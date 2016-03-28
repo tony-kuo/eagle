@@ -14,7 +14,7 @@ Implemented in python [2\.7\.\*, 3\.\*]
 
 A tab-delimited text file with one row per variant and columns representing:
 
-1. chromosom / sequence id
+1. chromosome / sequence id
 2. coordinate position
 3. reference sequence
 4. alternative sequence

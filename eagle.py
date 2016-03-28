@@ -92,19 +92,6 @@ def groupNearbyVariants(entry):
             misc[(varid[i][0], varid[i][1], ref, alt)] = [(varid[i][1], ref, alt)]; # Merge and delete extraneous entries
             del entry[varid[i]];
     if misc: entry.update(misc);
-    # Organize the sets so that every variant of interest is the first in set while the rest contain nearby variants
-    #if not multivariant:
-        #misc = {};
-        #varid = sorted(entry.keys());
-        #for i in range(0, len(varid)):
-            #if len(entry[varid[i]]) <= 1: continue; # Ignore singletons
-            #for j in entry[varid[i]]:
-                #newid = (varid[i][0], j[0], j[1], j[2]);
-                #misc[newid] = [j];
-                #for k in entry[varid[i]]:
-                    #if j != k and abs(j[0] - k[0]) <= distancethreshold: misc[newid].append(k);
-            #del entry[varid[i]];
-        #if misc: entry.update(misc);
 
     print("Group within:\t{0} bp\t{1} entries \t{2}".format(distancethreshold, len(entry.keys()), datetime.now()), file=sys.stderr);
     return(entry);
@@ -115,13 +102,6 @@ def readFasta(filename):
     seq = {};
     seqlength = {};
     with open(filename, 'r') as fh:
-        ##from itertools import groupby;
-        ##faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"));
-        ##for header in faiter:
-            ##seqid = re.split('>| ', header.next())[1]; #header.next()[1:].strip(); # >chr1 1 -> ['', 'chr1', '1'] 
-            ##seq[seqid] = ''.join(s.strip() for s in faiter.next());
-            ##seq[seqid] = seq[seqid].encode('utf-8'); # Explicit unicode for python3, needed for cffi char*
-            ##seqlength[seqid] = len(seq[seqid]);
         for line in fh:
             line = line.strip();
             if line[0] == '>': #re.match('^>.+', line):
@@ -141,7 +121,6 @@ def readPYSAM(files, var_list, outfile):
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
         varid = list(var_list.keys());
         numvariants = len(varid);
-        #entry = [evaluateVariant(fn, varid[n], var_list[varid[n]]) for n in range(0, numvariants)];
 
         try:
             pool = Pool(processes=numprocesses);
@@ -153,21 +132,6 @@ def readPYSAM(files, var_list, outfile):
             for j in p.get():
                 if j: entry.append(j); # Only keep non-empty results
 
-        #n = 0;
-        #outqueue = Queue();
-        #while n < numvariants:
-            #procs = [];
-            #for i in range(0, numprocesses):
-                #if n >= numvariants: break;
-                #p = Process(target=evaluateVariant, args=(outqueue, fn, varid[n], var_list[varid[n]]));
-                #procs.append(p);
-                #p.start();
-                #print("Read {0}:\t{1} of {2} variants\t{3}\t{4}\t{5}".format(fn, n, numvariants, varid[n], i, datetime.now()), file=sys.stderr);
-                #n += 1;
-            #for i in procs: # Get results from each process from queue
-                #for j in outqueue.get(): 
-                    #if j: entry.append(j); # Only keep non-empty results
-            #for i in procs: i.join();
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
     print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tProb(log10)\tOdds(log10)\tVarSet', file=fh);

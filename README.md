@@ -1,6 +1,6 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-Implemented in python [2.7, 3]
+Implemented in python [2.7.*, 3.*]
 
 **Requires**: pysam, cffi, numpy, scipy
 

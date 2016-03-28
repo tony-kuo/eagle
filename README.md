@@ -2,17 +2,17 @@
 
 Implemented in python [2.7, 3]
 
-Requires: pysam, cffi, numpy, scipy
+**Requires**: pysam, cffi, numpy, scipy
 
-Inputs:
+**Inputs**
 
 1. Alignment data in coordinated sorted indexed BAM format (.bam, .bam.bai)
 2. Reference genome in FASTA format
 3. Variant candidates in VCF format
 
-Output:
+**Output**
 
-A tab-delimited text file with one row per variant with columns representing:
+A tab-delimited text file with one row per variant and columns representing:
 
 1. chromosom / sequence id
 2. coordinate position

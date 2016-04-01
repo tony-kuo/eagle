@@ -45,8 +45,8 @@ def compileEntries(entry, threshold, keepone, isnegative):
         for fn in entry[key]: entry[key][fn] = sorted(entry[key][fn], key=lambda tup:tup[2], reverse=True)[0]; # Max LR per file for entries with same key
         current = sorted(entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
         valid = False;
-        if isnegative and current[2] < threshold and current[0] > 0 and current[1] <= 0: valid = True; # Negative samples require: LR < threshold, depth > 0, af <= 0
-        elif not isnegative and current[2] > threshold and current[0] > 0 and current[1] > 0: valid = True; # Positive samples require: LR > threshold, depth and af > than 0
+        if isnegative and current[2] < threshold: valid = True; # Negative samples require: LR < threshold
+        elif not isnegative and current[2] > threshold: valid = True; # Positive samples require: LR > threshold
         if valid:
             if keepone: new_entry[key] = current;
             else: new_entry[key] = entry[key];

@@ -21,7 +21,7 @@ signal(SIGPIPE,SIG_DFL);
 
 # Constants
 gamma = 1E-3; # Prior probability read is from "elsewhere"
-lg = np.log10(gamma**2);
+lg = np.log10(gamma);
 e3 = np.log10(3);
 l50 = np.log(0.5);
 l10 = np.log(0.1);
@@ -339,7 +339,6 @@ double getReadProb(char *seq, int seqlength, int refpos, int readlength, double 
         //printf("%c", seq[b]);
         probability += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
         if ( probability < baseline ) probability = baseline;
-        //if ( probability < baseline - 10 ) break; // Stop sum if less than 1% contribution to best probability seen so far in all locations
     }
     //printf("\\t%f\\n", probability);
     return (probability);

@@ -6,7 +6,7 @@ Implemented in python [2\.7\.\*, 3\.\*]
 
 **Inputs**
 
-1. Alignment data in coordinated sorted indexed BAM format (.bam, .bam.bai)
+1. Alignment data in coordinated sorted indexed BAM format (\*\.bam, \*\.bam.bai)
 2. Reference genome in FASTA format
 3. Variant candidates in VCF format
 

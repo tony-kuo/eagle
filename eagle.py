@@ -359,8 +359,6 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
     }
 }
 """)
-lg1 = np.log(1-gamma);
-lg2 = np.log(gamma);
 C.initAlphaMap(); # Initialize alphabet to int mapping table
 def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, otherprobability):
     probabilityarray = ffi.new("double[]", readlength*2);

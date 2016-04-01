@@ -4,7 +4,7 @@
 
 # EAGLE: explicit alternative genome likelihood evaluator
 # Given the alternative genome (VCF) and alignment data (BAM),
-# calculate the likelihood of the putative variant versus the 
+# calculate the likelihood of the putative variants versus the 
 # reference (FASTA)
 
 from __future__ import print_function
@@ -20,9 +20,8 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-gamma = 1E-6; # Prior probability read is from "elsewhere"
-lg1 = np.log(1-gamma);
-lg2 = np.log(gamma);
+gamma = 1E-3; # Prior probability read is from "elsewhere"
+lg = np.log10(gamma**2);
 e3 = np.log10(3);
 l50 = np.log(0.5);
 l10 = np.log(0.1);
@@ -186,15 +185,17 @@ def evaluateVariant(fn, varid, var_set):
             elif read.is_read2: readid += '/2';
 
             readlength = len(read.query_sequence.encode('utf-8'));
-            callerror = (np.array(read.query_qualities) / float(-10)) - e3; # Already converted to ord by pysam, log10(p/3)
-            notcallerror = np.log10(1 - np.power(10, callerror)); # log10(1-p);
+            callerror = np.array(read.query_qualities) / float(-10); # Already converted to ord by pysam
+            isbase = np.log10(1 - np.power(10, callerror)); # log10(1-e);
+            notbase = callerror - e3; #log10(e/3)
             # Convert read sequence into a probability matrix based on base-call error
             readprobmatrix = ffi.new("double[]", readlength*5);
-            C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(callerror), list(notcallerror), readprobmatrix);
+            C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
             # Calculate the probability for "other", assuming the read is correct but is from elsewhere
-            otherprobability = sum(np.log10(1 - np.power(10, (np.array(read.query_qualities) / float(-10)) - e3))) / np.log10(np.e);
+            otherprobability = sum([logsumexp(np.array([isbase[a]*2, (notbase[a]*2)-e3]) / np.log10(np.e)) for a in range(0,len(callerror))]); # ln((1-e)^2 + (e^2/3))
             readentry[varid][setid][readid] = otherprobability;
+            otherprobability /= np.log(10);
 
             # Calculate the probability given reference genome
             readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix, otherprobability);
@@ -205,7 +206,7 @@ def evaluateVariant(fn, varid, var_set):
             readprobability = calcReadProbability(altseq, altseqlength, read.reference_start, readlength, readprobmatrix, otherprobability);
             if readid not in altentry[varid][setid]: altentry[varid][setid][readid] = readprobability;
             else: altentry[varid][setid][readid] = logsumexp([altentry[varid][setid][readid], readprobability]);
-            if debug: print('{0}\t{1}\t{2}\t{3}'.format(refentry[varid][setid][readid], altentry[varid][setid][readid], read, currentset));
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}'.format(refentry[varid][setid][readid], altentry[varid][setid][readid], readentry[varid][setid][readid], read, currentset));
 
             # Multi-mapped alignments
             if not primaryonly and read.has_tag('XA'):
@@ -216,7 +217,7 @@ def evaluateVariant(fn, varid, var_set):
                     if (read.is_reverse == False and xa_pos < 0) or (read.is_reverse == True and xa_pos > 0): # If strand is opposite of that from primary alignment
                         newreadseq = ''.join(complement.get(base,base) for base in reversed(read.query_sequence)).encode('utf-8');
                         newreadprobmatrix = ffi.new("double[]", readlength*5);
-                        C.setReadProbMatrix(newreadseq, readlength, list(callerror[::-1]), list(notcallerror[::-1]), newreadprobmatrix);
+                        C.setReadProbMatrix(newreadseq, readlength, list(isbase[::-1]), list(notbase[::-1]), newreadprobmatrix);
                     else: newreadprobmatrix = readprobmatrix;
                     xa_pos = abs(xa_pos);
 
@@ -308,7 +309,7 @@ ffi.cdef ("""
 void initAlphaMap(void);
 void setReadProbMatrix(char*, int, double*, double*, double*);
 double getReadProb(char*, int, int, int, double*, double);
-void getReadProbList(char*, int, int, int, double*, double*);
+void getReadProbList(char*, int, int, int, double*, double*, double);
 """)
 C = ffi.verify ("""
 static int alphabetval[26];
@@ -320,33 +321,35 @@ static void initAlphaMap(void) {
     alphabetval['C'-'A'] = 3;
     alphabetval['N'-'A'] = 4;
 }
-void setReadProbMatrix(char* seq, int readlength, double *callerror, double *notcallerror, double *matrix) {
+void setReadProbMatrix(char* seq, int readlength, double *isbase, double *notbase, double *matrix) {
     int i, b; //array[width * row + col] = value
     memset(matrix, 0, readlength*5*sizeof(double)); // Zero out array
     for ( b = 0; b < readlength; b++ ) {
-        for ( i = 0; i < 5; i++ ) matrix[5*b+i] = callerror[b];
-        matrix[5*b+alphabetval[toupper(seq[b])-'A']] = notcallerror[b];
+        for ( i = 0; i < 5; i++ ) matrix[5*b+i] = notbase[b];
+        matrix[5*b+alphabetval[toupper(seq[b])-'A']] = isbase[b];
     }
 }
 double getReadProb(char *seq, int seqlength, int refpos, int readlength, double *matrix, double baseline) {
     int b; //array[width * row + col] = value
-    double probabilitysum = 0;
+    double probability = 0;
+    //printf("%d\\t", refpos);
     for ( b = refpos;  b < refpos+readlength; b++ ) {
         if ( b < 0) continue; // Skip if position is before the start of reference seq
         if ( b >= seqlength ) break; // Stop if it reaches the end of reference seq
         //printf("%c", seq[b]);
-        probabilitysum += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
-        if ( baseline != 999 && probabilitysum < baseline - 10 ) break; // Stop sum if less than 1% contribution to baseline (best, highest) probability mass
+        probability += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
+        if ( probability < baseline ) probability = baseline;
+        //if ( probability < baseline - 10 ) break; // Stop sum if less than 1% contribution to best probability seen so far in all locations
     }
-    //printf("\\t%f\\n", probabilitysum);
-    return (probabilitysum);
+    //printf("\\t%f\\n", probability);
+    return (probability);
 }
-void getReadProbList(char *seq, int seqlength, int refpos, int readlength, double *matrix, double *probabilityarray) {
+void getReadProbList(char *seq, int seqlength, int refpos, int readlength, double *matrix, double *probabilityarray, double baseline) {
     memset(probabilityarray, 0, readlength*2*sizeof(double)); // Zero out array
     int i;
     int n = 0;
     int slidelength = readlength;
-    double bestprobability = getReadProb(seq, seqlength, refpos, readlength, matrix, 999); // First probability at refpos, likely the highest, to be used as first best
+    double bestprobability = baseline; // Baseline lowest allowable probability = P(r|other) * gamma^2, analagous to best gapless local alignment
     for ( i = refpos-slidelength; i <= refpos+slidelength; i++ ) {
         if ( i + readlength < 0 ) continue;
         if ( i >= seqlength ) break;
@@ -356,13 +359,14 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
     }
 }
 """)
+lg1 = np.log(1-gamma);
+lg2 = np.log(gamma);
 C.initAlphaMap(); # Initialize alphabet to int mapping table
 def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, otherprobability):
     probabilityarray = ffi.new("double[]", readlength*2);
-    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray);
+    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray, otherprobability+lg);
     overall_probability = np.frombuffer(ffi.buffer(probabilityarray));
     overall_probability = logsumexp(overall_probability[np.nonzero(overall_probability)] / np.log10(np.e)); # sum of probabilities as ln exponential (converted from log10)
-    overall_probability = logsumexp([lg1 + overall_probability, lg2 + otherprobability]); # (1-gamma) * P(r|g) + gamma * P(r|other), fudge factor, floor probability for every read for every hypothesis
     return(overall_probability);
 
 # Global Variables
@@ -382,7 +386,7 @@ def main():
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
     parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases apart as a set (off: 0, default: 10)');
     parser.add_argument('-k', type=int, default=12, help='maximum number of variants above which test 2^sqrt(n) instead of 2^n combinations (default: 12)');
-    parser.add_argument('-mvh', action='store_true', help='consider nearby variants as one multi-variant hypothesis');
+    parser.add_argument('-mvh', action='store_true', help='consider nearby variants as one multi-variant hypothesis only');
     parser.add_argument('-p', action='store_true', help='consider only primary alignments');
     parser.add_argument('-t', type=int, default=1, help='number of processes to use (default: 1)');
     parser.add_argument('-debug', action='store_true', help='debug mode');

@@ -33,9 +33,8 @@ def readFiles(files):
                     prob = float(t[6]);
                     lr = float(t[7]);
                     in_set = t[8];
-                    if key not in entry: 
-                        entry[key] = {};
-                        entry[key][fn] = [];
+                    if key not in entry: entry[key] = {};
+                    if fn not in entry[key]: entry[key][fn] = [];
                     entry[key][fn].append((depth, af, lr, in_set));
         fh.close;
     return(entry);
@@ -93,11 +92,11 @@ def main():
     args = parser.parse_args();
 
     pos_entry = readFiles(args.p); 
-    pos_entry = compileEntries(pos_entry, args.mn, args.p1, False);
+    pos_entry = compileEntries(pos_entry, args.min, args.p1, False);
     neg_entry = {};
     if args.n:
         neg_entry = readFiles(args.n);
-        neg_entry = compileEntries(neg_entry, args.mx, args.n1, True);
+        neg_entry = compileEntries(neg_entry, args.max, args.n1, True);
 
     outputResults(pos_entry, neg_entry, args.s, args.p, args.n, args.p1, args.n1);
 

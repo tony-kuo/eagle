@@ -1,7 +1,9 @@
 #!/usr/bin/python
 
-# 2016 Tony Kuo
+# Copyright 2016 Tony Kuo
+# This program is distributed under the terms of the GNU General Public License
 
+# Utility Script
 # Compiles multiple results from EAGLE
 # Positive results must be > minimum for all samples
 # Negative results must be < maximum for all samples

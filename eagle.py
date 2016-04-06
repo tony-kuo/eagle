@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
-# 2016 Tony Kuo
+# Copyright 2016 Tony Kuo
+# This program is distributed under the terms of the GNU General Public License
 
 # EAGLE: explicit alternative genome likelihood evaluator
 # Given the alternative genome (VCF) and alignment data (BAM),

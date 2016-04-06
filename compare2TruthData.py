@@ -1,8 +1,10 @@
 #!/usr/bin/python
 
-# 2016 Tony Kuo
+# Copyright 2016 Tony Kuo
+# This program is distributed under the terms of the GNU General Public License
 
-# Utility script to compare results of EAGLE to VCF truth data
+# Utility Script
+# Compare results of EAGLE to VCF truth data
 # True positives are written to stdout
 # False positives are written to file
 

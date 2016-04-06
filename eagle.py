@@ -223,6 +223,7 @@ def evaluateVariant(fn, varid, var_set):
 
             readlength = len(read.query_sequence.encode('utf-8'));
             callerror = np.array(read.query_qualities) / float(-10); # Already converted to ord by pysam
+            callerror[callerror == 0] = -0.01; # Ensure there are no zeros, defaulting to a very high base-call error probability
             isbase = np.log10(1 - np.power(10, callerror)); # log10(1-e);
             notbase = callerror - e3; #log10(e/3)
             # Convert read sequence into a probability matrix based on base-call error
@@ -375,7 +376,7 @@ double getReadProb(char *seq, int seqlength, int refpos, int readlength, double 
         if ( b >= seqlength ) break; // Stop if it reaches the end of reference seq
         //printf("%c", seq[b]);
         probability += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
-        if ( probability < baseline ) probability = baseline;
+        if ( probability < baseline ) probability = baseline; // baseline lowest allowable probability = P(r|other) * P(other), analagous to best gapless local alignment
     }
     //printf("\\t%f\\n", probability);
     return (probability);
@@ -385,12 +386,10 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
     int i;
     int n = 0;
     int slidelength = readlength;
-    double bestprobability = baseline; // Baseline lowest allowable probability = P(r|other) * gamma^2, analagous to best gapless local alignment
     for ( i = refpos-slidelength; i <= refpos+slidelength; i++ ) {
         if ( i + readlength < 0 ) continue;
         if ( i >= seqlength ) break;
-        probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix, bestprobability);
-        if ( probabilityarray[n] > bestprobability ) bestprobability = probabilityarray[n]; // Update the best probability so far
+        probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix, baseline);
         n++;
     }
 }

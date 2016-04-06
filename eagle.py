@@ -12,9 +12,9 @@ from __future__ import print_function
 import argparse, re, sys, os;
 import pysam;
 import numpy as np;
-from itertools import chain, combinations;
-from scipy.misc import logsumexp;
 from cffi import FFI;
+from scipy.misc import logsumexp;
+from itertools import chain, combinations;
 from multiprocessing import Process, Queue, Pool;
 from datetime import datetime;
 from signal import signal, SIGPIPE, SIG_DFL;

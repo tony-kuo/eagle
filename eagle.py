@@ -21,12 +21,13 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-gamma = 1E-3; # Prior probability read is from "elsewhere"
+gamma = 1E-3; # Prior probability read is from "elsewhere" but misaligned to reference
 lg = np.log10(gamma);
 e3 = np.log10(3);
 l50 = np.log(0.5);
 l10 = np.log(0.1);
 l90 = np.log(0.9);
+genomesize = 0;
 complement = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'a': 't', 'c': 'g', 'g': 'c', 't': 'a' };
 
 def naturalSort(l): 
@@ -115,13 +116,6 @@ def readFasta(filename):
     seq = {};
     seqlength = {};
     with open(filename, 'r') as fh:
-        ##from itertools import groupby;
-        ##faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"));
-        ##for header in faiter:
-            ##seqid = re.split('>| ', header.next())[1]; #header.next()[1:].strip(); # >chr1 1 -> ['', 'chr1', '1'] 
-            ##seq[seqid] = ''.join(s.strip() for s in faiter.next());
-            ##seq[seqid] = seq[seqid].encode('utf-8'); # Explicit unicode for python3, needed for cffi char*
-            ##seqlength[seqid] = len(seq[seqid]);
         for line in fh:
             line = line.strip();
             if line[0] == '>': #re.match('^>.+', line):
@@ -130,9 +124,12 @@ def readFasta(filename):
             else:
                 seq[seqid].append(line);
     fh.close;
+    global genomesize;
+    genomesize = 0;
     for seqid in seq: 
         seq[seqid] = ''.join(seq[seqid]).encode('utf-8'); # Explicit unicode for python3, needed for cffi char*
         seqlength[seqid] = len(seq[seqid]);
+        genomesize += seqlength[seqid];
     return(seq, seqlength);
 
 def readPYSAM(files, var_list, outfile):
@@ -231,7 +228,7 @@ def evaluateVariant(fn, varid, var_set):
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
             # Calculate the probability for "other", assuming the read is correct but is from elsewhere
-            otherprobability = sum([logsumexp(np.array([isbase[a]*2, (notbase[a]*2)-e3]) / np.log10(np.e)) for a in range(0,len(callerror))]); # (1-e)^2 + (e^2/3)
+            otherprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-e3]) / np.log10(np.e)) for a in range(0,len(callerror))]); # (1-e)^2 + e^2/3
             readentry[varid][setid][readid] = otherprobability;
             otherprobability /= np.log(10);
 

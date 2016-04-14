@@ -20,8 +20,8 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-gamma = 1E-3; # Prior probability read is from "elsewhere" but misaligned to reference
-lg = np.log10(gamma);
+omega = 1E-3; # Prior probability read is from "elsewhere" but misaligned to reference
+lg = np.log10(omega);
 e3 = np.log10(3);
 l50 = np.log(0.5);
 l10 = np.log(0.1);
@@ -276,7 +276,7 @@ def evaluateVariant(fn, varid, var_set):
         currentset = ();
 
         refprior = 0.5;
-        otherprior = gamma;
+        otherprior = omega;
         if multivariant: altprior = np.log((1-refprior-otherprior) / float(4)); # 4x for alt, het10, het50, het90, multivariant is one hypothesis for all variants as a haplotype
         else: altprior = np.log((1-refprior-otherprior) / float(len(var_set)*4)); # 4x for alt, het10, het50, het90
         refprior = np.log(refprior);

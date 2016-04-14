@@ -4,9 +4,8 @@
 # This program is distributed under the terms of the GNU General Public License
 
 # EAGLE: explicit alternative genome likelihood evaluator
-# Given the alternative genome (VCF) and alignment data (BAM),
-# calculate the likelihood of the putative variants versus the 
-# reference (FASTA)
+# Given the sequencing data, explicitly test the alternative genome hypothesis
+# and calculate its probability against the reference genome hypothesis
 
 from __future__ import print_function
 import argparse, re, sys, os;

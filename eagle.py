@@ -278,8 +278,8 @@ def evaluateVariant(fn, varid, var_set):
 
         refprior = 0.5;
         elsewhereprior = omega;
-        if multivariant: altprior = np.log((1-refprior-elsewhereprior) / float(4)); # 4x for alt, het10, het50, het90, multivariant is one hypothesis for all variants as a haplotype
-        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set)*4)); # 4x for alt, het10, het50, het90
+        if multivariant: altprior = np.log(1-refprior-elsewhereprior); # multivariant is one hypothesis for all variants as a haplotype
+        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set))); # remainder divided evenly among the variant hypotheses
         refprior = np.log(refprior);
         elsewhereprior = np.log(elsewhereprior);
         for setid in readentry[varid]:
@@ -315,7 +315,7 @@ def evaluateVariant(fn, varid, var_set):
                 het90[currentset] += phet90;
                 elsewhere[currentset] += pelsewhere;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}'.format(prgx, phet, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}'.format(ref[currentset], het10[currentset], het[currentset], het90[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(het10.values()) + list(het90.values()) + list(elsewhere.values()));
         not_alt = list(ref.values()) + list(elsewhere.values());
@@ -339,7 +339,7 @@ ffi = FFI();
 ffi.cdef ("""
 void initAlphaMap(void);
 void setReadProbMatrix(char*, int, double*, double*, double*);
-double getReadProb(char*, int, int, int, double*, double);
+double getReadProb(char*, int, int, int, double*);
 void getReadProbList(char*, int, int, int, double*, double*);
 """)
 C = ffi.verify ("""
@@ -360,7 +360,7 @@ void setReadProbMatrix(char* seq, int readlength, double *isbase, double *notbas
         matrix[5*b+alphabetval[toupper(seq[b])-'A']] = isbase[b];
     }
 }
-double getReadProb(char *seq, int seqlength, int refpos, int readlength, double *matrix, double baseline) {
+double getReadProb(char *seq, int seqlength, int refpos, int readlength, double *matrix) {
     int b; //array[width * row + col] = value
     double probability = 0;
     //printf("%d\\t", refpos);
@@ -369,7 +369,6 @@ double getReadProb(char *seq, int seqlength, int refpos, int readlength, double 
         if ( b >= seqlength ) break; // Stop if it reaches the end of reference seq
         //printf("%c", seq[b]);
         probability += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
-        if ( probability < baseline-2 ) break; // stop if probability is less than 1% of baseline as it is negligible
     }
     //printf("\\t%f\\n", probability);
     return (probability);
@@ -379,11 +378,10 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
     int i;
     int n = 0;
     int slidelength = readlength;
-    double baseline = getReadProb(seq, seqlength, refpos, readlength, matrix, -1000);
     for ( i = refpos-slidelength; i <= refpos+slidelength; i++ ) {
         if ( i + readlength < 0 ) continue;
         if ( i >= seqlength ) break;
-        probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix, baseline);
+        probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix);
         n++;
     }
 }
@@ -394,7 +392,7 @@ def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, e
     C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray);
     overall_probability = np.frombuffer(ffi.buffer(probabilityarray));
     overall_probability = logsumexp(overall_probability[np.nonzero(overall_probability)] / np.log10(np.e)); # sum of probabilities as ln exponential (converted from log10)
-    if overall_probability < elsewhereprobability + lg: overall_probability = elsewhereprobability + lg; # floor probability as a fraction of probability from "elsewhere"
+    #if overall_probability < elsewhereprobability + lg: overall_probability = elsewhereprobability + lg; # floor probability as a fraction of probability from "elsewhere"
     return(overall_probability);
 
 # Global Variables

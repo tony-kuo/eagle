@@ -20,7 +20,7 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-3; # Prior probability read is from "elsewhere" but misaligned to reference
+omega = 1E-6; # Prior probability read is from some "elsewhere" that is paralogous
 lg = np.log10(omega);
 e3 = np.log10(3);
 l50 = np.log(0.5);
@@ -222,18 +222,17 @@ def evaluateVariant(fn, varid, var_set):
             readprobmatrix = ffi.new("double[]", readlength*5);
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
-            # Calculate the probability for "other", assuming the read is correct but is from elsewhere
-            otherprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-e3]) / np.log10(np.e)) for a in range(0,len(callerror))]); # (1-e)^2 + e^2/3
-            readentry[varid][setid][readid] = otherprobability;
-            otherprobability /= np.log(10);
+            # Calculate the probability for "elsewhere", assuming the read is correct but is from somewhere paralogous
+            elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-e3]) / np.log10(np.e)) for a in range(0,len(callerror))]); # (1-e)^2 + e^2/3
+            readentry[varid][setid][readid] = elsewhereprobability;
 
             # Calculate the probability given reference genome
-            readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix, otherprobability);
+            readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix, elsewhereprobability);
             if readid not in refentry[varid][setid]: refentry[varid][setid][readid] = readprobability;
             else: refentry[varid][setid][readid] = logsumexp([refentry[varid][setid][readid], readprobability]);
 
             # Calculate the probability given alternate genome
-            readprobability = calcReadProbability(altseq, altseqlength, read.reference_start, readlength, readprobmatrix, otherprobability);
+            readprobability = calcReadProbability(altseq, altseqlength, read.reference_start, readlength, readprobmatrix, elsewhereprobability);
             if readid not in altentry[varid][setid]: altentry[varid][setid][readid] = readprobability;
             else: altentry[varid][setid][readid] = logsumexp([altentry[varid][setid][readid], readprobability]);
             if debug: print('{0}\t{1}\t{2}\t{3}\t{4}'.format(refentry[varid][setid][readid], altentry[varid][setid][readid], readentry[varid][setid][readid], read, currentset));
@@ -251,14 +250,16 @@ def evaluateVariant(fn, varid, var_set):
                     else: newreadprobmatrix = readprobmatrix;
                     xa_pos = abs(xa_pos);
 
+                    # The more multi-mapped, the more likely it the read is from the outside
+                    readentry[varid][setid][readid] += elsewhereprobability;
                     # Probability given reference genome
-                    readprobability = calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, readlength, newreadprobmatrix, otherprobability);
+                    readprobability = calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, readlength, newreadprobmatrix, elsewhereprobability);
                     refentry[varid][setid][readid] = logsumexp([refentry[varid][setid][readid], readprobability]);
                     if debug: print(readprobability, end='\t');
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # Secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), just in case multi-mapped position also crosses the variant position
                         if xa_pos > varid[1]-1: xa_pos += offset;
-                        readprobability = calcReadProbability(altseq, altseqlength, xa_pos, readlength, newreadprobmatrix, otherprobability);
+                        readprobability = calcReadProbability(altseq, altseqlength, xa_pos, readlength, newreadprobmatrix, elsewhereprobability);
                     altentry[varid][setid][readid] = logsumexp([altentry[varid][setid][readid], readprobability]);
                     if debug: print('{0}\t{1}\t{2}'.format(readprobability, refentry[varid][setid][readid], altentry[varid][setid][readid]));
         setid += 1;
@@ -270,17 +271,17 @@ def evaluateVariant(fn, varid, var_set):
         het = {};
         het10 = {};
         het90 = {};
-        other = {};
+        elsewhere = {};
         refcount = {};
         altcount = {};
         currentset = ();
 
         refprior = 0.5;
-        otherprior = omega;
-        if multivariant: altprior = np.log((1-refprior-otherprior) / float(4)); # 4x for alt, het10, het50, het90, multivariant is one hypothesis for all variants as a haplotype
-        else: altprior = np.log((1-refprior-otherprior) / float(len(var_set)*4)); # 4x for alt, het10, het50, het90
+        elsewhereprior = omega;
+        if multivariant: altprior = np.log((1-refprior-elsewhereprior) / float(4)); # 4x for alt, het10, het50, het90, multivariant is one hypothesis for all variants as a haplotype
+        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set)*4)); # 4x for alt, het10, het50, het90
         refprior = np.log(refprior);
-        otherprior = np.log(otherprior);
+        elsewhereprior = np.log(elsewhereprior);
         for setid in readentry[varid]:
             currentset = readentry[varid][setid]['_VARSET_'];
             if currentset not in ref: 
@@ -289,14 +290,14 @@ def evaluateVariant(fn, varid, var_set):
                 het[currentset] = float(0);
                 het10[currentset] = float(0);
                 het90[currentset] = float(0);
-                other[currentset] = float(0);
+                elsewhere[currentset] = float(0);
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
 
             for readid in refentry[varid][setid]:
                 prgx = refentry[varid][setid][readid] + refprior; # ln of P(r|Gx), where Gx is original genome variant region
                 prgv = altentry[varid][setid][readid] + altprior; # ln of P(r|Gv), where Gv is mutated genome variant region
-                pother = readentry[varid][setid][readid] + otherprior;
+                pelsewhere = readentry[varid][setid][readid] + elsewhereprior;
                 # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
                 phet = logsumexp([l50 + prgv, l50 + prgx]) + altprior;
                 phet10 = logsumexp([l10 + prgv, l90 + prgx]) + altprior;
@@ -304,20 +305,20 @@ def evaluateVariant(fn, varid, var_set):
 
                 # Read count is only incremented when the difference in probability is not ambiguous
                 max_prgv = max([prgv, phet, phet10, phet90]);
-                if max_prgv > prgx and max_prgv > pother and max_prgv-prgx > 0.69: altcount[currentset] += 1; # about ln(2) difference
-                elif prgx > max_prgv and prgx > pother and prgx-max_prgv > 0.69: refcount[currentset] += 1;
+                if max_prgv > prgx and max_prgv > pelsewhere and max_prgv-prgx > 0.69: altcount[currentset] += 1; # about ln(2) difference
+                elif prgx > max_prgv and prgx > pelsewhere and prgx-max_prgv > 0.69: refcount[currentset] += 1;
                 
                 ref[currentset] += prgx;
                 alt[currentset] += prgv;
                 het[currentset] += phet;
                 het10[currentset] += phet10;
                 het90[currentset] += phet90;
-                other[currentset] += pother;
-                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}'.format(prgx, phet, prgv, pother, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], other[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+                elsewhere[currentset] += pelsewhere;
+                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}'.format(prgx, phet, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(het10.values()) + list(het90.values()) + list(other.values()));
-        not_alt = list(ref.values()) + list(other.values());
+        total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(het10.values()) + list(het90.values()) + list(elsewhere.values()));
+        not_alt = list(ref.values()) + list(elsewhere.values());
         for i in var_set:
             #i = var_set[0]; # Variant of interest is the first in set
             marginal_alt = [];
@@ -339,7 +340,7 @@ ffi.cdef ("""
 void initAlphaMap(void);
 void setReadProbMatrix(char*, int, double*, double*, double*);
 double getReadProb(char*, int, int, int, double*, double);
-void getReadProbList(char*, int, int, int, double*, double*, double);
+void getReadProbList(char*, int, int, int, double*, double*);
 """)
 C = ffi.verify ("""
 static int alphabetval[26];
@@ -368,16 +369,17 @@ double getReadProb(char *seq, int seqlength, int refpos, int readlength, double 
         if ( b >= seqlength ) break; // Stop if it reaches the end of reference seq
         //printf("%c", seq[b]);
         probability += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
-        if ( probability < baseline ) probability = baseline; // baseline lowest allowable probability = P(r|other) * P(other), analagous to best gapless local alignment
+        if ( probability < baseline-2 ) break; // stop if probability is less than 1% of baseline as it is negligible
     }
     //printf("\\t%f\\n", probability);
     return (probability);
 }
-void getReadProbList(char *seq, int seqlength, int refpos, int readlength, double *matrix, double *probabilityarray, double baseline) {
+void getReadProbList(char *seq, int seqlength, int refpos, int readlength, double *matrix, double *probabilityarray) {
     memset(probabilityarray, 0, readlength*2*sizeof(double)); // Zero out array
     int i;
     int n = 0;
     int slidelength = readlength;
+    double baseline = getReadProb(seq, seqlength, refpos, readlength, matrix, -1000);
     for ( i = refpos-slidelength; i <= refpos+slidelength; i++ ) {
         if ( i + readlength < 0 ) continue;
         if ( i >= seqlength ) break;
@@ -387,11 +389,12 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
 }
 """)
 C.initAlphaMap(); # Initialize alphabet to int mapping table
-def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, otherprobability):
+def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, elsewhereprobability):
     probabilityarray = ffi.new("double[]", readlength*2);
-    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray, otherprobability+lg);
+    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray);
     overall_probability = np.frombuffer(ffi.buffer(probabilityarray));
     overall_probability = logsumexp(overall_probability[np.nonzero(overall_probability)] / np.log10(np.e)); # sum of probabilities as ln exponential (converted from log10)
+    if overall_probability < elsewhereprobability + lg: overall_probability = elsewhereprobability + lg; # floor probability as a fraction of probability from "elsewhere"
     return(overall_probability);
 
 # Global Variables

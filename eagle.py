@@ -118,6 +118,7 @@ def readFasta(filename):
             line = line.strip();
             if line[0] == '>': #re.match('^>.+', line):
                 seqid = re.split('>| ', line)[1]; # >chr1 1 -> ['', 'chr1', '1']
+                if len(seqid) < 3: seqid = line[1:]; # >1 or >chr1
                 seq[seqid] = [];
             else:
                 seq[seqid].append(line);
@@ -197,8 +198,15 @@ def evaluateVariant(fn, varid, var_set):
         altseq = refseq[varid[0]];
         for i in sorted(currentset):
             pos = i[0] - 1 + offset;
-            ref = i[1];
-            alt = i[2];
+            if i[1] == '-': # Account for '-' representation of variants, insertion
+                ref = chr(refseq[varid[0]][ i[0]-1 ]);
+                alt = ref+i[2];
+            elif i[2] == '-': # Account for '-' representation of variants, deletion
+                alt = chr(refseq[varid[0]][ i[0]-2 ]);
+                ref = alt + i[1];
+            else:
+                ref = i[1];
+                alt = i[2];
             offset += len(alt) - len(ref);
             altseq = altseq[:pos] + alt.encode('utf-8') + altseq[(pos+len(ref)):]; # Explicit unicode for python3, needed for cffi char*
         altseqlength = len(altseq);

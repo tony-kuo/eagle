@@ -21,11 +21,12 @@ signal(SIGPIPE,SIG_DFL);
 
 # Constants
 omega = 1E-6; # Prior probability read is from some "elsewhere" that is paralogous
-lg = np.log10(omega);
-e3 = np.log10(3);
-l50 = np.log(0.5);
-l10 = np.log(0.1);
-l90 = np.log(0.9);
+logomega = np.log10(omega);
+logln = np.log10(np.e);
+log3 = np.log10(3);
+ln50 = np.log(0.5);
+ln10 = np.log(0.1);
+ln90 = np.log(0.9);
 complement = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'a': 't', 'c': 'g', 'g': 'c', 't': 'a' };
 
 def naturalSort(l): 
@@ -182,7 +183,7 @@ def evaluateVariant(fn, varid, var_set):
     elif len(var_set) > maxk: 
         hypotheses = list(combinations(var_set, 1)); # Solo variant hypotheses
         hypotheses.extend(list(combinations(var_set, len(var_set)))); # All variant co-occurs hypothesis
-        for i in range(2, int(np.sqrt(len(var_set)))): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
+        for i in range(2, int(sqrt(len(var_set)))): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
     else: hypotheses = chain(*map(lambda x: combinations(var_set, x), range(1, len(var_set)+1))); # powerset of variants in set excluding empty set
 
     setid = 0;
@@ -225,13 +226,13 @@ def evaluateVariant(fn, varid, var_set):
             callerror = np.array(read.query_qualities) / float(-10); # Already converted to ord by pysam
             callerror[callerror == 0] = -0.01; # Ensure there are no zeros, defaulting to a very high base-call error probability
             isbase = np.log10(1 - np.power(10, callerror)); # log10(1-e);
-            notbase = callerror - e3; #log10(e/3)
+            notbase = callerror - log3; #log10(e/3)
             # Convert read sequence into a probability matrix based on base-call error
             readprobmatrix = ffi.new("double[]", readlength*5);
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
             # Calculate the probability for "elsewhere", assuming the read is correct but is from somewhere paralogous
-            elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-e3]) / np.log10(np.e)) for a in range(0,len(callerror))]); # (1-e)^2 + e^2/3
+            elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # (1-e)^2 + e^2/3
             readentry[varid][setid][readid] = elsewhereprobability;
 
             # Calculate the probability given reference genome
@@ -307,9 +308,9 @@ def evaluateVariant(fn, varid, var_set):
                 prgv = altentry[varid][setid][readid] + altprior; # ln of P(r|Gv), where Gv is mutated genome variant region
                 pelsewhere = readentry[varid][setid][readid] + elsewhereprior;
                 # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
-                phet = logsumexp([l50 + prgv, l50 + prgx]) + altprior;
-                phet10 = logsumexp([l10 + prgv, l90 + prgx]) + altprior;
-                phet90 = logsumexp([l90 + prgv, l10 + prgx]) + altprior;
+                phet = logsumexp([ln50 + prgv, ln50 + prgx]) + altprior;
+                phet10 = logsumexp([ln10 + prgv, ln90 + prgx]) + altprior;
+                phet90 = logsumexp([ln90 + prgv, ln10 + prgx]) + altprior;
 
                 # Read count is only incremented when the difference in probability is not ambiguous
                 max_prgv = max([prgv, phet, phet10, phet90]);
@@ -399,8 +400,8 @@ def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, e
     probabilityarray = ffi.new("double[]", readlength*2);
     C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray);
     overall_probability = np.frombuffer(ffi.buffer(probabilityarray));
-    overall_probability = logsumexp(overall_probability[np.nonzero(overall_probability)] / np.log10(np.e)); # sum of probabilities as ln exponential (converted from log10)
-    #if overall_probability < elsewhereprobability + lg: overall_probability = elsewhereprobability + lg; # floor probability as a fraction of probability from "elsewhere"
+    overall_probability = logsumexp(overall_probability[np.nonzero(overall_probability)] / logln); # sum of probabilities as ln exponential (converted from log10)
+    #if overall_probability < elsewhereprobability + logomega: overall_probability = elsewhereprobability + logomega; # floor probability as a fraction of probability from "elsewhere"
     return(overall_probability);
 
 # Global Variables
@@ -414,16 +415,16 @@ refseq = {};
 reflength = {};
 def main():
     parser = argparse.ArgumentParser(description='Evaluate the significance of alternative genome using an explicit probabilistic model');
-    parser.add_argument('-v', help='variants list from getVariantGenome.pl');
+    parser.add_argument('-v', help='variants VCF file');
     parser.add_argument('-a', nargs='+', help='alignment data bam files');
     parser.add_argument('-r', help='reference sequence fasta file');
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
-    parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases apart as a set (off: 0, default: 10)');
-    parser.add_argument('-k', type=int, default=10, help='maximum number of variants above which test 2^sqrt(n) instead of 2^n combinations (default: 10)');
-    parser.add_argument('-mvh', action='store_true', help='consider nearby variants as one multi-variant hypothesis only');
+    parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)');
+    parser.add_argument('-k', type=int, default=10, help='maximum number of variants in set, above which test 2^sqrt(n) instead of 2^n combinations (default: 10)');
+    parser.add_argument('-mvh', action='store_true', help='consider nearby variants as *one* multi-variant hypothesis');
     parser.add_argument('-p', action='store_true', help='consider only primary alignments');
     parser.add_argument('-t', type=int, default=1, help='number of processes to use (default: 1)');
-    parser.add_argument('-debug', action='store_true', help='debug mode');
+    parser.add_argument('-debug', action='store_true', help='debug mode, printing information on every read for every variant');
     if len(sys.argv) == 1:
         parser.print_help();
         sys.exit(1);

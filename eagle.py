@@ -287,8 +287,8 @@ def evaluateVariant(fn, varid, var_set):
 
         refprior = 0.5;
         elsewhereprior = omega;
-        if multivariant: altprior = np.log(1-refprior-elsewhereprior); # multivariant is one hypothesis for all variants as a haplotype
-        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set))); # remainder divided evenly among the variant hypotheses
+        if multivariant: altprior = np.log((1-refprior-elsewhereprior) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous mutant
+        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous mutant
         refprior = np.log(refprior);
         elsewhereprior = np.log(elsewhereprior);
         for setid in readentry[varid]:

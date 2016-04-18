@@ -1,6 +1,6 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-Implemented in python [2\.7\.\*, 3\.\*]
+Implemented in python [Compatible with 2\.7\.\*, 3\.\*]
 
 **Requires**: pysam, cffi, numpy, scipy
 
@@ -24,3 +24,21 @@ A tab-delimited text file with one row per variant and columns representing:
 8. log 10 likelihood ratio (odds)
 9. nearby variants in the set of hypotheses if any
 
+**Input/Output Parameters**
+
+-v VCF file describing the variants, only the columns describing position and sequence are used [columns: 1,2,4,5].
+-a BAM alignment data file, reference coordinated sorted with index [*filename*.bam.bai].
+-r Reference genome [multi] fasta file.
+-o Output file name, defaults to *stdout* if not specified.
+
+**Program Parameters**
+
+-t The number of threads to use.
+
+-n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations.
+
+-k Typically, 2^*n* combinations are checked for *n* variants in the hypotheses set. Limit the number of combinations to 2^sqrt(*n*) if the number of variants exceeds *k*.
+
+-mvh Instead of considering the combinations of variants in the hypotheses set, consider that all variants in the set co-occur by testing **one** multi-variant hypothesis.
+
+-p Use primary alignments only. This will ignoring multi-mapping considerations.

@@ -405,8 +405,8 @@ def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix, e
 debug = False;
 primaryonly = False;
 numprocesses = 1;
-distancethreshold = 30;
-maxk = 12;
+distancethreshold = 10;
+maxk = 10;
 multivariant = False;
 refseq = {};
 reflength = {};

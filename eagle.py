@@ -133,7 +133,7 @@ def readPYSAM(files, var_list, outfile):
     entry = [];
     for fn in files: 
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
-        varid = list(var_list.keys());
+        varid = sorted(list(var_list.keys()));
         numvariants = len(varid);
         #entry = [evaluateVariant(fn, varid[n], var_list[varid[n]]) for n in range(0, numvariants)];
 

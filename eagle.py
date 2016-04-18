@@ -164,7 +164,7 @@ def readPYSAM(files, var_list, outfile):
             #for i in procs: i.join();
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
-    print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tREFOdds(log10)\tALTOdds(log10)\tVarSet', file=fh);
+    print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tProb(log10)\tOdds(log10)\tVarSet', file=fh);
     for i in naturalSort(entry): print(i, file=fh);
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
@@ -280,8 +280,6 @@ def evaluateVariant(fn, varid, var_set):
         ref = {};
         alt = {};
         het = {};
-        het10 = {};
-        het90 = {};
         elsewhere = {};
         refcount = {};
         altcount = {};
@@ -304,31 +302,30 @@ def evaluateVariant(fn, varid, var_set):
                 altcount[currentset] = 0;
 
             for readid in refentry[varid][setid]:
-                prgx = refentry[varid][setid][readid] + refprior; # ln of P(r|Gx), where Gx is original genome variant region
-                prgv = altentry[varid][setid][readid] + altprior; # ln of P(r|Gv), where Gv is mutated genome variant region
-                pelsewhere = readentry[varid][setid][readid] + elsewhereprior;
+                prgx = refentry[varid][setid][readid]; # ln of P(r|Gx), where Gx is original genome variant region
+                prgv = altentry[varid][setid][readid]; # ln of P(r|Gv), where Gv is mutated genome variant region
+                pelsewhere = readentry[varid][setid][readid];
                 # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
-                phet = logsumexp([ln50 + prgv, ln50 + prgx]) + altprior;
-                phet10 = logsumexp([ln10 + prgv, ln90 + prgx]) + altprior;
-                phet90 = logsumexp([ln90 + prgv, ln10 + prgx]) + altprior;
+                phet = logsumexp([ln50 + prgv, ln50 + prgx]);
+                phet10 = logsumexp([ln10 + prgv, ln90 + prgx]);
+                phet90 = logsumexp([ln90 + prgv, ln10 + prgx]);
                 phet = max([phet, phet10, phet90]);
 
                 # Read count is only incremented when the difference in probability is not ambiguous
                 max_prgv = max([prgv, phet]);
-                if max_prgv > prgx and max_prgv > pelsewhere and max_prgv-prgx > 0.69: altcount[currentset] += 1; # about ln(2) difference
-                elif prgx > max_prgv and prgx > pelsewhere and prgx-max_prgv > 0.69: refcount[currentset] += 1;
+                if max_prgv > prgx and max_prgv > pelsewhere+elsewhereprior: altcount[currentset] += 1;
+                elif prgx > max_prgv and prgx > pelsewhere+elsewhereprior: refcount[currentset] += 1;
                 
-                ref[currentset] += prgx;
-                alt[currentset] += prgv;
-                het[currentset] += phet;
-                elsewhere[currentset] += pelsewhere;
+                ref[currentset] += prgx + refprior;
+                alt[currentset] += prgv + altprior;
+                het[currentset] += phet + altprior;
+                elsewhere[currentset] += pelsewhere + elsewhereprior;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgx, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()));
         not_alt = list(ref.values()) + list(elsewhere.values());
         for i in var_set:
-            #i = var_set[0]; # Variant of interest is the first in set
             marginal_alt = [];
             for v in alt:
                 if i in v: marginal_alt.extend([alt[v], het[v]]);

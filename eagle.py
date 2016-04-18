@@ -287,8 +287,8 @@ def evaluateVariant(fn, varid, var_set):
 
         refprior = 0.5;
         elsewhereprior = omega;
-        if multivariant: altprior = np.log((1-refprior-elsewhereprior) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous mutant
-        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous mutant
+        if multivariant: altprior = np.log((1-refprior-elsewhereprior) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous
+        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
         refprior = np.log(refprior);
         elsewhereprior = np.log(elsewhereprior);
         for setid in readentry[varid]:
@@ -312,16 +312,15 @@ def evaluateVariant(fn, varid, var_set):
                 phet = max([phet, phet10, phet90]);
 
                 # Read count is only incremented when the difference in probability is not ambiguous
-                max_prgv = max([prgv, phet]);
-                if max_prgv > prgx and max_prgv > pelsewhere+elsewhereprior: altcount[currentset] += 1;
-                elif prgx > max_prgv and prgx > pelsewhere+elsewhereprior: refcount[currentset] += 1;
+                if prgv > prgx and prgv > pelsewhere+elsewhereprior: altcount[currentset] += 1;
+                elif prgx > prgv and prgx > pelsewhere+elsewhereprior: refcount[currentset] += 1;
                 
                 ref[currentset] += prgx + refprior;
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + altprior;
                 elsewhere[currentset] += pelsewhere + elsewhereprior;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgx, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()));
         not_alt = list(ref.values()) + list(elsewhere.values());

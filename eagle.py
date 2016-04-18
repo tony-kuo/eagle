@@ -20,7 +20,7 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-6; # Prior probability read is from some "elsewhere" that is paralogous
+omega = 1E-3; # Prior probability read is from some "elsewhere" that is paralogous
 logomega = np.log10(omega);
 logln = np.log10(np.e);
 log3 = np.log10(3);

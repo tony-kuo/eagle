@@ -164,7 +164,7 @@ def readPYSAM(files, var_list, outfile):
             #for i in procs: i.join();
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
-    print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tProb(log10)\tOdds(log10)\tVarSet', file=fh);
+    print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tREFOdds(log10)\tALTOdds(log10)\tVarSet', file=fh);
     for i in naturalSort(entry): print(i, file=fh);
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
@@ -232,7 +232,7 @@ def evaluateVariant(fn, varid, var_set):
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
             # Calculate the probability for "elsewhere", assuming the read is correct but is from somewhere paralogous
-            elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # (1-e)^2 + e^2/3
+            elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
             readentry[varid][setid][readid] = elsewhereprobability;
 
             # Calculate the probability given reference genome
@@ -297,8 +297,6 @@ def evaluateVariant(fn, varid, var_set):
                 ref[currentset] = float(0);
                 alt[currentset] = float(0);
                 het[currentset] = float(0);
-                het10[currentset] = float(0);
-                het90[currentset] = float(0);
                 elsewhere[currentset] = float(0);
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
@@ -311,29 +309,28 @@ def evaluateVariant(fn, varid, var_set):
                 phet = logsumexp([ln50 + prgv, ln50 + prgx]) + altprior;
                 phet10 = logsumexp([ln10 + prgv, ln90 + prgx]) + altprior;
                 phet90 = logsumexp([ln90 + prgv, ln10 + prgx]) + altprior;
+                phet = max([phet, phet10, phet90]);
 
                 # Read count is only incremented when the difference in probability is not ambiguous
-                max_prgv = max([prgv, phet, phet10, phet90]);
+                max_prgv = max([prgv, phet]);
                 if max_prgv > prgx and max_prgv > pelsewhere and max_prgv-prgx > 0.69: altcount[currentset] += 1; # about ln(2) difference
                 elif prgx > max_prgv and prgx > pelsewhere and prgx-max_prgv > 0.69: refcount[currentset] += 1;
                 
                 ref[currentset] += prgx;
                 alt[currentset] += prgv;
                 het[currentset] += phet;
-                het10[currentset] += phet10;
-                het90[currentset] += phet90;
                 elsewhere[currentset] += pelsewhere;
-                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}'.format(prgx, phet, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}'.format(ref[currentset], het10[currentset], het[currentset], het90[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgx, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}\t{8}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(het10.values()) + list(het90.values()) + list(elsewhere.values()));
+        total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()));
         not_alt = list(ref.values()) + list(elsewhere.values());
         for i in var_set:
             #i = var_set[0]; # Variant of interest is the first in set
             marginal_alt = [];
             for v in alt:
-                if i in v: marginal_alt.extend([alt[v], het[v], het10[v], het90[v]]);
-                else: not_alt.extend([alt[v], het[v], het10[v], het90[v]]);
+                if i in v: marginal_alt.extend([alt[v], het[v]]);
+                else: not_alt.extend([alt[v], het[v]]);
             if multivariant: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], altcount[currentset]+refcount[currentset], altcount[currentset]);
             else: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(altcount.values())+max(refcount.values()), max(altcount.values()));
             # Probability and odds in log10

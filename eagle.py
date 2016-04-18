@@ -183,7 +183,7 @@ def evaluateVariant(fn, varid, var_set):
     elif len(var_set) > maxk: 
         hypotheses = list(combinations(var_set, 1)); # Solo variant hypotheses
         hypotheses.extend(list(combinations(var_set, len(var_set)))); # All variant co-occurs hypothesis
-        for i in range(2, int(sqrt(len(var_set)))): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
+        for i in range(2, int(np.sqrt(len(var_set)))): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
     else: hypotheses = chain(*map(lambda x: combinations(var_set, x), range(1, len(var_set)+1))); # powerset of variants in set excluding empty set
 
     setid = 0;
@@ -417,7 +417,7 @@ def main():
     parser.add_argument('-r', help='reference sequence fasta file');
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
     parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)');
-    parser.add_argument('-k', type=int, default=10, help='maximum number of variants in set, above which test 2^sqrt(n) instead of 2^n combinations (default: 10)');
+    parser.add_argument('-k', type=int, default=10, help='maximum number of variants in hypotheses set, above which test 2^sqrt(n) instead of 2^n combinations (default: 10)');
     parser.add_argument('-mvh', action='store_true', help='consider nearby variants as *one* multi-variant hypothesis');
     parser.add_argument('-p', action='store_true', help='consider only primary alignments');
     parser.add_argument('-t', type=int, default=1, help='number of processes to use (default: 1)');

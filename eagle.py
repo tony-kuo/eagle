@@ -200,17 +200,19 @@ def evaluateVariant(fn, varid, var_set):
         for i in sorted(currentset):
             pos = i[0] - 1 + offset;
             if i[1] == '-': # Account for '-' representation of variants, insertion
-                ref = chr(refseq[varid[0]][ i[0]-1 ]);
-                alt = ref+i[2];
+                pos += 1;
+                ref = '';
+                alt = i[2];
             elif i[2] == '-': # Account for '-' representation of variants, deletion
-                alt = chr(refseq[varid[0]][ i[0]-2 ]);
-                ref = alt + i[1];
+                alt = '';
+                ref = i[1];
             else:
                 ref = i[1];
                 alt = i[2];
             offset += len(alt) - len(ref);
             altseq = altseq[:pos] + alt.encode('utf-8') + altseq[(pos+len(ref)):]; # Explicit unicode for python3, needed for cffi char*
         altseqlength = len(altseq);
+
         # Fetch reads that cross the variant location
         samfile = pysam.AlignmentFile(fn, "rb");
         readset = samfile.fetch(reference=varid[0], start=varstart-1, end=varend+1);

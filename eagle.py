@@ -235,7 +235,9 @@ def evaluateVariant(fn, varid, var_set):
 
             # Calculate the probability for "elsewhere", assuming the read is correct but is from somewhere paralogous
             elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
-            readentry[varid][setid][readid] = elsewhereprobability;
+            #elsewhereprobability = sum(np.array(isbase) / logln); # ln( (1-e) )
+            if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
+            else: readentry[varid][setid][readid] = logsumexp([readentry[varid][setid][readid], elsewhereprobability]);
 
             # Calculate the probability given reference genome
             readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix);
@@ -262,7 +264,7 @@ def evaluateVariant(fn, varid, var_set):
                     xa_pos = abs(xa_pos);
 
                     # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous)
-                    readentry[varid][setid][readid] += elsewhereprobability;
+                    readentry[varid][setid][readid] = logsumexp([readentry[varid][setid][readid], elsewhereprobability]);
                     # Probability given reference genome
                     readprobability = calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, readlength, newreadprobmatrix);
                     refentry[varid][setid][readid] = logsumexp([refentry[varid][setid][readid], readprobability]);
@@ -306,7 +308,7 @@ def evaluateVariant(fn, varid, var_set):
                 prgv = altentry[varid][setid][readid]; # ln of P(r|Gv), where Gv is mutated genome variant region
                 pelsewhere = readentry[varid][setid][readid];
 
-                # Outside paralogous source of reads formulation:
+                # Mixture model: outside paralogous source of reads
                 #prgx = logsumexp([elsewhereprior + pelsewhere, prgx]);
                 #prgv = logsumexp([elsewhereprior + pelsewhere, prgv]);
 
@@ -348,7 +350,7 @@ ffi = FFI();
 ffi.cdef ("""
 void initAlphaMap(void);
 void setReadProbMatrix(char*, int, double*, double*, double*);
-double getReadProb(char*, int, int, int, double*);
+double getReadProb(char*, int, int, int, double*, double);
 void getReadProbList(char*, int, int, int, double*, double*);
 """)
 C = ffi.verify ("""
@@ -369,7 +371,7 @@ void setReadProbMatrix(char* seq, int readlength, double *isbase, double *notbas
         matrix[5*b+alphabetval[toupper(seq[b])-'A']] = isbase[b];
     }
 }
-double getReadProb(char *seq, int seqlength, int refpos, int readlength, double *matrix) {
+double getReadProb(char *seq, int seqlength, int refpos, int readlength, double *matrix, double baseline) {
     int b; //array[width * row + col] = value
     double probability = 0;
     //printf("%d\\t", refpos);
@@ -378,6 +380,7 @@ double getReadProb(char *seq, int seqlength, int refpos, int readlength, double 
         if ( b >= seqlength ) break; // Stop if it reaches the end of reference seq
         //printf("%c", seq[b]);
         probability += matrix[5*(b-refpos)+alphabetval[toupper(seq[b])-'A']]; 
+        if ( probability < baseline - 10 ) break; // Stop sum if less than 1% contribution to baseline (best, highest) probability mass
     }
     //printf("\\t%f\\n", probability);
     return (probability);
@@ -387,10 +390,12 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
     int i;
     int n = 0;
     int slidelength = readlength;
+    double baseline = getReadProb(seq, seqlength, refpos, readlength, matrix, -1000); // First probability at refpos, likely the highest, to be used as first best
     for ( i = refpos-slidelength; i <= refpos+slidelength; i++ ) {
         if ( i + readlength < 0 ) continue;
         if ( i >= seqlength ) break;
-        probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix);
+        probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix, baseline);
+        if ( probabilityarray[n] > baseline ) baseline = probabilityarray[n]; // Update the best probability so far
         n++;
     }
 }

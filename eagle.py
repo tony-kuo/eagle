@@ -322,13 +322,13 @@ def evaluateVariant(fn, varid, var_set):
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgx, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp(list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()));
+        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()) );
         not_alt = list(ref.values()) + list(elsewhere.values());
         for i in var_set:
             marginal_alt = [];
             for v in alt:
-                if i in v: marginal_alt.extend([alt[v], het[v]]);
-                else: not_alt.extend([alt[v], het[v]]);
+                if i in v: marginal_alt.extend([ alt[v], het[v] ]);
+                else: not_alt.extend([ alt[v], het[v] ]);
             if multivariant: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], altcount[currentset]+refcount[currentset], altcount[currentset]);
             else: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(altcount.values())+max(refcount.values()), max(altcount.values()));
             # Probability and odds in log10

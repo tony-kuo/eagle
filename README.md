@@ -41,4 +41,4 @@ A tab-delimited text file with one row per variant and columns representing:
 
 -mvh Instead of considering the combinations of variants in the hypotheses set, consider that all variants in the set co-occur by testing **one** multi-variant hypothesis.
 
--p Use primary alignments only. This will ignoring multi-mapping considerations.
+-p Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.

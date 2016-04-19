@@ -239,17 +239,17 @@ def evaluateVariant(fn, varid, var_set):
             elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
             #elsewhereprobability = sum(np.array(isbase) / logln); # ln( (1-e) )
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
-            else: readentry[varid][setid][readid] = logsumexp([readentry[varid][setid][readid], elsewhereprobability]);
+            else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
 
             # Calculate the probability given reference genome
             readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix);
             if readid not in refentry[varid][setid]: refentry[varid][setid][readid] = readprobability;
-            else: refentry[varid][setid][readid] = logsumexp([refentry[varid][setid][readid], readprobability]);
+            else: refentry[varid][setid][readid] = np.logaddexp(refentry[varid][setid][readid], readprobability);
 
             # Calculate the probability given alternate genome
             readprobability = calcReadProbability(altseq, altseqlength, read.reference_start, readlength, readprobmatrix);
             if readid not in altentry[varid][setid]: altentry[varid][setid][readid] = readprobability;
-            else: altentry[varid][setid][readid] = logsumexp([altentry[varid][setid][readid], readprobability]);
+            else: altentry[varid][setid][readid] = np.logaddexp(altentry[varid][setid][readid], readprobability);
             if debug: print('{0}\t{1}\t{2}\t{3}\t{4}'.format(refentry[varid][setid][readid], altentry[varid][setid][readid], readentry[varid][setid][readid], read, currentset));
 
             # Multi-mapped alignments
@@ -266,16 +266,16 @@ def evaluateVariant(fn, varid, var_set):
                     xa_pos = abs(xa_pos);
 
                     # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous)
-                    readentry[varid][setid][readid] = logsumexp([readentry[varid][setid][readid], elsewhereprobability]);
+                    readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
                     # Probability given reference genome
                     readprobability = calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, readlength, newreadprobmatrix);
-                    refentry[varid][setid][readid] = logsumexp([refentry[varid][setid][readid], readprobability]);
+                    refentry[varid][setid][readid] = np.logaddexp(refentry[varid][setid][readid], readprobability);
                     if debug: print(readprobability, end='\t');
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # Secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), just in case multi-mapped position also crosses the variant position
                         if xa_pos > varid[1]-1: xa_pos += offset;
                         readprobability = calcReadProbability(altseq, altseqlength, xa_pos, readlength, newreadprobmatrix);
-                    altentry[varid][setid][readid] = logsumexp([altentry[varid][setid][readid], readprobability]);
+                    altentry[varid][setid][readid] = np.logaddexp(altentry[varid][setid][readid], readprobability);
                     if debug: print('{0}\t{1}\t{2}'.format(readprobability, refentry[varid][setid][readid], altentry[varid][setid][readid]));
         setid += 1;
 
@@ -311,13 +311,13 @@ def evaluateVariant(fn, varid, var_set):
                 pelsewhere = readentry[varid][setid][readid];
 
                 # Mixture model: outside paralogous source of reads
-                #prgx = logsumexp([elsewhereprior + pelsewhere, prgx]);
-                #prgv = logsumexp([elsewhereprior + pelsewhere, prgv]);
+                #prgx = np.logaddexp([elsewhereprior + pelsewhere, prgx]);
+                #prgv = np.logaddexp([elsewhereprior + pelsewhere, prgv]);
 
                 # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
-                phet = logsumexp([ln50 + prgv, ln50 + prgx]);
-                phet10 = logsumexp([ln10 + prgv, ln90 + prgx]);
-                phet90 = logsumexp([ln90 + prgv, ln10 + prgx]);
+                phet = np.logaddexp(ln50 + prgv, ln50 + prgx);
+                phet10 = np.logaddexp(ln10 + prgv, ln90 + prgx);
+                phet90 = np.logaddexp(ln90 + prgv, ln10 + prgx);
                 phet = max([phet, phet10, phet90]);
 
                 # Read count is only incremented when the difference in probability is not ambiguous

@@ -151,17 +151,19 @@ def readPYSAM(files, var_list, outfile):
         #outqueue = Queue();
         #while n < numvariants:
             #procs = [];
-            #for i in range(0, numprocesses):
+            #while len(procs) < numprocesses:
                 #if n >= numvariants: break;
                 #p = Process(target=evaluateVariant, args=(outqueue, fn, varid[n], var_list[varid[n]]));
                 #procs.append(p);
                 #p.start();
-                #print("Read {0}:\t{1} of {2} variants\t{3}\t{4}\t{5}".format(fn, n, numvariants, varid[n], i, datetime.now()), file=sys.stderr);
                 #n += 1;
-            #for i in procs: # Get results from each process from queue
-                #for j in outqueue.get(): 
-                    #if j: entry.append(j); # Only keep non-empty results
-            #for i in procs: i.join();
+                #for i in procs: # Get results from each process from queue
+                    #for j in outqueue.get(): 
+                        #if j: entry.append(j); # Only keep non-empty results
+                #for i in procs: 
+                    #i.join();
+                    #procs.remove(i)
+
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
     print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tProb(log10)\tOdds(log10)\tVarSet', file=fh);

@@ -20,8 +20,7 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-4; # Prior probability read is from some "elsewhere" that is paralogous
-logomega = np.log10(omega);
+omega = 1E-5; # Prior probability read is from some "elsewhere" not described by the set of hypotheses tested
 logln = np.log10(np.e);
 log3 = np.log10(3);
 ln50 = np.log(0.5);
@@ -237,7 +236,7 @@ def evaluateVariant(fn, varid, var_set):
 
             # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
             #elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
-            # perfect & edit distance 1: to approximate probability distribution of a read that originates from a paralog elsewhere, this should be the bulk of the probability mass
+            # perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
             elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)); 
 
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
@@ -292,11 +291,10 @@ def evaluateVariant(fn, varid, var_set):
         currentset = ();
 
         refprior = 0.5;
-        elsewhereprior = omega;
-        if multivariant: altprior = np.log((1-refprior-elsewhereprior) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous
-        else: altprior = np.log((1-refprior-elsewhereprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
+        if multivariant: altprior = np.log((1-refprior-omega) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous
+        else: altprior = np.log((1-refprior-omega) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
         refprior = np.log(refprior);
-        elsewhereprior = np.log(elsewhereprior);
+        elsewhereprior = np.log(omega);
         for setid in readentry[varid]:
             currentset = readentry[varid][setid]['_VARSET_'];
             if currentset not in ref: 
@@ -312,9 +310,9 @@ def evaluateVariant(fn, varid, var_set):
                 prgv = altentry[varid][setid][readid]; # ln of P(r|Gv), where Gv is mutated genome variant region
                 pelsewhere = readentry[varid][setid][readid];
 
-                # Mixture model: outside paralogous source of reads
-                #prgx = np.logaddexp(elsewhereprior + pelsewhere, prgx);
-                #prgv = np.logaddexp(elsewhereprior + pelsewhere, prgv);
+                # Mixture model: probability that the read is from elsewhere, outside paralogous source
+                prgx = np.logaddexp(elsewhereprior + pelsewhere, prgx);
+                prgv = np.logaddexp(elsewhereprior + pelsewhere, prgv);
 
                 # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
                 phet = np.logaddexp(ln50 + prgv, ln50 + prgx);
@@ -333,8 +331,10 @@ def evaluateVariant(fn, varid, var_set):
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgx, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()) );
-        not_alt = list(ref.values()) + list(elsewhere.values());
+        #total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()) );
+        #not_alt = list(ref.values()) + list(elsewhere.values());
+        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) );
+        not_alt = list(ref.values());
         for i in var_set:
             marginal_alt = [];
             for v in alt:

@@ -20,7 +20,7 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-5; # Prior probability read is from some "elsewhere" not described by the set of hypotheses tested
+omega = 1E-5; # Prior probability read is from some "elsewhere"
 logln = np.log10(np.e);
 log3 = np.log10(3);
 ln50 = np.log(0.5);
@@ -235,7 +235,6 @@ def evaluateVariant(fn, varid, var_set):
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
             # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
-            #elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
             # perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
             elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)); 
 
@@ -306,35 +305,33 @@ def evaluateVariant(fn, varid, var_set):
                 altcount[currentset] = 0;
 
             for readid in refentry[varid][setid]:
-                prgx = refentry[varid][setid][readid]; # ln of P(r|Gx), where Gx is original genome variant region
-                prgv = altentry[varid][setid][readid]; # ln of P(r|Gv), where Gv is mutated genome variant region
+                prgu = refentry[varid][setid][readid]; # ln of P(r|Gu), where Gu is the unchanged from the reference genome
+                prgv = altentry[varid][setid][readid]; # ln of P(r|Gv), where Gv is the variant genome
                 pelsewhere = readentry[varid][setid][readid];
 
                 # Mixture model: probability that the read is from elsewhere, outside paralogous source
-                prgx = np.logaddexp(elsewhereprior + pelsewhere, prgx);
+                prgu = np.logaddexp(elsewhereprior + pelsewhere, prgu);
                 prgv = np.logaddexp(elsewhereprior + pelsewhere, prgv);
 
-                # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
-                phet = np.logaddexp(ln50 + prgv, ln50 + prgx);
-                phet10 = np.logaddexp(ln10 + prgv, ln90 + prgx);
-                phet90 = np.logaddexp(ln90 + prgv, ln10 + prgx);
-                phet = max([phet, phet10, phet90]);
+                # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
+                phet = np.logaddexp(ln50 + prgv, ln50 + prgu);
+                phet10 = np.logaddexp(ln10 + prgv, ln90 + prgu);
+                phet90 = np.logaddexp(ln90 + prgv, ln10 + prgu);
+                phet = max([phet, phet10, phet90]); # Use the best allele frequency probability
 
                 # Read count is only incremented when the difference in probability is not ambiguous
-                if prgv > prgx and prgv > pelsewhere+elsewhereprior: altcount[currentset] += 1;
-                elif prgx > prgv and prgx > pelsewhere+elsewhereprior: refcount[currentset] += 1;
+                if prgv > prgu and prgv > pelsewhere+elsewhereprior: altcount[currentset] += 1;
+                elif prgu > prgv and prgu > pelsewhere+elsewhereprior: refcount[currentset] += 1;
                 
-                ref[currentset] += prgx + refprior;
+                ref[currentset] += prgu + refprior;
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + altprior;
                 elsewhere[currentset] += pelsewhere + elsewhereprior;
-                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgx, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
+                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        #total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()) );
-        #not_alt = list(ref.values()) + list(elsewhere.values());
-        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) );
-        not_alt = list(ref.values());
+        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()) );
+        not_alt = list(ref.values()) + list(elsewhere.values());
         for i in var_set:
             marginal_alt = [];
             for v in alt:

@@ -20,7 +20,7 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-3; # Prior probability read is from some "elsewhere" that is paralogous
+omega = 1E-4; # Prior probability read is from some "elsewhere" that is paralogous
 logomega = np.log10(omega);
 logln = np.log10(np.e);
 log3 = np.log10(3);
@@ -235,9 +235,11 @@ def evaluateVariant(fn, varid, var_set):
             readprobmatrix = ffi.new("double[]", readlength*5);
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
-            # Calculate the probability for "elsewhere", assuming the read is correct but is from somewhere paralogous
-            elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
-            #elsewhereprobability = sum(np.array(isbase) / logln); # ln( (1-e) )
+            # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
+            #elsewhereprobability = sum([logsumexp(np.array([isbase[a]*2, (callerror[a]*2)-log3]) / logln) for a in range(0,len(callerror))]); # ln( (1-e)^2 + e^2/3 )
+            # perfect & edit distance 1: to approximate probability distribution of a read that originates from a paralog elsewhere, this should be the bulk of the probability mass
+            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)); 
+
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
             else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
 
@@ -311,8 +313,8 @@ def evaluateVariant(fn, varid, var_set):
                 pelsewhere = readentry[varid][setid][readid];
 
                 # Mixture model: outside paralogous source of reads
-                #prgx = np.logaddexp([elsewhereprior + pelsewhere, prgx]);
-                #prgv = np.logaddexp([elsewhereprior + pelsewhere, prgv]);
+                #prgx = np.logaddexp(elsewhereprior + pelsewhere, prgx);
+                #prgv = np.logaddexp(elsewhereprior + pelsewhere, prgv);
 
                 # Mixture model: ln of (mu)(P(r|Gv)) + (1-mu)(P(r|Gx))
                 phet = np.logaddexp(ln50 + prgv, ln50 + prgx);

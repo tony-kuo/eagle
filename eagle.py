@@ -20,17 +20,19 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-5; # Prior probability of read originating from an outside paralogous source
-lnomega = np.log(omega);
-xreadlength = 100; # Expected read length
+omega = 1E-4; # Prior probability of read originating from an outside paralogous source
 alpha = 1.3; # Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-lnalpha = np.log(alpha);
+xreadlength = 100; # Expected read length
 
+# Precalculated log values 
 logln = np.log10(np.e);
 log3 = np.log10(3);
 ln50 = np.log(0.5);
 ln10 = np.log(0.1);
 ln90 = np.log(0.9);
+lnomega = np.log(omega);
+lnalpha = np.log(alpha);
+
 complement = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'a': 't', 'c': 'g', 'g': 'c', 't': 'a' };
 
 def naturalSort(l): 

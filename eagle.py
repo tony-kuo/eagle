@@ -20,8 +20,12 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-4; # Prior probability of read originating from an outside paralogous source
+omega = 1E-5; # Prior probability of read originating from an outside paralogous source
 lnomega = np.log(omega);
+xreadlength = 100; # Expected read length
+alpha = 1.3; # Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
+lnalpha = np.log(alpha);
+
 logln = np.log10(np.e);
 log3 = np.log10(3);
 ln50 = np.log(0.5);
@@ -236,8 +240,9 @@ def evaluateVariant(fn, varid, var_set):
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
             # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
-            # perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
-            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (np.log(1.3) * readlength); 
+            #   perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
+            #   we account for if reads have different lengths, where longer reads should have a lower probability of originating from some paralogous elsewhere 
+            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * readlength) + (lnalpha * xreadlength); 
 
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
             else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);

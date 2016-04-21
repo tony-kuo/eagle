@@ -20,7 +20,8 @@ from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
 
 # Constants
-omega = 1E-5; # Prior probability read is from some "elsewhere"
+omega = 1E-4; # Prior probability of read originating from an outside paralogous source
+lnomega = np.log(omega);
 logln = np.log10(np.e);
 log3 = np.log10(3);
 ln50 = np.log(0.5);
@@ -236,7 +237,7 @@ def evaluateVariant(fn, varid, var_set):
 
             # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
             # perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
-            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)); 
+            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (np.log(1.3) * readlength); 
 
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
             else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
@@ -284,23 +285,20 @@ def evaluateVariant(fn, varid, var_set):
         ref = {};
         alt = {};
         het = {};
-        elsewhere = {};
         refcount = {};
         altcount = {};
         currentset = ();
 
         refprior = 0.5;
-        if multivariant: altprior = np.log((1-refprior-omega) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous
-        else: altprior = np.log((1-refprior-omega) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
+        if multivariant: altprior = np.log((1-refprior) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous
+        else: altprior = np.log((1-refprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
         refprior = np.log(refprior);
-        elsewhereprior = np.log(omega);
         for setid in readentry[varid]:
             currentset = readentry[varid][setid]['_VARSET_'];
             if currentset not in ref: 
                 ref[currentset] = float(0);
                 alt[currentset] = float(0);
                 het[currentset] = float(0);
-                elsewhere[currentset] = float(0);
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
 
@@ -310,8 +308,8 @@ def evaluateVariant(fn, varid, var_set):
                 pelsewhere = readentry[varid][setid][readid];
 
                 # Mixture model: probability that the read is from elsewhere, outside paralogous source
-                prgu = np.logaddexp(elsewhereprior + pelsewhere, prgu);
-                prgv = np.logaddexp(elsewhereprior + pelsewhere, prgv);
+                prgu = np.logaddexp(lnomega + pelsewhere, prgu);
+                prgv = np.logaddexp(lnomega + pelsewhere, prgv);
 
                 # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
                 phet = np.logaddexp(ln50 + prgv, ln50 + prgu);
@@ -319,19 +317,18 @@ def evaluateVariant(fn, varid, var_set):
                 phet90 = np.logaddexp(ln90 + prgv, ln10 + prgu);
                 phet = max([phet, phet10, phet90]); # Use the best allele frequency probability
 
-                # Read count is only incremented when the difference in probability is not ambiguous
-                if prgv > prgu and prgv > pelsewhere+elsewhereprior: altcount[currentset] += 1;
-                elif prgu > prgv and prgu > pelsewhere+elsewhereprior: refcount[currentset] += 1;
+                # Read count is only incremented when the difference in probability is not ambiguous, ln(2) difference
+                if prgv > prgu and prgv - prgu > 0.69: altcount[currentset] += 1;
+                elif prgu > prgv and prgu - prgv > 0.69: refcount[currentset] += 1;
                 
                 ref[currentset] += prgu + refprior;
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + altprior;
-                elsewhere[currentset] += pelsewhere + elsewhereprior;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(ref[currentset], het[currentset], alt[currentset], elsewhere[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref[currentset], het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) + list(elsewhere.values()) );
-        not_alt = list(ref.values()) + list(elsewhere.values());
+        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) );
+        not_alt = list(ref.values());
         for i in var_set:
             marginal_alt = [];
             for v in alt:

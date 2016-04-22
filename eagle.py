@@ -125,7 +125,6 @@ def readFasta(filename):
             line = line.strip();
             if line[0] == '>': #re.match('^>.+', line):
                 seqid = re.split('>| ', line)[1]; # >chr1 1 -> ['', 'chr1', '1']
-                if len(seqid) < 3: seqid = line[1:]; # >1 or >chr1
                 seq[seqid] = [];
             else:
                 seq[seqid].append(line);
@@ -244,7 +243,7 @@ def evaluateVariant(fn, varid, var_set):
             # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
             #   perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
             #   we account for if reads have different lengths, where longer reads should have a lower probability of originating from some paralogous elsewhere 
-            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * readlength) + (lnalpha * xreadlength); 
+            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * (readlength - xreadlength)); 
 
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
             else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);

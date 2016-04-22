@@ -31,6 +31,7 @@ ln50 = np.log(0.5);
 ln10 = np.log(0.1);
 ln90 = np.log(0.9);
 lnomega = np.log(omega);
+ln1_omega = np.log(1-omega);
 lnalpha = np.log(alpha);
 
 complement = { 'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'a': 't', 'c': 'g', 'g': 'c', 't': 'a' };
@@ -314,8 +315,8 @@ def evaluateVariant(fn, varid, var_set):
                 pelsewhere = readentry[varid][setid][readid];
 
                 # Mixture model: probability that the read is from elsewhere, outside paralogous source
-                prgu = np.logaddexp(lnomega + pelsewhere, prgu);
-                prgv = np.logaddexp(lnomega + pelsewhere, prgv);
+                prgu = np.logaddexp(lnomega - ln1_omega + pelsewhere, prgu);
+                prgv = np.logaddexp(lnomega - ln1_omega + pelsewhere, prgv);
 
                 # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
                 phet = np.logaddexp(ln50 + prgv, ln50 + prgu);

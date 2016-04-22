@@ -331,12 +331,12 @@ def evaluateVariant(fn, varid, var_set):
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + altprior;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref[currentset], het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+            if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref[currentset], het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) );
-        not_alt = list(ref.values());
         for i in var_set:
             marginal_alt = [];
+            not_alt = list(ref.values());
             for v in alt:
                 if i in v: marginal_alt.extend([ alt[v], het[v] ]);
                 else: not_alt.extend([ alt[v], het[v] ]);

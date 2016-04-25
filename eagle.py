@@ -178,6 +178,7 @@ def readPYSAM(files, var_list, outfile):
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
 
 def evaluateVariant(fn, varid, var_set):
+    if varid[0] not in refseq: return([]);
     refentry = {};
     altentry = {};
     readentry = {};
@@ -265,6 +266,7 @@ def evaluateVariant(fn, varid, var_set):
                 for j in read.get_tag('XA').split(';'):
                     if len(j) <= 0: break; # Because last element is empty
                     t = j.split(',');
+                    if t[0] not in refseq: continue;
                     xa_pos = int(t[1]);
                     if (read.is_reverse == False and xa_pos < 0) or (read.is_reverse == True and xa_pos > 0): # If strand is opposite of that from primary alignment
                         newreadseq = ''.join(complement.get(base,base) for base in reversed(read.query_sequence)).encode('utf-8');

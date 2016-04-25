@@ -41,14 +41,21 @@ def readFiles(files):
         fh.close;
     return(entry);
 
-def compileEntries(entry, threshold, keepone, isnegative):
+def compileEntries(entry, likelihood, af, keepone, isnegative):
     new_entry = {};
     for key in entry:
+        # Check LR
         for fn in entry[key]: entry[key][fn] = sorted(entry[key][fn], key=lambda tup:tup[2], reverse=True)[0]; # Max LR per file for entries with same key
         current = sorted(entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
-        valid = False;
-        if isnegative and current[2] < threshold: valid = True; # Negative samples require: LR < threshold
-        elif not isnegative and current[2] > threshold: valid = True; # Positive samples require: LR > threshold
+        valid = True;
+        if isnegative and current[2] > likelihood: valid = False;
+        elif not isnegative and current[2] < likelihood: valid = False;
+        # Check AF
+        current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0]; # Max AF across files
+        if isnegative and current[1] > af: valid = False;
+        elif not isnegative and current[1] < af: valid = False;
+        # Positive samples require: LR >= threshold, AF <= threshold
+        # Negative samples require: LR <= threshold, AF >= threshold
         if valid:
             if keepone: new_entry[key] = current;
             else: new_entry[key] = entry[key];
@@ -86,19 +93,21 @@ def main():
     parser = argparse.ArgumentParser(description='Compile results from output of evalVariant [multiple, positive/negative]');
     parser.add_argument('-p', nargs='+', help='positive samples [f1 f2...]');
     parser.add_argument('-n', nargs='+', help='negative samples [f1 f2...]');
-    parser.add_argument('-min', type=float, default=0, help='threshold for minimum log likelihood ratio for positive samples (default: 0)');
-    parser.add_argument('-max', type=float, default=0, help='threshold for maximum log likelihood ratio for negative samples (default: 0)');
+    parser.add_argument('-minlr', type=float, default=0, help='threshold for minimum log likelihood ratio for positive samples (default: 0)');
+    parser.add_argument('-maxlr', type=float, default=0, help='threshold for maximum log likelihood ratio for negative samples (default: 0)');
+    parser.add_argument('-minaf', type=float, default=0.1, help='minimum allele frequency for positive samples (default: 0.1)');
+    parser.add_argument('-maxaf', type=float, default=0.01, help='maximum allele frequency for negative samples (default: 0.01)');
     parser.add_argument('-s', action='store_true', help='somatic, in that it must exist in the negative sample but log likelihood ratio < -max');
     parser.add_argument('-p1', action='store_true', help='print only one positive entry among many (entry with max likelihood ratio)');
     parser.add_argument('-n1', action='store_true', help='print only one negative entry among many (entry with max likelihood ratio)');
     args = parser.parse_args();
 
     pos_entry = readFiles(args.p); 
-    pos_entry = compileEntries(pos_entry, args.min, args.p1, False);
+    pos_entry = compileEntries(pos_entry, args.minlr, args.minaf, args.p1, False);
     neg_entry = {};
     if args.n:
         neg_entry = readFiles(args.n);
-        neg_entry = compileEntries(neg_entry, args.max, args.n1, True);
+        neg_entry = compileEntries(neg_entry, args.maxlr, args.maxaf, args.n1, True);
 
     outputResults(pos_entry, neg_entry, args.s, args.p, args.n, args.p1, args.n1);
 

@@ -91,8 +91,9 @@ def groupNearbyVariants(entry):
     for i in range(0, len(varid)):
         if len(entry[varid[i]]) <= 1: continue; # Ignore singletons
         x = max([entry[varid[i]][j+1][0] - entry[varid[i]][j][0] for j in range(0, len(entry[varid[i]])-1)]); # If all variants in set are adjacent to each other
-        y = max([max(len(j[1]), len(j[2])) for j in entry[varid[i]]]); # If all variants are SNPs
-        if x == 1 and y == 1:
+        y = max([max(len(j[1]), len(j[2])) for j in entry[varid[i]]]); # If all variants are length 1
+        z = [j[1] for j in entry[varid[i]]] + [j[2] for j in entry[varid[i]]]; # Account for '-' representation
+        if x == 1 and y == 1 and '-' not in z:
             ref = ''.join([j[1] for j in entry[varid[i]]]);
             alt = ''.join([j[2] for j in entry[varid[i]]]);
             misc[(varid[i][0], varid[i][1], ref, alt)] = [(varid[i][1], ref, alt)]; # Merge and delete extraneous entries

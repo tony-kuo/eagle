@@ -336,7 +336,8 @@ def evaluateVariant(fn, varid, var_set):
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
+        if len(var_set) > 1: total = logsumexp( [ref+np.log(2)] + list(alt.values()) + list(het.values()) ); # Double reference probability in total if there are variant sets hypotheses
+        else: total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
         for i in var_set:
             marginal_alt = [];
             not_alt = [ref];

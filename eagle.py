@@ -22,7 +22,6 @@ signal(SIGPIPE,SIG_DFL);
 # Constants
 omega = 1E-4; # Prior probability of read originating from an outside paralogous source
 alpha = 1.3; # Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-xreadlength = 100; # Expected read length
 
 # Precalculated log values 
 logln = np.log10(np.e);
@@ -224,7 +223,7 @@ def evaluateVariant(fn, varid, var_set):
 
         # Fetch reads that cross the variant location
         samfile = pysam.AlignmentFile(fn, "rb");
-        readset = samfile.fetch(reference=varid[0], start=varstart-1, end=varend+1);
+        readset = samfile.fetch(reference=varid[0], start=max(0,varstart-1), end=min(varend+1,reflength[varid[0]]));
         for read in readset: 
             if read.is_unmapped: continue;
             if primaryonly and read.is_secondary: continue;
@@ -245,7 +244,7 @@ def evaluateVariant(fn, varid, var_set):
             # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
             #   perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
             #   we account for if reads have different lengths, where longer reads should have a lower probability of originating from some paralogous elsewhere 
-            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * (readlength - xreadlength)); 
+            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * (readlength - read.infer_query_length())); 
 
             if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
             else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);

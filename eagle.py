@@ -291,25 +291,25 @@ def evaluateVariant(fn, varid, var_set):
 
     outlist = [];
     if readentry[varid]: # Compile probabilities from read data if exists
-        ref = {};
+        ref = float(0);
         alt = {};
         het = {};
         refcount = {};
         altcount = {};
         currentset = ();
 
-        refprior = 0.5;
-        if multivariant: altprior = np.log((1-refprior) / float(2)); # multivariant is one hypothesis for all variants as a haplotype, homozygous & non-homozygous
-        else: altprior = np.log((1-refprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
-        refprior = np.log(refprior);
         for setid in readentry[varid]:
             currentset = readentry[varid][setid]['_VARSET_'];
-            if currentset not in ref: 
-                ref[currentset] = float(0);
+            if currentset not in alt: 
                 alt[currentset] = float(0);
                 het[currentset] = float(0);
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
+
+            refprior = 0.5;
+            if multivariant or len(currentset) == 1: altprior = np.log((1-refprior) / float(2)); # one hypothesis, either one variant or multiple as a haplotype, homozygous & non-homozygous
+            else: altprior = np.log((1-refprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
+            refprior = np.log(refprior);
 
             for readid in refentry[varid][setid]:
                 prgu = refentry[varid][setid][readid]; # ln of P(r|Gu), where Gu is the unchanged from the reference genome
@@ -330,23 +330,24 @@ def evaluateVariant(fn, varid, var_set):
                 if prgv > prgu and prgv - prgu > 0.69: altcount[currentset] += 1;
                 elif prgu > prgv and prgu - prgv > 0.69: refcount[currentset] += 1;
                 
-                ref[currentset] += prgu + refprior;
+                if setid == 0: ref += prgu + refprior; # Only one reference hypothesis
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + altprior;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
-            if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref[currentset], het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
+            if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = logsumexp( list(ref.values()) + list(alt.values()) + list(het.values()) );
+        total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
         for i in var_set:
             marginal_alt = [];
-            not_alt = list(ref.values());
+            not_alt = [ref];
             for v in alt:
                 if i in v: marginal_alt.extend([ alt[v], het[v] ]);
                 else: not_alt.extend([ alt[v], het[v] ]);
             if multivariant: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], altcount[currentset]+refcount[currentset], altcount[currentset]);
             else: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(altcount.values())+max(refcount.values()), max(altcount.values()));
             # Probability and odds in log10
-            outstr += '{0}\t{1}\t'.format((logsumexp(marginal_alt) - total) / np.log(10), (logsumexp(marginal_alt) - logsumexp(not_alt)) / np.log(10)); 
+            #outstr += '{0}\t{1}\t'.format((logsumexp(marginal_alt) - total) / np.log(10), (logsumexp(marginal_alt) - logsumexp(not_alt)) / np.log(10)); 
+            outstr += '{0}\t{1}\t'.format((logsumexp(marginal_alt) - total) / np.log(10), (max(marginal_alt) - max(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    
             if len(var_set) > 1: outstr += '{0}'.format(var_set);
             else: outstr += '[]';

@@ -127,7 +127,7 @@ def readPYSAM(files, var_list, outfile):
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
         varid = sorted(list(var_list.keys()));
         numvariants = len(varid);
-        for n in range(0, numvariants): entry.extend(evaluateVariant(fn, varid[n], var_list[varid[n]]));
+        #for n in range(0, numvariants): entry.extend(evaluateVariant(fn, varid[n], var_list[varid[n]]));
 
         try:
             pool = Pool(processes=numprocesses);
@@ -161,7 +161,7 @@ def evaluateVariant(fn, varid, var_set):
     elif len(var_set) > maxk: 
         hypotheses = list(combinations(var_set, 1)); # Solo variant hypotheses
         hypotheses.extend(list(combinations(var_set, len(var_set)))); # All variant co-occurs hypothesis
-        for i in range(2, int(np.sqrt(len(var_set)))): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
+        for i in range(2, int(np.sqrt(len(var_set)))+1): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
     else: hypotheses = chain(*map(lambda x: combinations(var_set, x), range(1, len(var_set)+1))); # powerset of variants in set excluding empty set
 
     setid = 0;

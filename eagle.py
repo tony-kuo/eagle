@@ -99,20 +99,6 @@ def groupNearbyVariants(entry):
             #misc[(varid[i][0], varid[i][1], ref, alt)] = [(varid[i][1], ref, alt)]; # Merge and delete extraneous entries
             #del entry[varid[i]];
     #if misc: entry.update(misc);
-    # Organize the sets so that every variant of interest is the first in set while the rest contain nearby variants
-    #if not multivariant:
-        #misc = {};
-        #varid = sorted(entry.keys());
-        #for i in range(0, len(varid)):
-            #if len(entry[varid[i]]) <= 1: continue; # Ignore singletons
-            #for j in entry[varid[i]]:
-                #newid = (varid[i][0], j[0], j[1], j[2]);
-                #misc[newid] = [j];
-                #for k in entry[varid[i]]:
-                    #if j != k and abs(j[0] - k[0]) <= distancethreshold: misc[newid].append(k);
-            #del entry[varid[i]];
-        #if misc: entry.update(misc);
-
     print("Group within:\t{0} bp\t{1} entries \t{2}".format(distancethreshold, len(entry.keys()), datetime.now()), file=sys.stderr);
     return(entry);
 
@@ -141,7 +127,7 @@ def readPYSAM(files, var_list, outfile):
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
         varid = sorted(list(var_list.keys()));
         numvariants = len(varid);
-        #for n in range(0, numvariants): entry.extend(evaluateVariant(fn, varid[n], var_list[varid[n]]));
+        for n in range(0, numvariants): entry.extend(evaluateVariant(fn, varid[n], var_list[varid[n]]));
 
         try:
             pool = Pool(processes=numprocesses);
@@ -152,23 +138,6 @@ def readPYSAM(files, var_list, outfile):
         for p in results:
             for j in p.get():
                 if j: entry.append(j); # Only keep non-empty results
-
-        #n = 0;
-        #outqueue = Queue();
-        #while n < numvariants:
-            #procs = [];
-            #while len(procs) < numprocesses:
-                #if n >= numvariants: break;
-                #p = Process(target=evaluateVariant, args=(outqueue, fn, varid[n], var_list[varid[n]]));
-                #procs.append(p);
-                #p.start();
-                #n += 1;
-                #for i in procs: # Get results from each process from queue
-                    #for j in outqueue.get(): 
-                        #if j: entry.append(j); # Only keep non-empty results
-                #for i in procs: 
-                    #i.join();
-                    #procs.remove(i)
 
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;

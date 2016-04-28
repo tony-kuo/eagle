@@ -86,19 +86,19 @@ def groupNearbyVariants(entry):
         if misc: entry.update(misc);
         else: break;
     # Combine adjacent SNPs
-    misc = {};
-    varid = sorted(entry.keys());
-    for i in range(0, len(varid)):
-        if len(entry[varid[i]]) <= 1: continue; # Ignore singletons
-        x = max([entry[varid[i]][j+1][0] - entry[varid[i]][j][0] for j in range(0, len(entry[varid[i]])-1)]); # If all variants in set are adjacent to each other
-        y = max([max(len(j[1]), len(j[2])) for j in entry[varid[i]]]); # If all variants are length 1
-        z = [j[1] for j in entry[varid[i]]] + [j[2] for j in entry[varid[i]]]; # Account for '-' representation
-        if x == 1 and y == 1 and '-' not in z:
-            ref = ''.join([j[1] for j in entry[varid[i]]]);
-            alt = ''.join([j[2] for j in entry[varid[i]]]);
-            misc[(varid[i][0], varid[i][1], ref, alt)] = [(varid[i][1], ref, alt)]; # Merge and delete extraneous entries
-            del entry[varid[i]];
-    if misc: entry.update(misc);
+    #misc = {};
+    #varid = sorted(entry.keys());
+    #for i in range(0, len(varid)):
+        #if len(entry[varid[i]]) <= 1: continue; # Ignore singletons
+        #x = max([entry[varid[i]][j+1][0] - entry[varid[i]][j][0] for j in range(0, len(entry[varid[i]])-1)]); # If all variants in set are adjacent to each other
+        #y = max([max(len(j[1]), len(j[2])) for j in entry[varid[i]]]); # If all variants are length 1
+        #z = [j[1] for j in entry[varid[i]]] + [j[2] for j in entry[varid[i]]]; # Account for '-' representation
+        #if x == 1 and y == 1 and '-' not in z:
+            #ref = ''.join([j[1] for j in entry[varid[i]]]);
+            #alt = ''.join([j[2] for j in entry[varid[i]]]);
+            #misc[(varid[i][0], varid[i][1], ref, alt)] = [(varid[i][1], ref, alt)]; # Merge and delete extraneous entries
+            #del entry[varid[i]];
+    #if misc: entry.update(misc);
     # Organize the sets so that every variant of interest is the first in set while the rest contain nearby variants
     #if not multivariant:
         #misc = {};
@@ -141,7 +141,7 @@ def readPYSAM(files, var_list, outfile):
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
         varid = sorted(list(var_list.keys()));
         numvariants = len(varid);
-        #entry = [evaluateVariant(fn, varid[n], var_list[varid[n]]) for n in range(0, numvariants)];
+        #for n in range(0, numvariants): entry.extend(evaluateVariant(fn, varid[n], var_list[varid[n]]));
 
         try:
             pool = Pool(processes=numprocesses);
@@ -336,6 +336,7 @@ def evaluateVariant(fn, varid, var_set):
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
+        # P(solo) > P(marginal) for sets of 1, due to larger prior, so take the solo as it will either be low relative to variant combinations or dominate the sum 
         if not multivariant and len(var_set) > 1: total = logsumexp( [ref+np.log(2)] + list(alt.values()) + list(het.values()) ); # Double reference probability in total if marginal probabilities
         else: total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
         for i in var_set:
@@ -364,7 +365,7 @@ void getReadProbList(char*, int, int, int, double*, double*);
 C = ffi.verify ("""
 static int alphabetval[26];
 static void initAlphaMap(void) {
-    memset(alphabetval, 0, sizeof(alphabetval)); // Zero out array
+    memset(alphabetval, 4, sizeof(alphabetval)); // Zero out array
     alphabetval['A'-'A'] = 0;
     alphabetval['T'-'A'] = 1;
     alphabetval['G'-'A'] = 2;

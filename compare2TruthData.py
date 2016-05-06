@@ -18,17 +18,6 @@ def naturalSort(l):
     alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
     return sorted(l, key=alphanum_key)
 
-def readFiles(filename):
-    entry = {};
-    with open(filename, 'r') as fh:
-        for line in fh:
-            if re.match('^#', line) or len(line.strip())==0: continue;
-            t = line.strip().split('\t');
-            key = '\t'.join(t[0:4]);
-            entry[key] = line.strip();
-    fh.close;
-    return(entry);
-
 def readVCF(filename):
     entry = {};
     with open(filename, 'r') as fh:
@@ -47,28 +36,30 @@ def readVCF(filename):
     fh.close;
     return(entry);
 
+def readFiles(filename, vcf, falsepos, within_dist):
+    with open(filename, 'r') as fh:
+        with open(falsepos, 'w') as falsepos_fh:
+            for line in fh:
+                if re.match('^#', line) or len(line.strip())==0: continue;
+                line = line.strip();
+                var = line.split('\t');
+                pos = int(var[1]);
+                (ref, alt) = removeCommonPrefix(var[2], var[3]);
+                if var[0] in vcf and within_dist > 0:
+                    pos_list = [a[0] for a in vcf[var[0]].keys()];
+                    if pos in pos_list or min(pos_list, key=lambda x:abs(x-pos)) <= within_dist: print(line);
+                    else: print(line, file=falsepos_fh);
+                elif var[0] in vcf and (pos, ref, alt) in vcf[var[0]]: print(line);
+                else: print(line, file=falsepos_fh);
+        falsepos_fh.close;
+    fh.close;
+
 def removeCommonPrefix(s1, s2):
     if len(s1) == 1 and len(s2) == 1: return(s1, s2); # Return as is if SNP
     i = 0;
     while (i < min(len(s1),len(s2)) and s1[i] == s2[i]): i += 1;
     if i > 0: return(s1[i-1:], s2[i-1:]);
     return(s1, s2); # Return as is if SNP
-
-def outputResults(lr, vcf, false_filename, within_dist):
-    with open(false_filename, 'w') as fh:
-        for key in naturalSort(lr):
-            t = key.strip().split('\t');
-            refid = t[0];
-            pos = int(t[1]);
-            (ref, alt) = removeCommonPrefix(t[2], t[3]);
-            if refid in vcf and within_dist > 0:
-                pos_list = [a[0] for a in vcf[refid].keys()];
-                if pos in pos_list: print('{0}'.format(lr[key]));
-                elif min(pos_list, key=lambda x:abs(x-pos)) <= within_dist: print('{0}'.format(lr[key]));
-                else: print('{0}'.format(lr[key]), file=fh);
-            elif refid in vcf and (pos, ref, alt) in vcf[refid]: print('{0}'.format(lr[key]));
-            else: print('{0}'.format(lr[key]), file=fh);
-    fh.close;
 
 def main():
     parser = argparse.ArgumentParser(description='Compare to VCF Truth Data');
@@ -78,9 +69,8 @@ def main():
     parser.add_argument('-f', help='false positive file name');
     args = parser.parse_args();
 
-    lr = readFiles(args.l); 
     vcf = readVCF(args.v); 
-    outputResults(lr, vcf, args.f, args.n);
+    readFiles(args.l, vcf, args.f, args.n); 
 
 if __name__ == '__main__':
     try:

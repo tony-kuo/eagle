@@ -27,8 +27,11 @@ A tab-delimited text file with one row per variant and columns representing:
 **Input/Output Parameters**
 
 -v VCF file describing the variants, only the columns describing position and sequence are used [columns: 1,2,4,5].
+
 -a BAM alignment data file, reference coordinated sorted with index [*filename*.bam.bai].
+
 -r Reference genome [multi] fasta file.
+
 -o Output file name, defaults to *stdout* if not specified.
 
 **Program Parameters**
@@ -42,3 +45,7 @@ A tab-delimited text file with one row per variant and columns representing:
 -mvh Instead of considering the combinations of variants in the hypotheses set, consider that all variants in the set co-occur by testing **one** multi-variant hypothesis.
 
 -p Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
+
+**Usage Notes**
+
+Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the sets of variant combinations will separately consider each alternative sequence. This may result in entries with the first 4 columns being identical. The user needs to use their own judgement to interpret the relative effect sizes of among duplicate variants in the set. 'compileLikelihood.py' will retain only the entry with the maximum likelihood.

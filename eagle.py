@@ -73,9 +73,7 @@ def groupNearbyVariants(entry):
         misc = {};
         varid = sorted(entry.keys());
         for i in range(0, len(varid)):
-            if len(entry[varid[i]]) <= 1:
-                if multivariant: del entry[varid[i]]; # Remove singletons if we only consider the multi-variant hypothesis
-                continue;
+            if len(entry[varid[i]]) <= 1: continue; # Skip singletons
             for j in range(0, len(entry[varid[i]])-1):
                 if entry[varid[i]][j][0] == entry[varid[i]][j+1][0]:
                     newid = (varid[i][0], varid[i][1], varid[i][2], varid[i][3], j);
@@ -157,11 +155,11 @@ def evaluateVariant(fn, varid, var_set):
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
-    if multivariant: hypotheses = list(combinations(var_set, len(var_set)));
-    elif len(var_set) > maxk: 
+    if multivariant or len(var_set) > maxk: 
         hypotheses = list(combinations(var_set, 1)); # Solo variant hypotheses
         hypotheses.extend(list(combinations(var_set, len(var_set)))); # All variant co-occurs hypothesis
-        for i in range(2, int(np.sqrt(len(var_set)))+1): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
+        if not multivariant:
+            for i in range(2, int(np.sqrt(len(var_set)))+1): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
     else: hypotheses = chain(*map(lambda x: combinations(var_set, x), range(1, len(var_set)+1))); # powerset of variants in set excluding empty set
 
     setid = 0;
@@ -306,7 +304,7 @@ def evaluateVariant(fn, varid, var_set):
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         # P(solo) > P(marginal) for sets of 1, due to larger prior, so take the solo as it will either be low relative to variant combinations or dominate the sum 
-        if not multivariant and len(var_set) > 1: total = logsumexp( [ref+np.log(2)] + list(alt.values()) + list(het.values()) ); # Double reference probability in total if marginal probabilities
+        if len(var_set) > 1: total = logsumexp( [ref+np.log(2)] + list(alt.values()) + list(het.values()) ); # Double reference probability in total if multiple variants, for solo + multi
         else: total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
         for i in var_set:
             marginal_alt = [];
@@ -314,8 +312,7 @@ def evaluateVariant(fn, varid, var_set):
             for v in alt:
                 if i in v: marginal_alt.extend([ alt[v], het[v] ]);
                 else: not_alt.extend([ alt[v], het[v] ]);
-            if multivariant: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], altcount[currentset]+refcount[currentset], altcount[currentset]);
-            else: outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(altcount.values())+max(refcount.values()), max(altcount.values()));
+            outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(altcount.values())+max(refcount.values()), max(altcount.values()));
             # Probability and odds in log10
             outstr += '{0}\t{1}\t'.format((logsumexp(marginal_alt) - total) / np.log(10), (max(marginal_alt) - max(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    

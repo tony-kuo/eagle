@@ -14,7 +14,7 @@ import numpy as np;
 from cffi import FFI;
 from scipy.misc import logsumexp;
 from itertools import chain, combinations;
-from multiprocessing import Process, Queue, Pool;
+from multiprocessing import Pool;
 from datetime import datetime;
 from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
@@ -124,18 +124,19 @@ def readPYSAM(files, var_list, outfile):
     for fn in files: 
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
         varid = sorted(list(var_list.keys()));
-        numvariants = len(varid);
-        #for n in range(0, numvariants): entry.extend(evaluateVariant(fn, varid[n], var_list[varid[n]]));
+        args = [];
+        for n in range(0, len(varid)): 
+            if varid[n][0] in refseq: args.append((fn, varid[n], var_list[varid[n]]));
+                #entry.extend(evaluateVariant((fn, varid[n], var_list[varid[n]])));
+        #continue;
 
         try:
             pool = Pool(processes=numprocesses);
-            results = [pool.apply_async(evaluateVariant, args=(fn, varid[n], var_list[varid[n]])) for n in range(0, numvariants)];
+            results = pool.map_async(evaluateVariant, args);
+            for p in results.get(): entry.extend(p);
         finally:
             pool.close();
             pool.join();
-        for p in results:
-            for j in p.get():
-                if j: entry.append(j); # Only keep non-empty results
 
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
@@ -144,8 +145,8 @@ def readPYSAM(files, var_list, outfile):
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
 
-def evaluateVariant(fn, varid, var_set):
-    if varid[0] not in refseq: return([]);
+def evaluateVariant(args):
+    (fn, varid, var_set) = args;
     refentry = {};
     altentry = {};
     readentry = {};
@@ -155,12 +156,10 @@ def evaluateVariant(fn, varid, var_set):
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
-    if multivariant or len(var_set) > maxk: 
-        hypotheses = list(combinations(var_set, 1)); # Solo variant hypotheses
-        hypotheses.extend(list(combinations(var_set, len(var_set)))); # All variant co-occurs hypothesis
-        if not multivariant:
-            for i in range(2, int(np.sqrt(len(var_set)))+1): hypotheses.extend(list(combinations(var_set, i))); # n choose k variant combination hypotheses, up to n choose sqrt(n)
-    else: hypotheses = chain(*map(lambda x: combinations(var_set, x), range(1, len(var_set)+1))); # powerset of variants in set excluding empty set
+    if multivariant: i = [1, len(var_set)];
+    elif len(var_set) > maxk: i = range(1, int(np.sqrt(len(var_set)))+1) + [len(var_set)]; # Limit variant combinations to up to sqrt(n) while always including the "all variants" hypotheses
+    else: i = range(1, len(var_set)+1); # Powerset of variants in set excluding empty set
+    hypotheses = chain(*map(lambda x: combinations(var_set, x), i));
 
     setid = 0;
     for currentset in hypotheses:
@@ -242,14 +241,14 @@ def evaluateVariant(fn, varid, var_set):
                     else: newreadprobmatrix = readprobmatrix;
                     xa_pos = abs(xa_pos);
 
-                    # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous)
+                    # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
                     readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
                     # Probability given reference genome
                     readprobability = calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, readlength, newreadprobmatrix);
                     refentry[varid][setid][readid] = np.logaddexp(refentry[varid][setid][readid], readprobability);
                     if debug: print(readprobability, end='\t');
                     # Probability given alternate genome
-                    if t[0] == samfile.getrname(read.reference_id): # Secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), just in case multi-mapped position also crosses the variant position
+                    if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
                         if xa_pos > varid[1]-1: xa_pos += offset;
                         readprobability = calcReadProbability(altseq, altseqlength, xa_pos, readlength, newreadprobmatrix);
                     altentry[varid][setid][readid] = np.logaddexp(altentry[varid][setid][readid], readprobability);
@@ -315,7 +314,7 @@ def evaluateVariant(fn, varid, var_set):
             # Probability and odds in log10
             outstr += '{0}\t{1}\t'.format((max(marginal_alt) - total) / np.log(10), (max(marginal_alt) - max(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    
-            if len(var_set) > 1: outstr += '{0}'.format(var_set);
+            if len(var_set) > 1: outstr += '{0}'.format(var_set[0]);
             else: outstr += '[]';
             outlist.append(outstr.strip());
     return(outlist);

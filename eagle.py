@@ -375,11 +375,10 @@ void getReadProbList(char *seq, int seqlength, int refpos, int readlength, doubl
 """)
 C.initAlphaMap(); # Initialize alphabet to int mapping table
 def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix):
-    probabilityarray = ffi.new("double[]", readlength*2);
-    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, probabilityarray);
-    overall_probability = np.frombuffer(ffi.buffer(probabilityarray));
-    overall_probability = logsumexp(overall_probability[np.nonzero(overall_probability)] / logln); # sum of probabilities as ln exponential (converted from log10)
-    return(overall_probability);
+    probabilityarray = np.zeros(readlength*2);
+    p_probabilityarray = ffi.cast("double *", probabilityarray.ctypes.data); # Pointer to probability array
+    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, p_probabilityarray);
+    return(logsumexp(probabilityarray[np.nonzero(probabilityarray)] / logln)); # Return sum of probabilities as ln exponential (converted from log10)
 
 # Global Variables
 debug = False;

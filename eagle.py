@@ -176,7 +176,8 @@ def evaluateVariant(args):
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
-    i = [1, len(var_set)];
+    if len(var_set) == 1: i = [1];
+    else: i = [1, len(var_set)];
     if not multivariant: i.extend(range(2, len(var_set)));
     hypotheses = chain(*map(lambda x: combinations(var_set, x), i)); # Powerset of variants in set excluding empty set
 

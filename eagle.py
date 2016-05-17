@@ -14,7 +14,7 @@ import numpy as np;
 from cffi import FFI;
 from scipy.misc import logsumexp;
 from itertools import chain, combinations;
-from multiprocessing import Pool;
+from multiprocessing import Pool, Process, Manager;
 from datetime import datetime;
 from signal import signal, SIGPIPE, SIG_DFL;
 signal(SIGPIPE,SIG_DFL);
@@ -97,6 +97,9 @@ def groupNearbyVariants(entry):
             #misc[(varid[i][0], varid[i][1], ref, alt)] = [(varid[i][1], ref, alt)]; # Merge and delete extraneous entries
             #del entry[varid[i]];
     #if misc: entry.update(misc);
+    #for i in entry:
+        #if len(entry[i]) > maxk: print(i, len(entry[i]))
+    #sys.exit(0);
     print("Group within:\t{0} bp\t{1} entries \t{2}".format(distancethreshold, len(entry.keys()), datetime.now()), file=sys.stderr);
     return(entry);
 
@@ -119,21 +122,38 @@ def readFasta(filename):
         seqlength[seqid] = len(seq[seqid]);
     return(seq, seqlength);
 
+def processWork(inqueue, results):
+    while not inqueue.empty(): 
+        args = inqueue.get();
+        results.extend(evaluateVariant(args));
+
 def readPYSAM(files, var_list, outfile):
-    entry = [];
+    results = [];
+
+    #manager = Manager();
+    #work = manager.Queue(numprocesses);
+    #results = manager.list();
     for fn in files: 
         print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
         varid = sorted(list(var_list.keys()));
+
+        # Testing speed with Process, seems slower than pool
+        #pool = [];
+        #for i in range(0,numprocesses):
+            #p = Process(target=processWork, args=(work, results));
+            #p.start()
+            #pool.append(p);
+        #for n in range(0, len(varid)): 
+            #if varid[n][0] in refseq: work.put((fn, varid[n], var_list[varid[n]])); 
+        #for p in pool: p.join();
+
         args = [];
         for n in range(0, len(varid)): 
             if varid[n][0] in refseq: args.append((fn, varid[n], var_list[varid[n]]));
-                #entry.extend(evaluateVariant((fn, varid[n], var_list[varid[n]])));
-        #continue;
-
         try:
             pool = Pool(processes=numprocesses);
-            results = pool.map_async(evaluateVariant, args);
-            for p in results.get(): entry.extend(p);
+            poolresults = pool.map_async(evaluateVariant, args);
+            for p in poolresults.get(): results.extend(p);
         finally:
             pool.close();
             pool.join();
@@ -141,7 +161,7 @@ def readPYSAM(files, var_list, outfile):
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
     print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tProb(log10)\tOdds(log10)\tVarSet', file=fh);
-    for i in naturalSort(entry): print(i, file=fh);
+    for i in naturalSort(results): print(i, file=fh);
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
 
@@ -156,13 +176,13 @@ def evaluateVariant(args):
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
-    if multivariant: i = [1, len(var_set)];
-    elif len(var_set) > maxk: i = range(1, int(np.sqrt(len(var_set)))+1) + [len(var_set)]; # Limit variant combinations to up to sqrt(n) while always including the "all variants" hypotheses
-    else: i = range(1, len(var_set)+1); # Powerset of variants in set excluding empty set
-    hypotheses = chain(*map(lambda x: combinations(var_set, x), i));
+    i = [1, len(var_set)];
+    if not multivariant: i.extend(range(2, len(var_set)));
+    hypotheses = chain(*map(lambda x: combinations(var_set, x), i)); # Powerset of variants in set excluding empty set
 
     setid = 0;
     for currentset in hypotheses:
+        if setid >= maxh+len(var_set)+1 and setid > 0 and len(readentry[varid][setid-1]['_VARSET_']) != len(currentset): break; # Stop if max hypotheses limit reached and finished current n choose k
         if setid not in readentry[varid]: 
             refentry[varid][setid] = {};
             altentry[varid][setid] = {};
@@ -385,7 +405,7 @@ debug = False;
 primaryonly = False;
 numprocesses = 1;
 distancethreshold = 10;
-maxk = 10;
+maxh = 1024;
 multivariant = False;
 refseq = {};
 reflength = {};
@@ -396,7 +416,7 @@ def main():
     parser.add_argument('-r', help='reference sequence fasta file');
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
     parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)');
-    parser.add_argument('-k', type=int, default=10, help='maximum number of variants in hypotheses set, above which test 2^sqrt(n) instead of 2^n combinations (default: 10)');
+    parser.add_argument('-maxh', type=int, default=1024, help='the maximum number of hypotheses, instead of all 2^n (default: 2^10 = 1024)');
     parser.add_argument('-mvh', action='store_true', help='consider nearby variants as *one* multi-variant hypothesis');
     parser.add_argument('-p', action='store_true', help='consider only primary alignments');
     parser.add_argument('-t', type=int, default=1, help='number of processes to use (default: 1)');
@@ -406,12 +426,12 @@ def main():
         sys.exit(1);
     args = parser.parse_args();
 
-    global debug, primaryonly, numprocesses, distancethreshold, maxk, multivariant;
+    global debug, primaryonly, numprocesses, distancethreshold, maxh, multivariant;
     debug = args.debug;
     primaryonly = args.p;
     numprocesses = args.t;
     distancethreshold = args.n;
-    maxk = args.k;
+    maxh = args.maxh;
     multivariant = args.mvh;
 
     refvar_list = readVCF(args.v);

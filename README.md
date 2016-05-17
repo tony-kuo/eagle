@@ -1,6 +1,6 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-Implemented in python [Compatible with 2\.7\.\*, 3\.\*]
+Implemented in python with ABI level C functions [Compatible with 2\.7\.\*, 3\.\*]
 
 **Requires**: pysam, cffi, numpy, scipy
 
@@ -40,7 +40,7 @@ A tab-delimited text file with one row per variant and columns representing:
 
 -n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations.
 
--k Typically, 2^*n* combinations are checked for *n* variants in the hypotheses set. Limit the number of combinations to 2^sqrt(*n*) if the number of variants exceeds *k*.
+-maxh The maximum number of hypotheses to be tested.  Instead of looking at all 2^n hypotheses, if after the current *k* for *n choose k* combinations is finished and the number of hypotheses tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variant" hypothesis are always tested first and do not count towards the maximum.  Default is 1025 (2^10) hypotheses.
 
 -mvh Instead of considering the combinations of variants in the hypotheses set, consider that all variants in the set co-occur by testing **one** multi-variant hypothesis.
 
@@ -48,4 +48,4 @@ A tab-delimited text file with one row per variant and columns representing:
 
 **Usage Notes**
 
-Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the sets of variant combinations will separately consider each alternative sequence. This may result in entries with the first 4 columns being identical. The user needs to use their own judgement to interpret the relative effect sizes of among duplicate variants in the set. 'compileLikelihood.py' will retain only the entry with the maximum likelihood.
+Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the sets of variant combinations will separately consider each alternative sequence. This may result in entries with the first 4 columns being identical. The user needs to use their own judgement to interpret the relative effect sizes of duplicate entries in the output. The script *compileLikelihood.py* will retain the entry with the maximum probability.

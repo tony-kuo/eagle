@@ -259,7 +259,8 @@ def evaluateVariant(args):
                         newreadseq = ''.join(complement.get(base,base) for base in reversed(read.query_sequence)).encode('utf-8');
                         newreadprobmatrix = ffi.new("double[]", readlength*5);
                         C.setReadProbMatrix(newreadseq, readlength, list(isbase[::-1]), list(notbase[::-1]), newreadprobmatrix);
-                    else: newreadprobmatrix = readprobmatrix;
+                    else: 
+                        newreadprobmatrix = readprobmatrix;
                     xa_pos = abs(xa_pos);
 
                     # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
@@ -328,10 +329,14 @@ def evaluateVariant(args):
         for i in var_set:
             marginal_alt = [];
             not_alt = [ref];
+            marginal_count = [];
             for v in alt:
-                if i in v: marginal_alt.extend([ alt[v], het[v] ]);
-                else: not_alt.extend([ alt[v], het[v] ]);
-            outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(altcount.values())+max(refcount.values()), max(altcount.values()));
+                if i in v: 
+                    marginal_alt.extend([ alt[v], het[v] ]);
+                    marginal_count.extend([ altcount[v] ]);
+                else: 
+                    not_alt.extend([ alt[v], het[v] ]);
+            outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(refcount.values())+max(altcount.values()), min(marginal_count));
             # Probability and odds in log10
             outstr += '{0}\t{1}\t'.format((max(marginal_alt) - total) / np.log(10), (max(marginal_alt) - max(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    

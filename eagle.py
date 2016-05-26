@@ -336,7 +336,7 @@ def evaluateVariant(args):
                     marginal_count.extend([ altcount[v] ]);
                 else: 
                     not_alt.extend([ alt[v], het[v] ]);
-            outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(refcount.values())+max(altcount.values()), min(marginal_count));
+            outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(refcount.values())+max(altcount.values()), max(marginal_count));
             # Probability and odds in log10
             outstr += '{0}\t{1}\t'.format((max(marginal_alt) - total) / np.log(10), (max(marginal_alt) - max(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    

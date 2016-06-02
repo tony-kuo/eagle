@@ -295,8 +295,7 @@ def evaluateVariant(args):
                 altcount[currentset] = 0;
 
             refprior = 0.5;
-            # P(solo) > P(marginal) for sets of 1, due to larger prior, so just take the solo as we are taking the maximum later 
-            if multivariant or len(currentset) == 1: altprior = np.log((1-refprior) / float(2)); # one hypothesis, either one variant or multiple variants as a haplotype, homozygous & non-homozygous
+            if multivariant or len(var_set) == 1: altprior = np.log((1-refprior) / float(2)); # one hypothesis, either one variant or multiple variants as a haplotype, homozygous & non-homozygous
             else: altprior = np.log((1-refprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
             refprior = np.log(refprior);
 
@@ -325,7 +324,7 @@ def evaluateVariant(args):
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
-        total = max( [ref] + list(alt.values()) + list(het.values()) );
+        total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
         for i in var_set:
             marginal_alt = [];
             not_alt = [ref];
@@ -338,7 +337,7 @@ def evaluateVariant(args):
                     not_alt.extend([ alt[v], het[v] ]);
             outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], i[0], i[1], i[2], max(refcount.values())+max(altcount.values()), max(marginal_count));
             # Probability and odds in log10
-            outstr += '{0}\t{1}\t'.format((max(marginal_alt) - total) / np.log(10), (max(marginal_alt) - max(not_alt)) / np.log(10)); 
+            outstr += '{0}\t{1}\t'.format((logsumexp(marginal_alt) - total) / np.log(10), (logsumexp(marginal_alt) - logsumexp(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    
             if len(var_set) > 1: outstr += '{0}'.format(var_set[0]);
             else: outstr += '[]';

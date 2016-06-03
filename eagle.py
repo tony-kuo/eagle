@@ -286,6 +286,11 @@ def evaluateVariant(args):
         altcount = {};
         currentset = ();
 
+        refprior = 0.5;
+        if multivariant or len(var_set) == 1: altprior = np.log((1-refprior) / float(2)); # one hypothesis, either one variant or multiple variants as a haplotype, homozygous & non-homozygous
+        else: altprior = np.log((1-refprior) / float(len(readentry[varid])*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
+        refprior = np.log(refprior);
+
         for setid in readentry[varid]:
             currentset = readentry[varid][setid]['_VARSET_'];
             if currentset not in alt: 
@@ -293,11 +298,6 @@ def evaluateVariant(args):
                 het[currentset] = float(0);
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
-
-            refprior = 0.5;
-            if multivariant or len(var_set) == 1: altprior = np.log((1-refprior) / float(2)); # one hypothesis, either one variant or multiple variants as a haplotype, homozygous & non-homozygous
-            else: altprior = np.log((1-refprior) / float(len(var_set)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
-            refprior = np.log(refprior);
 
             for readid in refentry[varid][setid]:
                 prgu = refentry[varid][setid][readid]; # ln of P(r|Gu), where Gu is the unchanged from the reference genome

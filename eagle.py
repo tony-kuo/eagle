@@ -160,7 +160,7 @@ def readPYSAM(files, var_list, outfile):
 
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
-    print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tProb(log10)\tOdds(log10)\tVarSet', file=fh);
+    print('#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tlog10_Prob\tlog10_Odds\tVarSet', file=fh);
     for i in naturalSort(results): print(i, file=fh);
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
@@ -286,10 +286,13 @@ def evaluateVariant(args):
         altcount = {};
         currentset = ();
 
-        refprior = 0.5;
-        if multivariant or len(var_set) == 1: altprior = np.log((1-refprior) / float(2)); # one hypothesis, either one variant or multiple variants as a haplotype, homozygous & non-homozygous
-        else: altprior = np.log((1-refprior) / float(len(readentry[varid])*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
-        refprior = np.log(refprior);
+        refprior = np.log(0.5);
+        if len(var_set) == 1 or multivariant: # either one variant or multiple variants as a haplotype, homozygous & non-homozygous
+            altprior = np.log(0.25);
+        else:
+            altprior = np.log(float(0.5) / (len(readentry[varid])*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
+            #refprior = np.log(float(2) / ((len(readentry[varid])+1)*2)); # reference prior is double the alternative prior
+            #altprior = np.log(float(1) / ((len(readentry[varid])+1)*2)); # alternate prior divided evenly among the variant hypotheses (homozygous & non-homozygous)
 
         for setid in readentry[varid]:
             currentset = readentry[varid][setid]['_VARSET_'];
@@ -321,7 +324,7 @@ def evaluateVariant(args):
                 if setid == 0: ref += prgu + refprior; # Only one reference hypothesis
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + altprior;
-                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
+                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu+refprior, prgv+altprior, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );
@@ -339,7 +342,7 @@ def evaluateVariant(args):
             # Probability and odds in log10
             outstr += '{0}\t{1}\t'.format((logsumexp(marginal_alt) - total) / np.log(10), (logsumexp(marginal_alt) - logsumexp(not_alt)) / np.log(10)); 
             # Print the variant set entries if exists    
-            if len(var_set) > 1: outstr += '{0}'.format(var_set[0]);
+            if len(var_set) > 1: outstr += '{0}'.format(var_set);
             else: outstr += '[]';
             outlist.append(outstr.strip());
     return(outlist);

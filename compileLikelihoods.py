@@ -94,11 +94,11 @@ def main():
     parser = argparse.ArgumentParser(description='Compile results from output of evalVariant [multiple, positive/negative]');
     parser.add_argument('-p', nargs='+', help='positive samples [f1 f2...]');
     parser.add_argument('-n', nargs='+', help='negative samples [f1 f2...]');
-    parser.add_argument('-minlr', type=float, default=1, help='threshold for minimum log likelihood ratio for positive samples (default: 1)');
-    parser.add_argument('-maxlr', type=float, default=-1, help='threshold for maximum log likelihood ratio for negative samples (default: -1)');
-    parser.add_argument('-minaf', type=float, default=0.1, help='minimum allele frequency for positive samples (default: 0.1)');
-    parser.add_argument('-maxaf', type=float, default=0.01, help='maximum allele frequency for negative samples (default: 0.01)');
-    parser.add_argument('-s', action='store_true', help='somatic, in that it must exist in the negative sample but log likelihood ratio < -max');
+    parser.add_argument('-minlr', type=float, default=3, help='threshold for minimum log likelihood ratio for positive samples (default: 3)');
+    parser.add_argument('-maxlr', type=float, default=-3, help='threshold for maximum log likelihood ratio for negative samples (default: -3)');
+    parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
+    parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
+    parser.add_argument('-s', action='store_true', help='somatic, in that it must exist in the negative sample while also passing the threshold limits');
     parser.add_argument('-p1', action='store_true', help='print only one positive entry among many (entry with max likelihood ratio)');
     parser.add_argument('-n1', action='store_true', help='print only one negative entry among many (entry with max likelihood ratio)');
     args = parser.parse_args();

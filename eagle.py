@@ -149,7 +149,10 @@ def readPYSAM(files, var_list, outfile):
 
         args = [];
         for n in range(0, len(varid)): 
-            if varid[n][0] in refseq: args.append((fn, varid[n], var_list[varid[n]]));
+            if varid[n][0] in refseq: 
+                args.append((fn, varid[n], var_list[varid[n]]));
+                #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
+        #continue;
         try:
             pool = Pool(processes=numprocesses);
             poolresults = pool.map_async(evaluateVariant, args);
@@ -170,9 +173,9 @@ def evaluateVariant(args):
     refentry = {};
     altentry = {};
     readentry = {};
-    readentry[varid] = {};
-    refentry[varid] = {};
-    altentry[varid] = {};
+    readentry = {};
+    refentry = {};
+    altentry = {};
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
@@ -183,12 +186,12 @@ def evaluateVariant(args):
 
     setid = 0;
     for currentset in hypotheses:
-        if setid >= maxh+len(var_set)+1 and setid > 0 and len(readentry[varid][setid-1]['_VARSET_']) != len(currentset): break; # Stop if max hypotheses limit reached and finished current n choose k
-        if setid not in readentry[varid]: 
-            refentry[varid][setid] = {};
-            altentry[varid][setid] = {};
-            readentry[varid][setid] = {};
-            readentry[varid][setid]['_VARSET_'] = currentset;
+        if setid >= maxh+len(var_set)+1 and setid > 0 and len(readentry[setid-1]['_VARSET_']) != len(currentset): break; # Stop if max hypotheses limit reached and finished current n choose k
+        if setid not in readentry: 
+            refentry[setid] = {};
+            altentry[setid] = {};
+            readentry[setid] = {};
+            readentry[setid]['_VARSET_'] = currentset;
 
         # Construct the variant sequence
         offset = 0;
@@ -229,24 +232,25 @@ def evaluateVariant(args):
             readprobmatrix = ffi.new("double[]", readlength*5);
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 
-            # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
-            #   perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
-            #   we account for if reads have different lengths, where longer reads should have a lower probability of originating from some paralogous elsewhere 
-            elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * (readlength - read.infer_query_length())); 
+            # Reference genome probability and "elsewhere" probability only needs to be calculated once per readid
+            if setid == 0:
+                # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous
+                #   perfect & edit distance 1: to approximate probability distribution of a read that describes a paralog elsewhere, this account for the bulk of the probability distribution
+                #   we account for if reads have different lengths, where longer reads should have a lower probability of originating from some paralogous elsewhere 
+                elsewhereprobability = np.logaddexp(sum(isbase) / logln, (sum(isbase) / logln) + logsumexp((notbase - isbase) / logln)) - (lnalpha * (readlength - read.infer_query_length())); 
+                if readid not in readentry[setid]: readentry[setid][readid] = elsewhereprobability;
+                else: readentry[setid][readid] = np.logaddexp(readentry[setid][readid], elsewhereprobability);
 
-            if readid not in readentry[varid][setid]: readentry[varid][setid][readid] = elsewhereprobability;
-            else: readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
-
-            # Calculate the probability given reference genome
-            readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix);
-            if readid not in refentry[varid][setid]: refentry[varid][setid][readid] = readprobability;
-            else: refentry[varid][setid][readid] = np.logaddexp(refentry[varid][setid][readid], readprobability);
+                # Calculate the probability given reference genome, once per varid for setid 0
+                readprobability = calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, readlength, readprobmatrix);
+                if readid not in refentry[setid]: refentry[setid][readid] = readprobability;
+                else: refentry[setid][readid] = np.logaddexp(refentry[setid][readid], readprobability);
 
             # Calculate the probability given alternate genome
             readprobability = calcReadProbability(altseq, altseqlength, read.reference_start, readlength, readprobmatrix);
-            if readid not in altentry[varid][setid]: altentry[varid][setid][readid] = readprobability;
-            else: altentry[varid][setid][readid] = np.logaddexp(altentry[varid][setid][readid], readprobability);
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}'.format(refentry[varid][setid][readid], altentry[varid][setid][readid], readentry[varid][setid][readid], read, currentset));
+            if readid not in altentry[setid]: altentry[setid][readid] = readprobability;
+            else: altentry[setid][readid] = np.logaddexp(altentry[setid][readid], readprobability);
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}'.format(refentry[0][readid], altentry[setid][readid], readentry[setid][readid], read, currentset));
 
             # Multi-mapped alignments
             if not primaryonly and read.has_tag('XA'):
@@ -263,22 +267,23 @@ def evaluateVariant(args):
                         newreadprobmatrix = readprobmatrix;
                     xa_pos = abs(xa_pos);
 
-                    # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                    readentry[varid][setid][readid] = np.logaddexp(readentry[varid][setid][readid], elsewhereprobability);
                     # Probability given reference genome
                     readprobability = calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, readlength, newreadprobmatrix);
-                    refentry[varid][setid][readid] = np.logaddexp(refentry[varid][setid][readid], readprobability);
+                    if setid == 0: 
+                        refentry[setid][readid] = np.logaddexp(refentry[setid][readid], readprobability);
+                        # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
+                        readentry[setid][readid] = np.logaddexp(readentry[setid][readid], elsewhereprobability);
                     if debug: print(readprobability, end='\t');
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
                         if xa_pos > varid[1]-1: xa_pos += offset;
                         readprobability = calcReadProbability(altseq, altseqlength, xa_pos, readlength, newreadprobmatrix);
-                    altentry[varid][setid][readid] = np.logaddexp(altentry[varid][setid][readid], readprobability);
-                    if debug: print('{0}\t{1}\t{2}'.format(readprobability, refentry[varid][setid][readid], altentry[varid][setid][readid]));
+                    altentry[setid][readid] = np.logaddexp(altentry[setid][readid], readprobability);
+                    if debug: print('{0}\t{1}\t{2}'.format(readprobability, refentry[0][readid], altentry[setid][readid]));
         setid += 1;
 
     outlist = [];
-    if readentry[varid]: # Compile probabilities from read data if exists
+    if readentry: # Compile probabilities from read data if exists
         ref = float(0);
         alt = {};
         het = {};
@@ -290,22 +295,22 @@ def evaluateVariant(args):
         if len(var_set) == 1 or multivariant: # either one variant or multiple variants as a haplotype, homozygous & non-homozygous
             altprior = np.log(0.25);
         else:
-            altprior = np.log(float(0.5) / (len(readentry[varid])*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
-            #refprior = np.log(float(2) / ((len(readentry[varid])+1)*2)); # reference prior is double the alternative prior
-            #altprior = np.log(float(1) / ((len(readentry[varid])+1)*2)); # alternate prior divided evenly among the variant hypotheses (homozygous & non-homozygous)
+            altprior = np.log(float(0.5) / (len(readentry)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
+            #refprior = np.log(float(2) / ((len(readentry)+1)*2)); # reference prior is double the alternative prior
+            #altprior = np.log(float(1) / ((len(readentry)+1)*2)); # alternate prior divided evenly among the variant hypotheses (homozygous & non-homozygous)
 
-        for setid in readentry[varid]:
-            currentset = readentry[varid][setid]['_VARSET_'];
+        for setid in readentry:
+            currentset = readentry[setid]['_VARSET_'];
             if currentset not in alt: 
                 alt[currentset] = float(0);
                 het[currentset] = float(0);
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
 
-            for readid in refentry[varid][setid]:
-                prgu = refentry[varid][setid][readid]; # ln of P(r|Gu), where Gu is the unchanged from the reference genome
-                prgv = altentry[varid][setid][readid]; # ln of P(r|Gv), where Gv is the variant genome
-                pelsewhere = readentry[varid][setid][readid];
+            for readid in refentry[setid]:
+                prgu = refentry[0][readid]; # ln of P(r|Gu), where Gu is the unchanged from the reference genome
+                prgv = altentry[setid][readid]; # ln of P(r|Gv), where Gv is the variant genome
+                pelsewhere = readentry[0][readid];
 
                 # Mixture model: probability that the read is from elsewhere, outside paralogous source
                 prgu = np.logaddexp(lnomega - ln1_omega + pelsewhere, prgu);

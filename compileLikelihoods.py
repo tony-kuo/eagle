@@ -37,7 +37,7 @@ def readFiles(files):
                     in_set = t[8];
                     if key not in entry: entry[key] = {};
                     if fn not in entry[key]: entry[key][fn] = [];
-                    entry[key][fn].append((depth, af, lr, in_set));
+                    entry[key][fn].append((depth, af, lr, prob, in_set));
         fh.close;
     return(entry);
 
@@ -65,7 +65,14 @@ def compileEntries(entry, likelihood, af, keepone, isnegative):
 def outputResults(pos_entry, neg_entry, somatic, pos_files, neg_files, pos_keepone, neg_keepone):
     header = 0;
     for key in naturalSort(pos_entry):
-        if somatic and (not neg_entry or key not in neg_entry): continue;
+        if somatic:
+            if not neg_entry or key not in neg_entry: continue;
+            pos_prob = sorted(pos_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
+            neg_prob = sorted(neg_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
+            if np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])) < 0.99: 
+                #print(pos_prob, neg_prob, np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])));
+                continue;
+
         if not neg_entry or key in neg_entry:
             if header == 0:
                 header = 1;
@@ -76,17 +83,17 @@ def outputResults(pos_entry, neg_entry, somatic, pos_files, neg_files, pos_keepo
                 print(outstr);
 
             outstr = '{0}\t'.format(key);
-            if pos_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][0], pos_entry[key][1], pos_entry[key][2], pos_entry[key][3]);
+            if pos_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][0], pos_entry[key][1], pos_entry[key][2], pos_entry[key][4]);
             else:
                 for fn in pos_files: 
-                    if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][3]);
+                    if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][4]);
                     else: outstr += '\t\t\t\t';
             if neg_files:
-                if neg_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}'.format(neg_entry[key][0], neg_entry[key][1], neg_entry[key][2], neg_entry[key][3]);
+                if neg_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}'.format(neg_entry[key][0], neg_entry[key][1], neg_entry[key][2], neg_entry[key][4]);
                 else:
                     for fn in neg_files: 
                         fn = fn.split(',')[0];
-                        if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][3]);
+                        if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][4]);
                         else: outstr += '\t\t\t\t';
             print(outstr.strip());
 
@@ -98,7 +105,7 @@ def main():
     parser.add_argument('-maxlr', type=float, default=-3, help='threshold for maximum log likelihood ratio for negative samples (default: -3)');
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
     parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
-    parser.add_argument('-s', action='store_true', help='somatic, in that it must exist in the negative sample while also passing the threshold limits');
+    parser.add_argument('-s', action='store_true', help='somatic, it must exist in the negative sample and [Pr_positive * (1-Pr_negative) >= 0.99]');
     parser.add_argument('-p1', action='store_true', help='print only one positive entry among many (entry with max likelihood ratio)');
     parser.add_argument('-n1', action='store_true', help='print only one negative entry among many (entry with max likelihood ratio)');
     args = parser.parse_args();

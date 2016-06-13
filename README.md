@@ -38,6 +38,8 @@ A tab-delimited text file with one row per variant and columns representing:
 
 -t The number of threads to use.
 
+-hetbias Bias the prior probability towards heterozygous or homozygous mutations. If one expects that most mutations are not homozygous (i.e.\ in tumor samples), then skew the prior probability towards heterozygous (heterogeneous) mutations. Otherwise, low allele frequency mutations will have low probability due to the equally probable the homozygous hypothesis. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
+
 -n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations.
 
 -maxh The maximum number of hypotheses to be tested.  Instead of looking at all 2^n hypotheses, if after the current *k* for *n choose k* combinations is finished and the number of hypotheses tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variant" hypothesis are always tested first and do not count towards the maximum.  Default is 1025 (2^10) hypotheses.

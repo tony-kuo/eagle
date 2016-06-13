@@ -292,12 +292,12 @@ def evaluateVariant(args):
         currentset = ();
 
         refprior = np.log(0.5);
-        if len(var_set) == 1 or multivariant: # either one variant or multiple variants as a haplotype, homozygous & non-homozygous
-            altprior = np.log(0.25);
-        else:
-            altprior = np.log(float(0.5) / (len(readentry)*2)); # remainder divided evenly among the variant hypotheses, homozygous & non-homozygous
-            #refprior = np.log(float(2) / ((len(readentry)+1)*2)); # reference prior is double the alternative prior
-            #altprior = np.log(float(1) / ((len(readentry)+1)*2)); # alternate prior divided evenly among the variant hypotheses (homozygous & non-homozygous)
+        if len(var_set) == 1 or multivariant: # Eeither one variant or multiple variants as a haplotype, homozygous & non-homozygous
+            altprior = np.log(float(0.5) * (1-hetbias));
+            hetprior = np.log(float(0.5) * hetbias);
+        else:  # Variant set: divided evenly among the variant hypotheses, homozygous & non-homozygous
+            altprior = np.log(float(0.5) * (1-hetbias) / len(readentry));
+            hetprior = np.log(float(0.5) * hetbias / len(readentry));
 
         for setid in readentry:
             currentset = readentry[setid]['_VARSET_'];
@@ -328,7 +328,7 @@ def evaluateVariant(args):
                 
                 if setid == 0: ref += prgu + refprior; # Only one reference hypothesis
                 alt[currentset] += prgv + altprior;
-                het[currentset] += phet + altprior;
+                het[currentset] += phet + hetprior;
                 if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu+refprior, prgv+altprior, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
@@ -417,17 +417,19 @@ def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix):
 debug = False;
 primaryonly = False;
 numprocesses = 1;
+hetbias = 0.5;
 distancethreshold = 10;
 maxh = 1024;
 multivariant = False;
 refseq = {};
 reflength = {};
 def main():
-    parser = argparse.ArgumentParser(description='Evaluate the significance of alternative genome using an explicit probabilistic model');
+    parser = argparse.ArgumentParser(description='Explicit alternative genome likelihood evaluator.');
     parser.add_argument('-v', help='variants VCF file');
     parser.add_argument('-a', nargs='+', help='alignment data bam files');
     parser.add_argument('-r', help='reference sequence fasta file');
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
+    parser.add_argument('-hetbias', type=float, default=0.5, help='prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)');
     parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)');
     parser.add_argument('-maxh', type=int, default=1024, help='the maximum number of hypotheses, instead of all 2^n (default: 2^10 = 1024)');
     parser.add_argument('-mvh', action='store_true', help='consider nearby variants as *one* multi-variant hypothesis');
@@ -439,10 +441,11 @@ def main():
         sys.exit(1);
     args = parser.parse_args();
 
-    global debug, primaryonly, numprocesses, distancethreshold, maxh, multivariant;
+    global debug, primaryonly, numprocesses, hetbias, distancethreshold, maxh, multivariant;
     debug = args.debug;
     primaryonly = args.p;
     numprocesses = args.t;
+    hetbias = args.hetbias;
     distancethreshold = args.n;
     maxh = args.maxh;
     multivariant = args.mvh;

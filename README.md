@@ -36,11 +36,11 @@ A tab-delimited text file with one row per variant and columns representing:
 
 **Program Parameters**
 
--t The number of threads to use.
+-t The number of processes to use. Default is 1.
 
--hetbias Bias the prior probability towards heterozygous or homozygous mutations. If one expects that most mutations are not homozygous (i.e.\ in tumor samples), then skew the prior probability towards heterozygous (heterogeneous) mutations. Otherwise, low allele frequency mutations will have low probability due to the equally probable the homozygous hypothesis. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
+-hetbias Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
 
--n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations.
+-n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp.
 
 -maxh The maximum number of hypotheses to be tested.  Instead of looking at all 2^n hypotheses, if after the current *k* for *n choose k* combinations is finished and the number of hypotheses tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variant" hypothesis are always tested first and do not count towards the maximum.  Default is 1025 (2^10) hypotheses.
 
@@ -50,4 +50,6 @@ A tab-delimited text file with one row per variant and columns representing:
 
 **Usage Notes**
 
-Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the sets of variant combinations will separately consider each alternative sequence. This may result in entries with the first 4 columns being identical. The user needs to use their own judgement to interpret the relative effect sizes of duplicate entries in the output. The script *compileLikelihood.py* will retain the entry with the maximum probability.
+Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the program will separately consider each alternative sequence in their own sets. This may result in entries with the first 4 columns being identical. The user will need to use their own judgement to interpret the relative effect sizes of duplicate entries in the output. The script *compileLikelihood.py* will retain the entry with the maximum probability.
+
+If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratios in hetergenous samples and tune the bias appropriately, this will likely increase type I errors.

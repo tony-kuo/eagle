@@ -28,16 +28,21 @@ def readFiles(files):
             for line in fh:
                 if re.match('^#', line) or len(line.strip())==0: continue;
                 t = line.strip().split('\t');
-                key = '\t'.join(t[0:4]);
-                depth = int(t[4]);
-                if depth > 0:
-                    af = float(t[5])/depth;
-                    prob = float(t[6]);
-                    lr = float(t[7]);
-                    in_set = t[8];
-                    if key not in entry: entry[key] = {};
-                    if fn not in entry[key]: entry[key][fn] = [];
-                    entry[key][fn].append((depth, af, lr, prob, in_set));
+                ref = t[2].split(',');
+                alt = t[3].split(',');
+                # Account for double heterozygous non-reference or entries with the same position
+                for i in ref:
+                    for j in alt:
+                        key = t[0]+'\t'+t[1]+'\t'+i+'\t'+j;
+                        depth = int(t[4]);
+                        if depth > 0:
+                            af = float(t[5])/depth;
+                            prob = float(t[6]);
+                            lr = float(t[7]);
+                            in_set = t[8];
+                            if key not in entry: entry[key] = {};
+                            if fn not in entry[key]: entry[key][fn] = [];
+                            entry[key][fn].append((depth, af, lr, prob, in_set));
         fh.close;
     return(entry);
 
@@ -73,29 +78,28 @@ def outputResults(pos_entry, neg_entry, somatic, pos_files, neg_files, pos_keepo
                 #print(pos_prob, neg_prob, np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])));
                 continue;
 
-        if not neg_entry or key in neg_entry:
-            if header == 0:
-                header = 1;
-                outstr = '#\t\t\t\t';
-                if not pos_keepone: outstr += '\t\t\t\t'.join(pos_files);
-                else: outstr += '\t\t\t\t';
-                if neg_files and not neg_keepone: outstr += '\t\t\t\t' + '\t\t\t\t'.join(neg_files);
-                print(outstr);
+        if header == 0:
+            header = 1;
+            outstr = '#\t\t\t\t';
+            if not pos_keepone: outstr += '\t\t\t\t'.join(pos_files);
+            else: outstr += '\t\t\t\t';
+            if neg_files and not neg_keepone: outstr += '\t\t\t\t' + '\t\t\t\t'.join(neg_files);
+            print(outstr);
 
-            outstr = '{0}\t'.format(key);
-            if pos_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][0], pos_entry[key][1], pos_entry[key][2], pos_entry[key][4]);
+        outstr = '{0}\t'.format(key);
+        if pos_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][0], pos_entry[key][1], pos_entry[key][2], pos_entry[key][4]);
+        else:
+            for fn in pos_files: 
+                if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][4]);
+                else: outstr += '\t\t\t\t';
+        if neg_entry and key in neg_entry:
+            if neg_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}'.format(neg_entry[key][0], neg_entry[key][1], neg_entry[key][2], neg_entry[key][4]);
             else:
-                for fn in pos_files: 
-                    if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][4]);
+                for fn in neg_files: 
+                    fn = fn.split(',')[0];
+                    if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][4]);
                     else: outstr += '\t\t\t\t';
-            if neg_files:
-                if neg_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}'.format(neg_entry[key][0], neg_entry[key][1], neg_entry[key][2], neg_entry[key][4]);
-                else:
-                    for fn in neg_files: 
-                        fn = fn.split(',')[0];
-                        if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][4]);
-                        else: outstr += '\t\t\t\t';
-            print(outstr.strip());
+        print(outstr.strip());
 
 def main():
     parser = argparse.ArgumentParser(description='Compile results from output of evalVariant [multiple, positive/negative]');

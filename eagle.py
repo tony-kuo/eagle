@@ -329,7 +329,7 @@ def evaluateVariant(args):
                 if setid == 0: ref += prgu + refprior; # Only one reference hypothesis
                 alt[currentset] += prgv + altprior;
                 het[currentset] += phet + hetprior;
-                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}'.format(prgu+refprior, prgv+altprior, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
+                if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}'.format(prgu, phet, prgv, pelsewhere, varid[0], currentset, readid, altcount[currentset])); # ln likelihoods
             if debug: print('-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(ref, het[currentset], alt[currentset], varid[0], currentset, altcount[currentset])); # ln likelihoods
 
         total = logsumexp( [ref] + list(alt.values()) + list(het.values()) );

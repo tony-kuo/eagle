@@ -151,8 +151,8 @@ def readPYSAM(files, var_list, outfile):
         for n in range(0, len(varid)): 
             if varid[n][0] in refseq: 
                 args.append((fn, varid[n], var_list[varid[n]]));
-                #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
-        #continue;
+                results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
+        continue;
         try:
             pool = Pool(processes=numprocesses);
             poolresults = pool.map_async(evaluateVariant, args);
@@ -179,6 +179,8 @@ def evaluateVariant(args):
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
+    samfile = pysam.AlignmentFile(fn, "rb");
+
     if len(var_set) == 1: i = [1];
     else: i = [1, len(var_set)];
     if not multivariant: i.extend(range(2, len(var_set)));
@@ -186,7 +188,7 @@ def evaluateVariant(args):
 
     setid = 0;
     for currentset in hypotheses:
-        if setid >= maxh+len(var_set)+1 and setid > 0 and len(readentry[setid-1]['_VARSET_']) != len(currentset): break; # Stop if max hypotheses limit reached and finished current n choose k
+        if setid > 0 and setid >= maxh+len(var_set)+1 and len(readentry[setid-1]['_VARSET_']) != len(currentset): break; # Stop if max hypotheses limit reached and finished current n choose k
         if setid not in readentry: 
             refentry[setid] = {};
             altentry[setid] = {};
@@ -213,7 +215,6 @@ def evaluateVariant(args):
         altseqlength = len(altseq);
 
         # Fetch reads that cross the variant location
-        samfile = pysam.AlignmentFile(fn, "rb");
         readset = samfile.fetch(reference=varid[0], start=max(0,varstart-1), end=min(varend+1,reflength[varid[0]]));
         for read in readset: 
             if read.is_unmapped: continue;
@@ -250,7 +251,7 @@ def evaluateVariant(args):
             readprobability = calcReadProbability(altseq, altseqlength, read.reference_start, readlength, readprobmatrix);
             if readid not in altentry[setid]: altentry[setid][readid] = readprobability;
             else: altentry[setid][readid] = np.logaddexp(altentry[setid][readid], readprobability);
-            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}'.format(refentry[0][readid], altentry[setid][readid], readentry[setid][readid], read, currentset));
+            if debug: print('{0}\t{1}\t{2}\t{3}\t{4}\t{5}'.format(setid, refentry[0][readid], altentry[setid][readid], readentry[0][readid], read, currentset));
 
             # Multi-mapped alignments
             if not primaryonly and read.has_tag('XA'):
@@ -307,7 +308,7 @@ def evaluateVariant(args):
                 refcount[currentset] = 0;
                 altcount[currentset] = 0;
 
-            for readid in refentry[setid]:
+            for readid in refentry[0]:
                 prgu = refentry[0][readid]; # ln of P(r|Gu), where Gu is the unchanged from the reference genome
                 prgv = altentry[setid][readid]; # ln of P(r|Gv), where Gv is the variant genome
                 pelsewhere = readentry[0][readid];

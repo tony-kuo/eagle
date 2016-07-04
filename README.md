@@ -4,6 +4,8 @@ Implemented in python with ABI level C functions [Compatible with 2\.7\.\*, 3\.\
 
 **Requires**: pysam, cffi, numpy, scipy
 
+Usage: `python eagle.py -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
+
 **Inputs**
 
 1. Alignment data in coordinated sorted indexed BAM format (\*\.bam, \*\.bam.bai)
@@ -53,3 +55,5 @@ A tab-delimited text file with one row per variant and columns representing:
 Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the program will separately consider each alternative sequence in their own sets. This may result in entries with the first 4 columns being identical. The user will need to use their own judgement to interpret the relative effect sizes of duplicate entries in the output. The script *compileLikelihood.py* will retain the entry with the maximum probability.
 
 If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratios in hetergenous samples and tune the bias appropriately, this will likely increase type I errors.
+
+`compare2TruthData.py` and `compileLikelihoods.py` are scripts to post-process the probabilities calculated by EAGLE. In particular, `compileLikelihoods.py` can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results, given some likelihood ratio thresholds to determine significance.

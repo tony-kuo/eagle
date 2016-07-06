@@ -77,7 +77,7 @@ def groupNearbyVariants(entry):
             for j in range(0, len(entry[varid[i]])-1):
                 if entry[varid[i]][j][0] == entry[varid[i]][j+1][0]:
                     newid = (varid[i][0], varid[i][1], varid[i][2], varid[i][3], j);
-                    misc[newid] = list(entry[varid[i]]);
+                    misc[newid] = [entry[varid[i]]];
                     del entry[varid[i]][j];
                     del misc[newid][j+1];
                     break;
@@ -179,7 +179,9 @@ def evaluateVariant(args):
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
+    # Fetch reads that cross the variant location
     samfile = pysam.AlignmentFile(fn, "rb");
+    readset = list(samfile.fetch(reference=varid[0], start=max(0,varstart-1), end=min(varend+1,reflength[varid[0]])));
 
     if len(var_set) == 1: i = [1];
     else: i = [1, len(var_set)];
@@ -211,25 +213,22 @@ def evaluateVariant(args):
                 ref = i[1];
                 alt = i[2];
             offset += len(alt) - len(ref);
-            altseq = altseq[:pos] + alt.encode('utf-8') + altseq[(pos+len(ref)):]; # Explicit unicode for python3, needed for cffi char*
+            altseq = '{0}{1}{2}'.format(altseq[:pos], alt.encode('utf-8'), altseq[(pos+len(ref)):]); # Explicit unicode for python3, needed for cffi char*
         altseqlength = len(altseq);
 
-        # Fetch reads that cross the variant location
-        readset = samfile.fetch(reference=varid[0], start=max(0,varstart-1), end=min(varend+1,reflength[varid[0]]));
         for read in readset: 
             if read.is_unmapped: continue;
             if primaryonly and read.is_secondary: continue;
 
-            readid = read.query_name;
-            if read.is_read1: readid += '/1';
-            elif read.is_read2: readid += '/2';
+            if read.is_read1: readid = '{0}/1'.format(read.query_name);
+            else: readid = '{0}/2'.format(read.query_name);
 
-            readlength = len(read.query_sequence.encode('utf-8'));
+            # Convert read sequence into a probability matrix based on base-call error
             callerror = np.array(read.query_qualities) / float(-10); # Already converted to ord by pysam
             callerror[callerror == 0] = -0.01; # Ensure there are no zeros, defaulting to a very high base-call error probability
             isbase = np.log10(1 - np.power(10, callerror)); # log10(1-e);
             notbase = callerror - log3; #log10(e/3)
-            # Convert read sequence into a probability matrix based on base-call error
+            readlength = len(read.query_sequence);
             readprobmatrix = ffi.new("double[]", readlength*5);
             C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
 

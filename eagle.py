@@ -47,8 +47,8 @@ def readVCF(filename):
             if line[0] == '#': continue;
             var = line.strip().split('\t');
             pos = int(var[1]);
-            ref = var[3].split(',');
-            alt = var[4].split(',');
+            ref = var[3].upper().split(',');
+            alt = var[4].upper().split(',');
             # Account for double heterozygous non-reference or entries with the same position
             for i in ref:
                 for j in alt:
@@ -77,12 +77,13 @@ def groupNearbyVariants(entry):
             for j in range(0, len(entry[varid[i]])-1):
                 if entry[varid[i]][j][0] == entry[varid[i]][j+1][0]:
                     newid = (varid[i][0], varid[i][1], varid[i][2], varid[i][3], j);
-                    misc[newid] = [entry[varid[i]]];
+                    misc[newid] = list(entry[varid[i]]);
                     del entry[varid[i]][j];
                     del misc[newid][j+1];
                     break;
         if misc: entry.update(misc);
         else: break;
+    #return("0");
     # Combine adjacent SNPs
     #misc = {};
     #varid = sorted(entry.keys());
@@ -115,7 +116,7 @@ def readFasta(filename):
                 seqid = re.split('>| ', line)[1]; # >chr1 1 -> ['', 'chr1', '1']
                 seq[seqid] = [];
             else:
-                seq[seqid].append(line);
+                seq[seqid].append(line.upper());
     fh.close;
     for seqid in seq: 
         seq[seqid] = ''.join(seq[seqid]).encode('utf-8'); # Explicit unicode for python3, needed for cffi char*
@@ -151,8 +152,8 @@ def readPYSAM(files, var_list, outfile):
         for n in range(0, len(varid)): 
             if varid[n][0] in refseq: 
                 args.append((fn, varid[n], var_list[varid[n]]));
-                results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
-        continue;
+                #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
+        #continue;
         try:
             pool = Pool(processes=numprocesses);
             poolresults = pool.map_async(evaluateVariant, args);
@@ -173,9 +174,6 @@ def evaluateVariant(args):
     refentry = {};
     altentry = {};
     readentry = {};
-    readentry = {};
-    refentry = {};
-    altentry = {};
     varstart = min([a[0] for a in var_set]);
     varend = max([a[0] for a in var_set]);
 
@@ -228,9 +226,11 @@ def evaluateVariant(args):
             callerror[callerror == 0] = -0.01; # Ensure there are no zeros, defaulting to a very high base-call error probability
             isbase = np.log10(1 - np.power(10, callerror)); # log10(1-e);
             notbase = callerror - log3; #log10(e/3)
+
             readlength = len(read.query_sequence);
-            readprobmatrix = ffi.new("double[]", readlength*5);
-            C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), readprobmatrix);
+            readprobmatrix = np.zeros(readlength*5);
+            p_readprobmatrix = ffi.cast("double *", readprobmatrix.ctypes.data); # Pointer to read probability matrix
+            C.setReadProbMatrix(read.query_sequence.encode('utf-8'), readlength, list(isbase), list(notbase), p_readprobmatrix);
 
             # Reference genome probability and "elsewhere" probability only needs to be calculated once per readid
             if setid == 0:
@@ -261,8 +261,9 @@ def evaluateVariant(args):
                     xa_pos = int(t[1]);
                     if (read.is_reverse == False and xa_pos < 0) or (read.is_reverse == True and xa_pos > 0): # If strand is opposite of that from primary alignment
                         newreadseq = ''.join(complement.get(base,base) for base in reversed(read.query_sequence)).encode('utf-8');
-                        newreadprobmatrix = ffi.new("double[]", readlength*5);
-                        C.setReadProbMatrix(newreadseq, readlength, list(isbase[::-1]), list(notbase[::-1]), newreadprobmatrix);
+                        newreadprobmatrix = np.zeros(readlength*5);
+                        p_readprobmatrix = ffi.cast("double *", newreadprobmatrix.ctypes.data); # Pointer to read probability matrix
+                        C.setReadProbMatrix(newreadseq, readlength, list(isbase[::-1]), list(notbase[::-1]), p_readprobmatrix);
                     else: 
                         newreadprobmatrix = readprobmatrix;
                     xa_pos = abs(xa_pos);
@@ -391,13 +392,13 @@ double getReadProb(char *seq, int seqlength, int refpos, int readlength, double 
     //printf("\\t%f\\n", probability);
     return (probability);
 }
-void getReadProbList(char *seq, int seqlength, int refpos, int readlength, double *matrix, double *probabilityarray) {
+void getReadProbList(char *seq, int seqlength, int pos, int readlength, double *matrix, double *probabilityarray) {
     memset(probabilityarray, 0, readlength*2*sizeof(double)); // Zero out array
     int i;
     int n = 0;
     int slidelength = readlength;
-    double baseline = getReadProb(seq, seqlength, refpos, readlength, matrix, -1000); // First probability at refpos, likely the highest, to be used as first best
-    for ( i = refpos-slidelength; i <= refpos+slidelength; i++ ) {
+    double baseline = getReadProb(seq, seqlength, pos, readlength, matrix, -1000); // First probability at refpos, likely the highest, to be used as first best
+    for ( i = pos-slidelength; i <= pos+slidelength; i++ ) {
         if ( i + readlength < 0 ) continue;
         if ( i >= seqlength ) break;
         probabilityarray[n] = getReadProb(seq, seqlength, i, readlength, matrix, baseline);
@@ -410,7 +411,8 @@ C.initAlphaMap(); # Initialize alphabet to int mapping table
 def calcReadProbability(refseq, reflength, refpos, readlength, readprobmatrix):
     probabilityarray = np.zeros(readlength*2);
     p_probabilityarray = ffi.cast("double *", probabilityarray.ctypes.data); # Pointer to probability array
-    C.getReadProbList(refseq, reflength, refpos, readlength, readprobmatrix, p_probabilityarray);
+    p_readprobmatrix = ffi.cast("double *", readprobmatrix.ctypes.data); # Pointer to probability matrix
+    C.getReadProbList(refseq, reflength, refpos, readlength, p_readprobmatrix, p_probabilityarray);
     return(logsumexp(probabilityarray[np.nonzero(probabilityarray)] / logln)); # Return sum of probabilities as ln exponential (converted from log10)
 
 # Global Variables

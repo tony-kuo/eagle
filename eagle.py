@@ -239,7 +239,9 @@ def readPYSAM(files, var_list, outfile):
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
 
+#from readset import evaluateVariantCython; # Testing Cython: python setup.py build_ext --inplace
 def evaluateVariant(args):
+    #return(evaluateVariantCython(args, refseq, reflength, hetbias, maxh, multivariant, primaryonly, debug));
     (fn, varid, var_set) = args;
     refentry = {};
     altentry = {};
@@ -407,19 +409,19 @@ def evaluateVariant(args):
     total = [ref] + list(alt.values()) + list(het.values());
     total = C.log10sumexp(total, len(total));
     for v in var_set:
-        marginal_alt = [];
-        not_alt = [ref];
-        marginal_count = [];
+        marginal_alt = 0.0;
+        not_alt = ref;
+        marginal_count = 0;
         for currentset in alt:
             if v in currentset: 
-                marginal_alt.extend([ alt[currentset], het[currentset] ]);
-                marginal_count.extend([ altcount[currentset] ]);
+                if marginal_alt == 0.0: marginal_alt = C.log10addexp(alt[currentset], het[currentset]);
+                else: marginal_alt = C.log10addexp(marginal_alt, C.log10addexp(alt[currentset], het[currentset]));
+                if altcount[currentset] > marginal_count: marginal_count = altcount[currentset];
             else: 
-                not_alt.extend([ alt[currentset], het[currentset] ]);
-        outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], v[0], v[1], v[2], max(refcount.values())+max(altcount.values()), max(marginal_count));
+                not_alt = C.log10addexp(not_alt, C.log10addexp(alt[currentset], het[currentset]));
+        outstr = '{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t'.format(varid[0], v[0], v[1], v[2], max(refcount.values())+max(altcount.values()), marginal_count);
         # Probability and odds in log10
-        m = C.log10sumexp(marginal_alt, len(marginal_alt));
-        outstr += '{0}\t{1}\t'.format(m - total, m - C.log10sumexp(not_alt, len(not_alt))); 
+        outstr += '{0}\t{1}\t'.format(marginal_alt - total, marginal_alt - not_alt); 
         # Print the variant set entries if exists    
         if len(var_set) > 1: outstr += '{0}'.format(var_set);
         else: outstr += '[]';

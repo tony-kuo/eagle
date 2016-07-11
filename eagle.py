@@ -257,7 +257,7 @@ def evaluateVariant(args):
 
     setid = 0;
     for currentset in chain(*map(lambda x: combinations(var_set, x), v)): # For each set combination in powerset of variants in set excluding empty set
-        if setid > 0 and setid >= maxc+len(var_set)+1 and len(readentry[setid-1]['_VARSET_']) != len(currentset): break; # Stop if combinations limit reached and finished current k in n choose k
+        if setid > 0 and setid >= maxh+len(var_set)+1 and len(readentry[setid-1]['_VARSET_']) != len(currentset): break; # Stop if combinations limit reached and finished current k in n choose k
         if setid not in readentry: 
             refentry[setid] = {};
             altentry[setid] = {};
@@ -432,7 +432,7 @@ primaryonly = False;
 numprocesses = 1;
 hetbias = 0.5;
 distancethreshold = 10;
-maxc = 1024;
+maxh = 1024;
 multivariant = False;
 refseq = {};
 reflength = {};
@@ -444,7 +444,7 @@ def main():
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
     parser.add_argument('-hetbias', type=float, default=0.5, help='prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)');
     parser.add_argument('-n', type=int, default=10, help='consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)');
-    parser.add_argument('-maxc', type=int, default=1024, help='the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)');
+    parser.add_argument('-maxh', type=int, default=1024, help='the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)');
     parser.add_argument('-mvh', action='store_true', help='consider nearby variants as *one* multi-variant hypothesis');
     parser.add_argument('-p', action='store_true', help='consider only primary alignments');
     parser.add_argument('-t', type=int, default=1, help='number of processes to use (default: 1)');
@@ -454,13 +454,13 @@ def main():
         sys.exit(1);
     args = parser.parse_args();
 
-    global debug, primaryonly, numprocesses, hetbias, distancethreshold, maxc, multivariant;
+    global debug, primaryonly, numprocesses, hetbias, distancethreshold, maxh, multivariant;
     debug = args.debug;
     primaryonly = args.p;
     numprocesses = args.t;
     hetbias = args.hetbias;
     distancethreshold = args.n;
-    maxc = args.maxc;
+    maxh = args.maxh;
     multivariant = args.mvh;
 
     refvar_list = readVCF(args.v);

@@ -304,9 +304,9 @@ def evaluateVariant(args):
             # Reference genome probability and "elsewhere" probability only needs to be calculated once per readid
             if setid == 0:
                 # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous. Approximate probability distribution by accounting for the bulk with:
-                #   perfect = prod[ (1-e) ]
+                #   perfect match = prod[ (1-e) ]
                 #   hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-                # We also account for if reads have different lengths, where longer reads should have a lower probability of originating from some paralogous elsewhere 
+                # We also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability of originating from some paralogous elsewhere 
                 #   lengthfactor = alpha ^ (readlength - expected readlength)
                 # P(elsewhere) = (perfect + hamming) / lengthfactor
                 elsewhereprobability = C.log10addexp(sum(isbase), sum(isbase) + C.log10sumexp(list(notbase - isbase), len(isbase))) - (lalpha * (readlength - read.infer_query_length())); 
@@ -331,8 +331,8 @@ def evaluateVariant(args):
                     t = j.split(',');
                     if t[0] not in refseq: continue;
                     xa_pos = int(t[1]);
-                    if (read.is_reverse == False and xa_pos < 0) or (read.is_reverse == True and xa_pos > 0): # If strand is opposite of that from primary alignment
-                        newreadseq = ''.join(complement.get(base,base) for base in reversed(read.query_sequence)).encode('utf-8');
+                    if (read.is_reverse == False and xa_pos < 0) or (read.is_reverse == True and xa_pos > 0): # If aligned strand is opposite of that from primary alignment
+                        newreadseq = ''.join(complement.get(base,base) for base in reversed(read.query_sequence)).encode('utf-8'); # Reverse complement read sequence
                         newreadprobmatrix = np.zeros(readlength*5);
                         p_readprobmatrix = ffi.cast("double *", newreadprobmatrix.ctypes.data); # Pointer to read probability matrix
                         C.setReadProbMatrix(newreadseq, readlength, list(isbase[::-1]), list(notbase[::-1]), p_readprobmatrix);

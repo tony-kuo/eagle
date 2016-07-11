@@ -198,39 +198,38 @@ def processWork(inqueue, results):
         args = inqueue.get();
         results.extend(evaluateVariant(args));
 
-def readPYSAM(files, var_list, outfile):
-    results = [];
+def readPYSAM(fn, var_list, outfile):
+    print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
 
+    results = [];
+    varid = sorted(list(var_list.keys()));
+
+    # Testing speed with Process, seems slower than Pool
     #manager = Manager();
     #work = manager.Queue(numprocesses);
     #results = manager.list();
-    for fn in files: 
-        print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
-        varid = sorted(list(var_list.keys()));
+    #pool = [];
+    #for i in range(0,numprocesses):
+        #p = Process(target=processWork, args=(work, results));
+        #p.start()
+        #pool.append(p);
+    #for n in range(0, len(varid)): 
+        #if varid[n][0] in refseq: work.put((fn, varid[n], var_list[varid[n]])); 
+    #for p in pool: p.join();
 
-        # Testing speed with Process, seems slower than Pool
-        #pool = [];
-        #for i in range(0,numprocesses):
-            #p = Process(target=processWork, args=(work, results));
-            #p.start()
-            #pool.append(p);
-        #for n in range(0, len(varid)): 
-            #if varid[n][0] in refseq: work.put((fn, varid[n], var_list[varid[n]])); 
-        #for p in pool: p.join();
-
-        args = [];
-        for n in range(0, len(varid)): 
-            if varid[n][0] in refseq: 
-                args.append((fn, varid[n], var_list[varid[n]]));
-                #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
-        #continue;
-        try:
-            pool = Pool(processes=numprocesses);
-            poolresults = pool.map_async(evaluateVariant, args);
-            for p in poolresults.get(): results.extend(p);
-        finally:
-            pool.close();
-            pool.join();
+    args = [];
+    for n in range(0, len(varid)): 
+        if varid[n][0] in refseq: 
+            args.append((fn, varid[n], var_list[varid[n]]));
+            #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing
+    #continue;
+    try:
+        pool = Pool(processes=numprocesses);
+        poolresults = pool.map_async(evaluateVariant, args);
+        for p in poolresults.get(): results.extend(p);
+    finally:
+        pool.close();
+        pool.join();
 
     if len(outfile) > 0: fh = open(outfile, 'w');
     else: fh = sys.stdout;
@@ -441,7 +440,7 @@ reflength = {};
 def main():
     parser = argparse.ArgumentParser(description='Explicit alternative genome likelihood evaluator.');
     parser.add_argument('-v', help='variants VCF file');
-    parser.add_argument('-a', nargs='+', help='alignment data bam files');
+    parser.add_argument('-a', help='alignment data bam files');
     parser.add_argument('-r', help='reference sequence fasta file');
     parser.add_argument('-o', type=str, default='', help='output file (default: stdout)');
     parser.add_argument('-hetbias', type=float, default=0.5, help='prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)');

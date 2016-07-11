@@ -189,7 +189,7 @@ def readFasta(filename):
                 seq[seqid].append(line.upper());
     fh.close;
     for seqid in seq: 
-        seq[seqid] = ''.join(seq[seqid]).encode('utf-8'); # Explicit unicode for python3, needed for cffi char*
+        seq[seqid] = ''.join(seq[seqid]).encode('utf-8'); # Explicit byte string for python3, needed for cffi char*
         seqlength[seqid] = len(seq[seqid]);
     return(seq, seqlength);
 
@@ -280,7 +280,7 @@ def evaluateVariant(args):
                 ref = v[1];
                 alt = v[2];
             offset += len(alt) - len(ref);
-            altseq = altseq[:pos] + alt.encode('utf-8') + altseq[(pos+len(ref)):]; # Explicit unicode for python3, needed for cffi char*
+            altseq = altseq[:pos] + alt.encode('utf-8') + altseq[(pos+len(ref)):]; # Explicit byte string for python3, needed for cffi char*
         altseqlength = len(altseq);
 
         for read in readset: 

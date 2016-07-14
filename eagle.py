@@ -125,7 +125,7 @@ def readVCF(filename):
     print("Read VCF:\t{0}\t{1} entries\t{2}".format(filename, len(entry.keys()), datetime.now()), file=sys.stderr);
     return (entry);
 
-def groupVariants(entry):
+def groupVariants(entry, distancethreshold):
     # Check if current variant is within distance limit of the previous on the same chromosome, merge if so
     varid = sorted(entry.keys());
     skip2ind = -1;
@@ -193,8 +193,8 @@ def processWork(inqueue, results):
         args = inqueue.get();
         results.extend(evaluateVariant(args));
 
-def readPYSAM(fn, var_list, outfile):
-    print("Start:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
+def readPYSAM(fn, var_list, outfile, numprocesses):
+    print("Start:\t{0} procs \t{1}\t{2}".format(numprocesses+1, fn, datetime.now()), file=sys.stderr);
 
     results = [];
     varid = sorted(list(var_list.keys()));
@@ -416,9 +416,7 @@ def evaluateVariant(args):
 # Global Variables
 debug = False;
 primaryonly = False;
-numprocesses = 0;
 hetbias = 0.5;
-distancethreshold = 10;
 maxh = 1024;
 multivariant = False;
 refseq = {};
@@ -429,33 +427,33 @@ def main():
     parser.add_argument("-a", help="alignment data bam files (index and ref coord sorted)");
     parser.add_argument("-r", help="reference sequence fasta file");
     parser.add_argument("-o", type=str, default="", help="output file (default: stdout)");
-    parser.add_argument("--hetbias", type=float, default=0.5, help="prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)");
     parser.add_argument("-n", type=int, default=10, help="consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)");
     parser.add_argument("--maxh", type=int, default=1024, help="the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)");
     parser.add_argument("--mvh", action="store_true", help="consider nearby variants as *one* multi-variant hypothesis");
+    parser.add_argument("--hetbias", type=float, default=0.5, help="prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)");
     parser.add_argument("--pao", action="store_true", help="consider primary alignments only");
-    parser.add_argument("-t", type=int, default=1, help="number of additional processes to use (default: 0, single main process)");
+    parser.add_argument("-t", type=int, default=1, help="number of processes to use (default: 1)");
     parser.add_argument("--debug", action="store_true", help="debug mode, printing information on every read for every variant");
     if len(sys.argv) == 1:
         parser.print_help();
         sys.exit(1);
     args = parser.parse_args();
 
-    global debug, primaryonly, numprocesses, hetbias, distancethreshold, maxh, multivariant;
-    debug = args.debug;
-    primaryonly = args.pao;
-    numprocesses = args.t;
-    hetbias = args.hetbias;
+    global maxh, multivariant, hetbias, primaryonly, debug;
     distancethreshold = args.n;
     maxh = args.maxh;
     multivariant = args.mvh;
+    hetbias = args.hetbias;
+    primaryonly = args.pao;
+    numprocesses = max(1, args.t - 1); # Main process counts as 1
+    debug = args.debug;
 
     var_list = readVCF(args.v);
-    if distancethreshold > 0: var_list = groupVariants(var_list);
+    if distancethreshold > 0: var_list = groupVariants(var_list, distancethreshold);
 
     global refseq, reflength;
     (refseq, reflength) = readFasta(args.r);
-    readPYSAM(args.a, var_list, args.o); # reads crossing variant in genome
+    readPYSAM(args.a, var_list, args.o, numprocesses);
 
 if __name__ == "__main__":
     try:

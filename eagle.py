@@ -125,7 +125,7 @@ def readVCF(filename):
     print("Read VCF:\t{0}\t{1} entries\t{2}".format(filename, len(entry.keys()), datetime.now()), file=sys.stderr);
     return (entry);
 
-def groupNearbyVariants(entry):
+def groupVariants(entry):
     # Check if current variant is within distance limit of the previous on the same chromosome, merge if so
     varid = sorted(entry.keys());
     skip2ind = -1;
@@ -416,7 +416,7 @@ def evaluateVariant(args):
 # Global Variables
 debug = False;
 primaryonly = False;
-numprocesses = 1;
+numprocesses = 0;
 hetbias = 0.5;
 distancethreshold = 10;
 maxh = 1024;
@@ -434,7 +434,7 @@ def main():
     parser.add_argument("--maxh", type=int, default=1024, help="the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)");
     parser.add_argument("--mvh", action="store_true", help="consider nearby variants as *one* multi-variant hypothesis");
     parser.add_argument("--pao", action="store_true", help="consider primary alignments only");
-    parser.add_argument("-t", type=int, default=1, help="number of processes to use (default: 1)");
+    parser.add_argument("-t", type=int, default=1, help="number of additional processes to use (default: 0, single main process)");
     parser.add_argument("--debug", action="store_true", help="debug mode, printing information on every read for every variant");
     if len(sys.argv) == 1:
         parser.print_help();
@@ -451,7 +451,7 @@ def main():
     multivariant = args.mvh;
 
     var_list = readVCF(args.v);
-    if distancethreshold > 0: var_list = groupNearbyVariants(var_list);
+    if distancethreshold > 0: var_list = groupVariants(var_list);
 
     global refseq, reflength;
     (refseq, reflength) = readFasta(args.r);

@@ -109,7 +109,7 @@ def readVCF(filename):
     entry = {};
     with open(filename, "r") as fh:
         for line in fh:
-            if line[0] == "#": continue;
+            if line[0] == "#" or line.strip() == "": continue;
             var = line.strip().split("\t");
             pos = int(var[1]);
             ref = var[3].upper().split(",");
@@ -232,10 +232,6 @@ def readPYSAM(fn, var_list, outfile, numprocesses):
 def evaluateVariant(args):
     #return (evaluateVariantCython(args, refseq, reflength, hetbias, maxh, multivariant, primaryonly, debug));
     (fn, varid, varset) = args;
-    setentry = {};
-    refentry = {};
-    altentry = {};
-    readentry = {};
     varstart = min([a[0] for a in varset]);
     varend = max([a[0] for a in varset]);
 
@@ -247,13 +243,33 @@ def evaluateVariant(args):
     if not multivariant: v.extend(range(2, len(varset)));
 
     setid = 0;
+    setentry = {};
     for currentset in chain(*map(lambda x: combinations(varset, x), v)): # For each set combination in powerset of variants in set excluding empty set
         if setid > 0 and setid >= maxh+len(varset)+1 and len(setentry[setid-1]) != len(currentset): break; # Stop if combinations limit reached and finished current k in n choose k
-        if setid not in setentry: 
-            setentry[setid] = currentset;
-            refentry[setid] = {};
-            altentry[setid] = {};
-            readentry[setid] = {};
+        setentry[setid] = currentset;
+        setid += 1;
+
+    refprior = np.log10(0.5);
+    if len(varset) == 1 or multivariant: # Eeither one variant or multiple variants as a haplotype, homozygous & non-homozygous
+        altprior = np.log10(0.5 * (1-hetbias));
+        hetprior = np.log10(0.5 * hetbias);
+    else:  # Variant set: divided evenly among the variant hypotheses, homozygous & non-homozygous
+        altprior = np.log10(0.5 * (1-hetbias) / len(setentry));
+        hetprior = np.log10(0.5 * hetbias / len(setentry));
+
+    ref = 0.0;
+    alt = {};
+    het = {};
+    refcount = {};
+    altcount = {};
+    prgu = {};
+    pout = {};
+    for setid in setentry:
+        currentset = setentry[setid];
+        alt[setid] = 0.0;
+        het[setid] = 0.0;
+        refcount[setid] = 0;
+        altcount[setid] = 0;
 
         # Construct the variant sequence
         offset = 0;
@@ -262,16 +278,16 @@ def evaluateVariant(args):
             pos = v[0] - 1 + offset;
             if v[1] == "-": # Account for "-" representation of variants, insertion
                 pos += 1;
-                ref = "";
-                alt = v[2];
+                varref = "";
+                varalt = v[2];
             elif v[2] == "-": # Account for "-" representation of variants, deletion
-                alt = "";
-                ref = v[1];
+                varalt = "";
+                varref = v[1];
             else:
-                ref = v[1];
-                alt = v[2];
-            offset += len(alt) - len(ref);
-            altseq = altseq[:pos] + alt.encode("utf-8") + altseq[(pos+len(ref)):]; # Explicit byte string for python3, needed for cffi char*
+                varref = v[1];
+                varalt = v[2];
+            offset += len(varalt) - len(varref);
+            altseq = altseq[:pos] + varalt.encode("utf-8") + altseq[(pos+len(varref)):]; # Explicit byte string for python3, needed for cffi char*
         altseqlength = len(altseq);
 
         for read in readset: 
@@ -299,17 +315,15 @@ def evaluateVariant(args):
                 # We also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability of originating from some paralogous elsewhere 
                 #   lengthfactor = alpha ^ (readlength - expected readlength)
                 # P(elsewhere) = (perfect + hamming) / lengthfactor
-                elsewhereprobability = C.log10addexp(sum(ismatch), sum(ismatch) + C.log10sumexp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
-                readentry[setid][readid] = elsewhereprobability if readid not in readentry[setid] else C.log10addexp(readentry[setid][readid], elsewhereprobability);
-
+                elsewhere = C.log10addexp(sum(ismatch), sum(ismatch) + C.log10sumexp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
+                pout[readid] = elsewhere;
                 # Calculate the probability given reference genome, once per varid for setid 0
                 readprobability = C.calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, p_readprobmatrix, readlength);
-                refentry[setid][readid] = readprobability if readid not in refentry[setid] else C.log10addexp(refentry[setid][readid], readprobability);
+                prgu[readid] = readprobability;
 
             # Calculate the probability given alternate genome
-            readprobability = C.calcReadProbability(altseq, altseqlength, read.reference_start, p_readprobmatrix, readlength);
-            altentry[setid][readid] = readprobability if readid not in altentry[setid] else C.log10addexp(altentry[setid][readid], readprobability);
-            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, refentry[0][readid], altentry[setid][readid], readentry[0][readid], read, currentset));
+            prgv = C.calcReadProbability(altseq, altseqlength, read.reference_start, p_readprobmatrix, readlength);
+            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, prgu[readid], prgv, pout[readid], read, currentset));
 
             # Multi-mapped alignments
             if not primaryonly and read.has_tag("XA"):
@@ -330,66 +344,39 @@ def evaluateVariant(args):
                     readprobability = C.calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, p_readprobmatrix, readlength);
                     if setid == 0: 
                         # Probability given reference genome
-                        refentry[setid][readid] = C.log10addexp(refentry[setid][readid], readprobability);
+                        prgu[readid] = C.log10addexp(prgu[readid], readprobability);
                         # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                        readentry[setid][readid] = C.log10addexp(readentry[setid][readid], elsewhereprobability);
+                        pout[readid] = C.log10addexp(pout[readid], elsewhere);
                     if debug: print(readprobability, end="\t");
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
                         if xa_pos > varid[1]-1: xa_pos += offset;
                         readprobability = C.calcReadProbability(altseq, altseqlength, xa_pos, p_readprobmatrix, readlength);
-                    altentry[setid][readid] = C.log10addexp(altentry[setid][readid], readprobability);
+                    prgv = C.log10addexp(altentry[setid][readid], readprobability);
                     if debug: print("{0}\t{1}\t{2}".format(readprobability, refentry[0][readid], altentry[setid][readid]));
-        setid += 1;
-    if not readentry: return ([]); # Return empty list if no read data
-
-    outlist = [];
-    ref = 0.0;
-    alt = {};
-    het = {};
-    refcount = {};
-    altcount = {};
-
-    refprior = np.log10(0.5);
-    if len(varset) == 1 or multivariant: # Eeither one variant or multiple variants as a haplotype, homozygous & non-homozygous
-        altprior = np.log10(0.5 * (1-hetbias));
-        hetprior = np.log10(0.5 * hetbias);
-    else:  # Variant set: divided evenly among the variant hypotheses, homozygous & non-homozygous
-        altprior = np.log10(0.5 * (1-hetbias) / len(setentry));
-        hetprior = np.log10(0.5 * hetbias / len(setentry));
-
-    for setid in setentry:
-        if setid not in alt: 
-            alt[setid] = 0.0;
-            het[setid] = 0.0;
-            refcount[setid] = 0;
-            altcount[setid] = 0;
-
-        for readid in refentry[0]:
-            prgu = refentry[0][readid]; # log of P(r|Gu), where Gu is the unchanged from the reference genome
-            prgv = altentry[setid][readid]; # log of P(r|Gv), where Gv is the variant genome
-            pelsewhere = readentry[0][readid];
 
             # Mixture model: probability that the read is from elsewhere, outside paralogous source
-            prgu = C.log10addexp(LGOMEGA - LG1_OMEGA + pelsewhere, prgu);
-            prgv = C.log10addexp(LGOMEGA - LG1_OMEGA + pelsewhere, prgv);
+            if setid == 0: prgu[readid] = C.log10addexp(LGOMEGA - LG1_OMEGA + pout[readid], prgu[readid]);
+            prgv = C.log10addexp(LGOMEGA - LG1_OMEGA + pout[readid], prgv);
 
             # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
-            phet = C.log10addexp(LG50 + prgv, LG50 + prgu);
-            phet10 = C.log10addexp(LG10 + prgv, LG90 + prgu);
-            phet90 = C.log10addexp(LG90 + prgv, LG10 + prgu);
+            phet = C.log10addexp(LG50 + prgv, LG50 + prgu[readid]);
+            phet10 = C.log10addexp(LG10 + prgv, LG90 + prgu[readid]);
+            phet90 = C.log10addexp(LG90 + prgv, LG10 + prgu[readid]);
             phet = max([phet, phet10, phet90]); # Use the best allele frequency probability
 
             # Read count is only incremented when the difference in probability is not ambiguous, ~log(2) difference
-            if prgv > prgu and prgv - prgu > 0.3: altcount[setid] += 1;
-            elif prgu > prgv and prgu - prgv > 0.3: refcount[setid] += 1;
+            if prgv > prgu[readid] and prgv - prgu[readid] > 0.3: altcount[setid] += 1;
+            elif prgu[readid] > prgv and prgu[readid] - prgv > 0.3: refcount[setid] += 1;
             
-            if setid == 0: ref += prgu + refprior; # Only one reference hypothesis
+            if setid == 0: ref += prgu[readid] + refprior; # Only one reference hypothesis
             alt[setid] += prgv + altprior;
             het[setid] += phet + hetprior;
-            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu, phet, prgv, pelsewhere, varid[0], setentry[setid], readid, altcount[setid])); # log likelihoods
-        if debug: print("-=-\t{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(ref, het[setid], alt[setid], varid[0], setentry[setid], altcount[setid])); # log likelihoods
+            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu[readid], phet, prgv, pout[readid], altcount[setid], varid[0], readid, setentry[setid])); # log likelihoods
+        if debug: print("{0}=\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, ref, het[setid], alt[setid], altcount[setid], setentry[setid])); # log likelihoods
+    if not prgu: return ([]); # Return empty list if no read data
 
+    outlist = [];
     total = [ref] + list(alt.values()) + list(het.values());
     total = C.log10sumexp(total, len(total));
     for v in varset:

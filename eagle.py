@@ -54,17 +54,19 @@ static void initAlphaMap(void) {
 }
 double log10addexp(double a, double b) {
     double max_exp;
-    if ( a > b ) { max_exp = a; }
-    else { max_exp = b; }
-    return (log10(pow(10, a - max_exp) + pow(10, b - max_exp)) + max_exp);
+    if (a > b) max_exp = a;
+    else max_exp = b;
+    return log10(pow(10, a - max_exp) + pow(10, b - max_exp)) + max_exp;
 }
-double log10sumexp(const double *n, size_t count) {
+double log10sumexp(const double *n, size_t size) {
     size_t i;
     double max_exp = n[0]; 
-    for ( i = 1; i < count; i++ ) { if ( n[i] > max_exp ) max_exp = n[i]; }
-    double sum = 0.0;
-    for ( i = 0; i < count; i++ ) { sum += pow(10, n[i] - max_exp); }
-    return (log10(sum) + max_exp);
+    for (i = 1; i < size; i++) { 
+        if (n[i] > max_exp) max_exp = n[i]; 
+    }
+    double sum = 0;
+    for (i = 0; i < size; i++) sum += pow(10, n[i] - max_exp);
+    return log10(sum) + max_exp;
 }
 void setReadProbMatrix(double *matrix, const char *seq, size_t readlength, const double *ismatch, const double *nomatch) {
     int i, b; // array[width * row + col] = value
@@ -76,26 +78,26 @@ void setReadProbMatrix(double *matrix, const char *seq, size_t readlength, const
 }
 double calcReadProb(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength, double baseline) {
     int b; // array[width * row + col] = value
-    double probability = 0.0;
-    for ( b = pos;  b < pos+readlength; b++ ) {
-        if ( b < 0) continue;
-        if ( b >= seqlength ) break;
-        probability += matrix[5*(b-pos)+alphabetval[toupper(seq[b])-'A']]; 
-        if ( probability < baseline - 10 ) break; // stop if less than 1% contribution to baseline (best, highest) probability mass
+    double probability = 0;
+    for (b = pos;  b < pos+readlength; b++) {
+        if (b < 0) continue;
+        if (b >= seqlength) break;
+        probability += matrix[5 * (b - pos) + alphabetval[toupper(seq[b]) - 'A']]; 
+        if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
     }
-    return (probability);
+    return probability;
 }
 double calcReadProbability(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength) {
     int i;
-    double probability = 0.0;
-    double baseline = calcReadProb(seq, seqlength, pos, matrix, readlength, -1000); // first probability at given pos, likely the highest, to be used as first baseline
-    for ( i = pos-readlength; i <= pos+readlength; i++ ) {
-        if ( i + readlength < 0 ) continue;
-        if ( i >= seqlength ) break;
-        probability = probability == 0.0 ? calcReadProb(seq, seqlength, i, matrix, readlength, baseline) : log10addexp(probability, calcReadProb(seq, seqlength, i, matrix, readlength, baseline));
-        if ( probability > baseline ) baseline = probability;
+    double probability = 0;
+    double baseline = calcReadProb(seq, seqlength, pos, matrix, readlength, -1000); // first probability at given pos, likely the highest, for initial baseline
+    for (i = pos-readlength; i <= pos+readlength; ++i) {
+        if (i + readlength < 0) continue;
+        if (i >= seqlength) break;
+        probability = probability == 0 ? calcReadProb(seq, seqlength, i, matrix, readlength, baseline) : log10addexp(probability, calcReadProb(seq, seqlength, i, matrix, readlength, baseline));
+        if (probability > baseline) baseline = probability;
     }
-    return (probability);
+    return probability;
 }
 """)
 C.initAlphaMap(); # Initialize alphabet to int mapping table

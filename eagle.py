@@ -37,7 +37,7 @@ ffi = FFI();
 ffi.cdef ("""
 void initAlphaMap(void);
 double log10addexp(double a, double b);
-double log10sumexp(double *n, size_t count);
+double log10sumexp(const double *n, size_t count);
 void setReadProbMatrix(double *matrix, const char *seq, size_t readlength, const double *ismatch, const double *nomatch);
 double calcReadProb(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength, double baseline);
 double calcReadProbability(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength);
@@ -58,7 +58,7 @@ double log10addexp(double a, double b) {
     else { max_exp = b; }
     return (log10(pow(10, a - max_exp) + pow(10, b - max_exp)) + max_exp);
 }
-double log10sumexp(double *n, size_t count) {
+double log10sumexp(const double *n, size_t count) {
     size_t i;
     double max_exp = n[0]; 
     for ( i = 1; i < count; i++ ) { if ( n[i] > max_exp ) max_exp = n[i]; }

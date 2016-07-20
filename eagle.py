@@ -355,7 +355,7 @@ def evaluateVariant(args):
                         if xa_pos > varid[1]-1: xa_pos += offset;
                         readprobability = C.calcReadProbability(altseq, altseqlength, xa_pos, p_readprobmatrix, readlength);
                     prgv = C.log10addexp(prgv, readprobability);
-                    if debug: print("{0}\t{1}\t{2}".format(readprobability, refentry[0][readid], altentry[setid][readid]));
+                    if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu[readid], prgv));
 
             # Mixture model: probability that the read is from elsewhere, outside paralogous source
             if setid == 0: prgu[readid] = C.log10addexp(LGOMEGA - LG1_OMEGA + pout[readid], prgu[readid]);

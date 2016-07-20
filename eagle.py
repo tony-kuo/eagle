@@ -354,7 +354,7 @@ def evaluateVariant(args):
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
                         if xa_pos > varid[1]-1: xa_pos += offset;
                         readprobability = C.calcReadProbability(altseq, altseqlength, xa_pos, p_readprobmatrix, readlength);
-                    prgv = C.log10addexp(altentry[setid][readid], readprobability);
+                    prgv = C.log10addexp(prgv, readprobability);
                     if debug: print("{0}\t{1}\t{2}".format(readprobability, refentry[0][readid], altentry[setid][readid]));
 
             # Mixture model: probability that the read is from elsewhere, outside paralogous source

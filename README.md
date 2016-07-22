@@ -40,15 +40,15 @@ A tab-delimited text file with one row per variant and columns representing:
 
 -t The number of processes to use. Default is 1.
 
--hetbias Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
-
 -n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp.
 
 -maxh The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is finished and the number tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum.  Default is 1024 (2^10).
 
 -mvh Instead of considering the combinations of variants in the hypotheses set, consider that all variants in the set co-occur by testing **one** multi-variant hypothesis.
 
--p Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
+-hetbias Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
+
+-pao Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
 
 **Usage Notes**
 

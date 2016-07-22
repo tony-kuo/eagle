@@ -124,14 +124,14 @@ def readVCF(filename):
     print("Read VCF:\t{0}\t{1} entries\t{2}".format(filename, len(entry.keys()), datetime.now()), file=sys.stderr);
     return (entry);
 
-def groupVariants(entry, distancethreshold):
+def groupVariants(entry, distlim):
     # Check if current variant is within distance limit of the previous on the same chromosome, merge if so
     varid = sorted(entry.keys());
     skip2ind = -1;
     for i in range(0, len(varid)-1):
         if i <= skip2ind: continue;
         for j in range(i+1, len(varid)):
-            if varid[j][0] != varid[j-1][0] or varid[j][1] - varid[j-1][1] > distancethreshold: break;
+            if varid[j][0] != varid[j-1][0] or varid[j][1] - varid[j-1][1] > distlim: break;
             entry[varid[i]].extend(entry[varid[j]]);
             del entry[varid[j]];
             skip2ind = j;
@@ -166,7 +166,7 @@ def groupVariants(entry, distancethreshold):
     #for i in entry:
         #if len(entry[i]) > maxk: print(i, len(entry[i]))
     #sys.exit(0);
-    print("Group within:\t{0} bp\t{1} entries \t{2}".format(distancethreshold, len(entry.keys()), datetime.now()), file=sys.stderr);
+    print("Group within:\t{0} bp\t{1} entries \t{2}".format(distlim, len(entry.keys()), datetime.now()), file=sys.stderr);
     return (entry);
 
 def readFasta(filename):
@@ -192,18 +192,18 @@ def processWork(inqueue, results):
         args = inqueue.get();
         results.extend(evaluateVariant(args));
 
-def readPYSAM(fn, var_list, outfile, numprocesses):
-    print("Start:\t{0} procs \t{1}\t{2}".format(numprocesses, fn, datetime.now()), file=sys.stderr);
+def readPYSAM(fn, var_list, outfile, numproc):
+    print("Start:\t{0} procs \t{1}\t{2}".format(numproc, fn, datetime.now()), file=sys.stderr);
 
     results = [];
     varid = sorted(list(var_list.keys()));
 
     # Testing speed with Process, seems slower than Pool
     #manager = Manager();
-    #work = manager.Queue(numprocesses);
+    #work = manager.Queue(numproc);
     #results = manager.list();
     #pool = [];
-    #for i in range(0,numprocesses):
+    #for i in range(0,numproc):
         #p = Process(target=processWork, args=(work, results));
         #p.start()
         #pool.append(p);
@@ -217,7 +217,7 @@ def readPYSAM(fn, var_list, outfile, numprocesses):
             args.append((fn, varid[n], var_list[varid[n]]));
             #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing and nicer error messages
     try:
-        pool = Pool(processes=numprocesses);
+        pool = Pool(processes=numproc);
         poolresults = pool.map_async(evaluateVariant, args);
         for p in poolresults.get(): results.extend(p);
     finally:
@@ -425,20 +425,22 @@ def main():
     args = parser.parse_args();
 
     global maxh, multivariant, hetbias, primaryonly, debug;
-    distancethreshold = args.n;
+    numproc = max(1, args.t - 1); # Main process counts as 1
+    distlim = max(0, args.n);
     maxh = args.maxh;
     multivariant = args.mvh;
     hetbias = args.hetbias;
     primaryonly = args.pao;
-    numprocesses = max(1, args.t - 1); # Main process counts as 1
     debug = args.debug;
+    if hetbias < 0 or hetbias > 1: hetbias = 0.5;
+    if maxh < 0: maxh = 1024;
 
     var_list = readVCF(args.v);
-    if distancethreshold > 0: var_list = groupVariants(var_list, distancethreshold);
+    if distlim > 0: var_list = groupVariants(var_list, distlim);
 
     global refseq, reflength;
     (refseq, reflength) = readFasta(args.r);
-    readPYSAM(args.a, var_list, args.o, numprocesses);
+    readPYSAM(args.a, var_list, args.o, numproc);
 
 if __name__ == "__main__":
     try:

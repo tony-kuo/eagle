@@ -412,12 +412,12 @@ def main():
     parser.add_argument("-a", help="alignment data bam files (index and ref coord sorted)");
     parser.add_argument("-r", help="reference sequence fasta file");
     parser.add_argument("-o", type=str, default="", help="output file (default: stdout)");
+    parser.add_argument("-t", type=int, default=1, help="number of processes to use (default: 1)");
     parser.add_argument("-n", type=int, default=10, help="consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)");
     parser.add_argument("--maxh", type=int, default=1024, help="the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)");
     parser.add_argument("--mvh", action="store_true", help="consider nearby variants as *one* multi-variant hypothesis");
     parser.add_argument("--hetbias", type=float, default=0.5, help="prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)");
     parser.add_argument("--pao", action="store_true", help="consider primary alignments only");
-    parser.add_argument("-t", type=int, default=1, help="number of processes to use (default: 1)");
     parser.add_argument("--debug", action="store_true", help="debug mode, printing information on every read for every variant");
     if len(sys.argv) == 1:
         parser.print_help();

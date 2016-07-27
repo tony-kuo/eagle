@@ -38,9 +38,9 @@ ffi.cdef ("""
 void initAlphaMap(void);
 double log10addexp(double a, double b);
 double log10sumexp(const double *n, size_t count);
-void setReadProbMatrix(double *matrix, const char *seq, size_t readlength, const double *ismatch, const double *nomatch);
-double calcReadProb(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength, double baseline);
-double calcReadProbability(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength);
+void setProbMatrix(double *matrix, const char *seq, int readlength, const double *ismatch, const double *nomatch);
+double calcProb(const char *seq, int seqlength, int pos, const double *matrix, int readlength, double baseline);
+double calcProbDist(const char *seq, int seqlength, int pos, const double *matrix, int readlength);
 """)
 C = ffi.verify ("""
 static int alphabetval[26];
@@ -68,7 +68,7 @@ double log10sumexp(const double *n, size_t size) {
     for (i = 0; i < size; i++) sum += pow(10, n[i] - max_exp);
     return log10(sum) + max_exp;
 }
-void setReadProbMatrix(double *matrix, const char *seq, size_t readlength, const double *ismatch, const double *nomatch) {
+void setProbMatrix(double *matrix, const char *seq, int readlength, const double *ismatch, const double *nomatch) {
     int i, b; // array[width * row + col] = value
     memset(matrix, 0, readlength * 5 * sizeof matrix);
     for (b = 0; b < readlength; ++b) {
@@ -76,7 +76,7 @@ void setReadProbMatrix(double *matrix, const char *seq, size_t readlength, const
         matrix[5 * b +alphabetval[toupper(seq[b]) - 'A']] = ismatch[b];
     }
 }
-double calcReadProb(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength, double baseline) {
+double calcProb(const char *seq, int seqlength, int pos, const double *matrix, int readlength, double baseline) {
     int b; // array[width * row + col] = value
     double probability = 0;
     for (b = pos;  b < pos+readlength; b++) {
@@ -87,14 +87,14 @@ double calcReadProb(const char *seq, size_t seqlength, size_t pos, const double 
     }
     return probability;
 }
-double calcReadProbability(const char *seq, size_t seqlength, size_t pos, const double *matrix, size_t readlength) {
+double calcProbDist(const char *seq, int seqlength, int pos, const double *matrix, int readlength) {
     int i;
     double probability = 0;
-    double baseline = calcReadProb(seq, seqlength, pos, matrix, readlength, -1000); // first probability at given pos, likely the highest, for initial baseline
+    double baseline = calcProb(seq, seqlength, pos, matrix, readlength, -1000); // first probability at given pos, likely the highest, for initial baseline
     for (i = pos-readlength; i <= pos+readlength; ++i) {
         if (i + readlength < 0) continue;
         if (i >= seqlength) break;
-        probability = probability == 0 ? calcReadProb(seq, seqlength, i, matrix, readlength, baseline) : log10addexp(probability, calcReadProb(seq, seqlength, i, matrix, readlength, baseline));
+        probability = probability == 0 ? calcProb(seq, seqlength, i, matrix, readlength, baseline) : log10addexp(probability, calcProb(seq, seqlength, i, matrix, readlength, baseline));
         if (probability > baseline) baseline = probability;
     }
     return probability;
@@ -192,7 +192,7 @@ def processWork(inqueue, results):
         args = inqueue.get();
         results.extend(evaluateVariant(args));
 
-def readPYSAM(fn, var_list, outfile, numproc):
+def processVariants(fn, var_list, outfile, numproc):
     print("Start:\t{0} procs \t{1}\t{2}".format(numproc, fn, datetime.now()), file=sys.stderr);
 
     results = [];
@@ -307,7 +307,7 @@ def evaluateVariant(args):
             readlength = len(read.query_sequence);
             readprobmatrix = np.zeros(readlength*5);
             p_readprobmatrix = ffi.cast("double *", readprobmatrix.ctypes.data); # Pointer to read probability matrix
-            C.setReadProbMatrix(p_readprobmatrix, read.query_sequence.encode("utf-8"), readlength, list(ismatch), list(nomatch));
+            C.setProbMatrix(p_readprobmatrix, read.query_sequence.encode("utf-8"), readlength, list(ismatch), list(nomatch));
 
             # Reference genome probability and "elsewhere" probability only needs to be calculated once per readid
             if setid == 0:
@@ -320,11 +320,11 @@ def evaluateVariant(args):
                 elsewhere = C.log10addexp(sum(ismatch), sum(ismatch) + C.log10sumexp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
                 pout[readid] = elsewhere;
                 # Calculate the probability given reference genome, once per varid for setid 0
-                readprobability = C.calcReadProbability(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, p_readprobmatrix, readlength);
+                readprobability = C.calcProbDist(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, p_readprobmatrix, readlength);
                 prgu[readid] = readprobability;
 
             # Calculate the probability given alternate genome
-            prgv = C.calcReadProbability(altseq, altseqlength, read.reference_start, p_readprobmatrix, readlength);
+            prgv = C.calcProbDist(altseq, altseqlength, read.reference_start, p_readprobmatrix, readlength);
             if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, prgu[readid], prgv, pout[readid], read, currentset));
 
             # Multi-mapped alignments
@@ -338,12 +338,12 @@ def evaluateVariant(args):
                         newreadseq = "".join(complement.get(base,base) for base in reversed(read.query_sequence)).encode("utf-8"); # Reverse complement read sequence
                         newreadprobmatrix = np.zeros(readlength*5);
                         p_readprobmatrix = ffi.cast("double *", newreadprobmatrix.ctypes.data); # Pointer to read probability matrix
-                        C.setReadProbMatrix(p_readprobmatrix, newreadseq, readlength, list(ismatch[::-1]), list(nomatch[::-1]));
+                        C.setProbMatrix(p_readprobmatrix, newreadseq, readlength, list(ismatch[::-1]), list(nomatch[::-1]));
                     else: 
                         p_readprobmatrix = ffi.cast("double *", readprobmatrix.ctypes.data); # Pointer to read probability matrix
                     xa_pos = abs(xa_pos);
 
-                    readprobability = C.calcReadProbability(refseq[t[0]], reflength[t[0]], xa_pos, p_readprobmatrix, readlength);
+                    readprobability = C.calcProbDist(refseq[t[0]], reflength[t[0]], xa_pos, p_readprobmatrix, readlength);
                     if setid == 0: 
                         # Probability given reference genome
                         prgu[readid] = C.log10addexp(prgu[readid], readprobability);
@@ -352,7 +352,7 @@ def evaluateVariant(args):
                     if debug: print(readprobability, end="\t");
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
-                        if abs(xa_pos - varid[1]-1) < 50: readprobability = C.calcReadProbability(altseq, altseqlength, xa_pos, p_readprobmatrix, readlength);
+                        if abs(xa_pos - varid[1]-1) < 50: readprobability = C.calcProbDist(altseq, altseqlength, xa_pos, p_readprobmatrix, readlength);
                     prgv = C.log10addexp(prgv, readprobability);
                     if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu[readid], prgv));
 
@@ -425,7 +425,7 @@ def main():
     args = parser.parse_args();
 
     global maxh, multivariant, hetbias, primaryonly, debug;
-    numproc = max(1, args.t - 1); # Main process counts as 1
+    numproc = max(1, args.t); # Main process counts as 1
     distlim = max(0, args.n);
     maxh = args.maxh;
     multivariant = args.mvh;
@@ -440,7 +440,7 @@ def main():
 
     global refseq, reflength;
     (refseq, reflength) = readFasta(args.r);
-    readPYSAM(args.a, var_list, args.o, numproc);
+    processVariants(args.a, var_list, args.o, numproc);
 
 if __name__ == "__main__":
     try:

@@ -26,6 +26,8 @@ A tab-delimited text file with one row per variant and columns representing:
 8. log 10 likelihood ratio (odds)
 9. variants in the set of nearby variant if any, otherwise []
 
+The read counts represent reads that are unambiguously for the reference or alternative sequence (2x the probability favoring one over the other), as opposed to aligned reads. Our model attempts to account for reads that might be misaligned due to repetitive sequences in the hypothesis.
+
 **Input/Output Parameters**
 
 -v VCF file describing the variants, only the columns describing position and sequence are used [columns: 1,2,4,5].

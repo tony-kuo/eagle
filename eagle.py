@@ -23,21 +23,24 @@ OMEGA = 1E-4; # Prior probability of read originating from an outside paralogous
 ALPHA = 1.3; # Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
 # Precalculated log values 
-LG3 = np.log10(3);
-LG50 = np.log10(0.5);
-LG10 = np.log10(0.1);
-LG90 = np.log10(0.9);
-LGOMEGA = np.log10(OMEGA);
-LG1_OMEGA = np.log10(1-OMEGA);
-LGALPHA = np.log10(ALPHA);
+REFPRIOR = np.log(0.5);
+M_1_LOG10E = 1/np.log10(np.e);
+M_1_LN10 = 1/np.log(10);
+LG3 = np.log(3);
+LG50 = np.log(0.5);
+LG10 = np.log(0.1);
+LG90 = np.log(0.9);
+LGOMEGA = np.log(OMEGA);
+LG1_OMEGA = np.log(1-OMEGA);
+LGALPHA = np.log(ALPHA);
 
 complement = { "A": "T", "C": "G", "G": "C", "T": "A", "a": "t", "c": "g", "g": "c", "t": "a" };
 
 ffi = FFI();
 ffi.cdef ("""
 void initAlphaMap(void);
-double log10addexp(double a, double b);
-double log10sumexp(const double *n, size_t count);
+double logaddexp(double a, double b);
+double logsumexp(const double *a, size_t size);
 void setProbMatrix(double *matrix, const char *seq, int readlength, const double *ismatch, const double *nomatch);
 double calcProb(const char *seq, int seqlength, int pos, const double *matrix, int readlength, double baseline);
 double calcProbDist(const char *seq, int seqlength, int pos, const double *matrix, int readlength);
@@ -52,21 +55,21 @@ static void initAlphaMap(void) {
     alphabetval['C'-'A'] = 3;
     alphabetval['N'-'A'] = 4;
 }
-double log10addexp(double a, double b) {
+double logaddexp(double a, double b) {
     double max_exp;
     if (a > b) max_exp = a;
     else max_exp = b;
-    return log10(pow(10, a - max_exp) + pow(10, b - max_exp)) + max_exp;
+    return log(exp(a - max_exp) + exp(b - max_exp)) + max_exp;
 }
-double log10sumexp(const double *n, size_t size) {
+double logsumexp(const double *a, size_t size) {
     size_t i;
-    double max_exp = n[0]; 
+    double max_exp = a[0]; 
     for (i = 1; i < size; i++) { 
-        if (n[i] > max_exp) max_exp = n[i]; 
+        if (a[i] > max_exp) max_exp = a[i]; 
     }
     double sum = 0;
-    for (i = 0; i < size; i++) sum += pow(10, n[i] - max_exp);
-    return log10(sum) + max_exp;
+    for (i = 0; i < size; i++) sum += exp(a[i] - max_exp);
+    return log(sum) + max_exp;
 }
 void setProbMatrix(double *matrix, const char *seq, int readlength, const double *ismatch, const double *nomatch) {
     int i, b; // array[width * row + col] = value
@@ -94,7 +97,7 @@ double calcProbDist(const char *seq, int seqlength, int pos, const double *matri
     for (i = pos-readlength; i <= pos+readlength; ++i) {
         if (i + readlength < 0) continue;
         if (i >= seqlength) break;
-        probability = probability == 0 ? calcProb(seq, seqlength, i, matrix, readlength, baseline) : log10addexp(probability, calcProb(seq, seqlength, i, matrix, readlength, baseline));
+        probability = probability == 0 ? calcProb(seq, seqlength, i, matrix, readlength, baseline) : logaddexp(probability, calcProb(seq, seqlength, i, matrix, readlength, baseline));
         if (probability > baseline) baseline = probability;
     }
     return probability;
@@ -251,13 +254,12 @@ def evaluateVariant(args):
         setentry[setid] = currentset;
         setid += 1;
 
-    refprior = np.log10(0.5);
     if len(varset) == 1 or multivariant: # Eeither one variant or multiple variants as a haplotype, homozygous & non-homozygous
-        altprior = np.log10(0.5 * (1-hetbias));
-        hetprior = np.log10(0.5 * hetbias);
+        altprior = np.log(0.5 * (1-hetbias));
+        hetprior = np.log(0.5 * hetbias);
     else:  # Variant set: divided evenly among the variant hypotheses, homozygous & non-homozygous
-        altprior = np.log10(0.5 * (1-hetbias) / len(setentry));
-        hetprior = np.log10(0.5 * hetbias / len(setentry));
+        altprior = np.log(0.5 * (1-hetbias) / len(setentry));
+        hetprior = np.log(0.5 * hetbias / len(setentry));
 
     ref = 0.0;
     alt = {};
@@ -299,10 +301,10 @@ def evaluateVariant(args):
             readid = "{0}/1".format(read.query_name) if read.is_read1 else "{0}/2".format(read.query_name);
 
             # Convert read sequence into a probability matrix based on base-call error
-            callerror = np.array(read.query_qualities) / -10.0; # Already converted to number by pysam
-            callerror[callerror == 0] = -0.01; # Ensure there are no zeros, defaulting to a very high base-call error probability
-            ismatch = np.log10(1 - np.power(10, callerror)); # log10(1-e);
-            nomatch = callerror - LG3; #log10(e/3)
+            callerror = (np.array(read.query_qualities) / -10.0) * M_1_LOG10E; # Already converted to number by pysam, convert to ln
+            callerror[callerror == 0] = -0.01 * M_1_LOG10E; # Ensure there are no zeros, defaulting to a very high base-call error probability
+            ismatch = np.log(1 - np.exp(callerror)); # log(1-e);
+            nomatch = callerror - LG3; #log(e/3)
 
             readlength = len(read.query_sequence);
             readprobmatrix = np.zeros(readlength*5);
@@ -317,7 +319,7 @@ def evaluateVariant(args):
                 # We also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability of originating from some paralogous elsewhere 
                 #   lengthfactor = alpha ^ (readlength - expected readlength)
                 # P(elsewhere) = (perfect + hamming) / lengthfactor
-                elsewhere = C.log10addexp(sum(ismatch), sum(ismatch) + C.log10sumexp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
+                elsewhere = C.logaddexp(sum(ismatch), sum(ismatch) + C.logsumexp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
                 pout[readid] = elsewhere;
                 # Calculate the probability given reference genome, once per varid for setid 0
                 readprobability = C.calcProbDist(refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start, p_readprobmatrix, readlength);
@@ -346,31 +348,31 @@ def evaluateVariant(args):
                     readprobability = C.calcProbDist(refseq[t[0]], reflength[t[0]], xa_pos, p_readprobmatrix, readlength);
                     if setid == 0: 
                         # Probability given reference genome
-                        prgu[readid] = C.log10addexp(prgu[readid], readprobability);
+                        prgu[readid] = C.logaddexp(prgu[readid], readprobability);
                         # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                        pout[readid] = C.log10addexp(pout[readid], elsewhere);
+                        pout[readid] = C.logaddexp(pout[readid], elsewhere);
                     if debug: print(readprobability, end="\t");
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
                         if abs(xa_pos - varid[1]-1) < 50: readprobability = C.calcProbDist(altseq, altseqlength, xa_pos, p_readprobmatrix, readlength);
-                    prgv = C.log10addexp(prgv, readprobability);
+                    prgv = C.logaddexp(prgv, readprobability);
                     if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu[readid], prgv));
 
             # Mixture model: probability that the read is from elsewhere, outside paralogous source
-            if setid == 0: prgu[readid] = C.log10addexp(LGOMEGA - LG1_OMEGA + pout[readid], prgu[readid]);
-            prgv = C.log10addexp(LGOMEGA - LG1_OMEGA + pout[readid], prgv);
+            if setid == 0: prgu[readid] = C.logaddexp(LGOMEGA - LG1_OMEGA + pout[readid], prgu[readid]);
+            prgv = C.logaddexp(LGOMEGA - LG1_OMEGA + pout[readid], prgv);
 
             # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
-            phet = C.log10addexp(LG50 + prgv, LG50 + prgu[readid]);
-            phet10 = C.log10addexp(LG10 + prgv, LG90 + prgu[readid]);
-            phet90 = C.log10addexp(LG90 + prgv, LG10 + prgu[readid]);
+            phet = C.logaddexp(LG50 + prgv, LG50 + prgu[readid]);
+            phet10 = C.logaddexp(LG10 + prgv, LG90 + prgu[readid]);
+            phet90 = C.logaddexp(LG90 + prgv, LG10 + prgu[readid]);
             phet = max([phet, phet10, phet90]); # Use the best allele frequency probability
 
             # Read count is only incremented when the difference in probability is not ambiguous, ~log(2) difference
-            if prgv > prgu[readid] and prgv - prgu[readid] > 0.3: altcount[setid] += 1;
-            elif prgu[readid] > prgv and prgu[readid] - prgv > 0.3: refcount[setid] += 1;
+            if prgv > prgu[readid] and prgv - prgu[readid] > 0.69: altcount[setid] += 1;
+            elif prgu[readid] > prgv and prgu[readid] - prgv > 0.69: refcount[setid] += 1;
             
-            if setid == 0: ref += prgu[readid] + refprior; # Only one reference hypothesis
+            if setid == 0: ref += prgu[readid] + REFPRIOR; # Only one reference hypothesis
             alt[setid] += prgv + altprior;
             het[setid] += phet + hetprior;
             if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu[readid], phet, prgv, pout[readid], altcount[setid], varid[0], readid, setentry[setid])); # log likelihoods
@@ -379,20 +381,20 @@ def evaluateVariant(args):
 
     outlist = [];
     total = [ref] + list(alt.values()) + list(het.values());
-    total = C.log10sumexp(total, len(total));
+    total = C.logsumexp(total, len(total));
     for v in varset:
         marginal_alt = 0.0;
         not_alt = ref;
         marginal_count = 0;
         for setid in alt:
             if v in setentry[setid]: 
-                marginal_alt = C.log10addexp(alt[setid], het[setid]) if marginal_alt == 0.0 else C.log10addexp(marginal_alt, C.log10addexp(alt[setid], het[setid]));
+                marginal_alt = C.logaddexp(alt[setid], het[setid]) if marginal_alt == 0.0 else C.logaddexp(marginal_alt, C.logaddexp(alt[setid], het[setid]));
                 if altcount[setid] > marginal_count: marginal_count = altcount[setid];
             else: 
-                not_alt = C.log10addexp(not_alt, C.log10addexp(alt[setid], het[setid]));
+                not_alt = C.logaddexp(not_alt, C.logaddexp(alt[setid], het[setid]));
         outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t".format(varid[0], v[0], v[1], v[2], max(refcount.values())+max(altcount.values()), marginal_count);
         # Probability and odds in log10
-        outstr += "{0}\t{1}\t".format(marginal_alt - total, marginal_alt - not_alt); 
+        outstr += "{0}\t{1}\t".format((marginal_alt - total) * M_1_LN10, (marginal_alt - not_alt) * M_1_LN10); 
         # Print the variant set entries if exists    
         outstr += "{0}".format(varset) if len(varset) > 1 else "[]";
         outlist.append(outstr.strip());

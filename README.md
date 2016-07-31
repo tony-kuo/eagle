@@ -30,32 +30,32 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **Input/Output Parameters**
 
--v VCF file describing the variants, only the columns describing position and sequence are used [columns: 1,2,4,5].
+-v  VCF file describing the variants, only the columns describing position and sequence are used [columns: 1,2,4,5].
 
--a BAM alignment data file, reference coordinated sorted with index [*filename*.bam.bai].
+-a  BAM alignment data file, reference coordinated sorted with index [*filename*.bam.bai].
 
--r Reference genome [multi] fasta file.
+-r  Reference genome [multi] fasta file.
 
--o Output file name, defaults to *stdout* if not specified.
+-o  Output file name, defaults to *stdout* if not specified.
 
 **Program Parameters**
 
--t The number of processes to use. Default is 1.
+-t INT  The number of processes to use. Default is 1.
 
--n Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp.
+-n INT  Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp.
 
--maxh The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is finished and the number tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum.  Default is 1024 (2^10).
+--maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is finished and the number tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum. Default is 1024 (2^10).
 
--mvh Instead of considering the combinations of variants in the hypotheses set, consider that all variants in the set co-occur by testing **one** multi-variant hypothesis.
+--mvh  Instead of considering the combinations of variants in the hypotheses set, assume all variants in the set co-occur and test **one** multi-variant hypothesis.
 
--hetbias Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
+--hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
 
--pao Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
+--pao  Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
 
 **Usage Notes**
 
-`compare2TruthData.py` and `compileLikelihoods.py` are scripts to post-process the probabilities calculated by EAGLE. In particular, `compileLikelihoods.py` can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to determine significance.
+`compare2TruthData.py` and `compileLikelihoods.py` are simple scripts to post-process the probabilities calculated by EAGLE. In particular, `compileLikelihoods.py` can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to determine significance.
 
-If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratios in hetergenous samples and tune the bias appropriately, this will likely increase type I errors, depending on the threshold chosen.
+If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratio in hetergenous samples and tune the bias appropriately, this will likely increase type I errors, depending on the threshold chosen.
 
-Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are given as separate entries. Furthermore, if they are near other variants, the program will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will only retain the entry with the maximum probability.
+Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are output as separate entries. Furthermore, if they are near other variants, it will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will naively retain the one with the maximum probability, for entries with identical coordinates.

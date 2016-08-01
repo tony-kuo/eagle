@@ -1,11 +1,11 @@
 #!/usr/bin/python
 
+# EAGLE: explicit alternative genome likelihood evaluator
+# Given the sequencing data and candidate variant, explicitly test 
+# the alternative hypothesis against the reference hypothesis
+
 # Copyright 2016 Tony Kuo
 # This program is distributed under the terms of the GNU General Public License
-
-# EAGLE: explicit alternative genome likelihood evaluator
-# Given the sequencing data, explicitly test the alternative genome hypothesis
-# and calculate its probability against the reference genome hypothesis
 
 from __future__ import print_function
 import argparse, re, sys, os;
@@ -94,7 +94,7 @@ double calc_prob_distrib(const double *matrix, int read_length, const char *seq,
     int n2 = pos + read_length;
     double probability = 0;
     double baseline = calc_prob(matrix, read_length, seq, seq_length, pos, -1000); // first probability at given pos, likely the highest, for initial baseline
-    for (i = n1; i <= n2; ++i) {
+    for (i = n1; i < n2; ++i) {
         if (i + read_length < 0) continue;
         if (i >= seq_length) break;
         probability = probability == 0 ? calc_prob(matrix, read_length, seq, seq_length, i, baseline) : log_add_exp(probability, calc_prob(matrix, read_length, seq, seq_length, i, baseline));
@@ -372,8 +372,8 @@ def evaluateVariant(args):
             if setid == 0: ref += prgu[readid] + REFPRIOR; # Only one reference hypothesis
             alt[setid] += prgv + altprior;
             het[setid] += phet + hetprior;
-            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu[readid], phet, prgv, pout[readid], altcount[setid], varid[0], readid, setentry[setid])); # log likelihoods
-        if debug: print("{0}\t=\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, ref, het[setid], alt[setid], altcount[setid], setentry[setid])); # log likelihoods
+            if debug: print("{0}\t++\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu[readid], phet, prgv, pout[readid], altcount[setid], varid[0], readid, setentry[setid])); # log likelihoods
+        if debug: print("{0}\t==\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, ref, het[setid], alt[setid], altcount[setid], setentry[setid])); # log likelihoods
     if not prgu: return ([]); # Return empty list if no read data
 
     outlist = [];

@@ -3,7 +3,7 @@
 C implementation
 
 **Requires**: htslib (http://www.htslib.org/)
-Set `HTSDIR` in Makefile to the htslib folder and make.
+Set HTSDIR in the make file to the htslib folder and make.
 
 Usage: `eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
 

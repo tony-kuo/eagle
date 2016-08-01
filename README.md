@@ -1,10 +1,14 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
 C implementation
+
 **Requires**: htslib (http://www.htslib.org/)
 Set `HTSDIR` in Makefile to the htslib folder and make.
 
+Usage: `eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
+
 Python implementation [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI
+
 **Requires**: pysam, cffi, numpy
 
 Usage: `python eagle.py -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`

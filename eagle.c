@@ -908,7 +908,7 @@ static void *pool(void *work) {
 void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh) {
     size_t i, j;
 
-    Variant **varlist = (Variant **)var_list->data;
+    Variant **var_data = (Variant **)var_list->data;
     size_t nvariants = var_list->size;
 
     /* Variants that are close together as sets */
@@ -917,9 +917,9 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     Vector **var_set = malloc((nvariants * 2)  * sizeof (Vector *));
     while (i < nvariants) {
         Vector *curr = vector_create(8, VARIANT_T);
-        vector_add(curr, varlist[i]);
+        vector_add(curr, var_data[i]);
         size_t j = i + 1;
-        while (distlim > 0 && j < nvariants && strcmp(varlist[j]->chr, varlist[j - 1]->chr) == 0 && abs(varlist[j]->pos - varlist[j - 1]->pos) <= distlim) vector_add(curr, varlist[j++]);
+        while (distlim > 0 && j < nvariants && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) vector_add(curr, var_data[j++]);
         i = j;
         var_set[nsets++] = curr;
     }

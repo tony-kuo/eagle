@@ -1,6 +1,13 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-Implemented in python [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI
+C implementation
+
+**Requires**: htslib (http://www.htslib.org/)
+Set HTSDIR in the make file to the htslib folder and make.
+
+Usage: `eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
+
+Python implementation [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI
 
 **Requires**: pysam, cffi, numpy
 
@@ -54,7 +61,9 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **Usage Notes**
 
-`compare2TruthData.py` and `compileLikelihoods.py` are simple scripts to post-process the probabilities calculated by EAGLE. In particular, `compileLikelihoods.py` can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to determine significance.
+*compare2TruthData.py* is a simple script to separate false positives and true positives based on truth data given as a VCF. 
+
+*compileLikelihoods.py* post-processes the probabilities calculated by EAGLE and can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to filter mutations.
 
 If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratio in hetergenous samples and tune the bias appropriately, this will likely increase type I errors, depending on the threshold chosen.
 

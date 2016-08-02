@@ -374,7 +374,7 @@ Vector *vcf_read(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open VCF file %s\n", filename); }
 
-    Vector *var_vector = vector_create(64, VARIANT_T);
+    Vector *var_list = vector_create(64, VARIANT_T);
 
     char *line = NULL;
     ssize_t read_file = 0;
@@ -397,7 +397,7 @@ Vector *vcf_read(const char *filename) {
                 v->pos = pos;
                 v->ref = strdup(ref_token);
                 v->alt = strdup(alt_token);
-                vector_add(var_vector, v);
+                vector_add(var_list, v);
                 if (*(s2 + n2) != ',') break;
             }
             if (*(s1 + n1) != ',') break;
@@ -405,9 +405,9 @@ Vector *vcf_read(const char *filename) {
     }
     free(line); line = NULL;
     fclose(file);
-    qsort(var_vector->data, var_vector->size, sizeof (void *), nat_sort_var);
-    print_status("Read VCF: %s\t%i entries\t%s", filename, (int)var_vector->size, asctime(time_info));
-    return var_vector;
+    qsort(var_list->data, var_list->size, sizeof (void *), nat_sort_var);
+    print_status("Read VCF: %s\t%i entries\t%s", filename, (int)var_list->size, asctime(time_info));
+    return var_list;
 }
 
 void fasta_read(const char *fa_file) {
@@ -460,7 +460,7 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
     hts_idx_t *bam_idx = sam_index_load(sam_in, bam_file); // bam index
     if (bam_idx == NULL) { exit_err("failed to open BAM index %s\n", bam_file); }
 
-    Vector *read_vector = vector_create(64, READ_T);
+    Vector *read_list = vector_create(64, READ_T);
     hts_itr_t *iter = sam_itr_querys(bam_idx, bam_header, region); // read iterator
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
@@ -493,17 +493,17 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
 
-            char *str;
+            char *s;
             read->flag = NULL;
-            str = bam_flag2str(aln->core.flag);
-            if (str != NULL) read->flag = strdup(str);
-            free(str); str = NULL;
+            s = bam_flag2str(aln->core.flag);
+            if (s != NULL) read->flag = strdup(s);
+            free(s); s = NULL;
 
             read->multimap = NULL;
-            str = (char *)bam_aux_get(aln, "XA");
-            if (str != NULL) read->multimap = strdup(str);
+            s = (char *)bam_aux_get(aln, "XA");
+            if (s != NULL) read->multimap = strdup(s);
 
-            vector_add(read_vector, read);
+            vector_add(read_list, read);
         }
         bam_destroy1(aln);
     }
@@ -511,7 +511,7 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
     hts_idx_destroy(bam_idx);
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
-    return read_vector;
+    return read_list;
 }
 
 static Fasta *refseq_fetch(const char *name, const char *fa_file) {
@@ -609,18 +609,18 @@ static inline int variant_find(const Vector *a, const Variant *v) {
     return -1;
 }
 
-static inline void variant_print(char **output, const Vector *var_vector, size_t i, int read_count, int has_alt_count, double total, double has_alt, double not_alt) {
-    Variant **var_set = (Variant **)var_vector->data;
-    size_t nvariants = var_vector->size;
+static inline void variant_print(char **output, const Vector *var_set, size_t i, int read_count, int has_alt_count, double total, double has_alt, double not_alt) {
+    Variant **var_data = (Variant **)var_set->data;
+    size_t nvariants = var_set->size;
 
     size_t n;
     char *token;
     double prob = (has_alt - total) * M_1_LN10;
     double odds = (has_alt - not_alt) * M_1_LN10;
 
-    n = snprintf(NULL, 0, "%s\t%d\t%s\t%s\t%d\t%d\t%e\t%f\t", var_set[i]->chr, var_set[i]->pos, var_set[i]->ref, var_set[i]->alt, read_count, has_alt_count, prob, odds) + 1;
+    n = snprintf(NULL, 0, "%s\t%d\t%s\t%s\t%d\t%d\t%e\t%f\t", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt, read_count, has_alt_count, prob, odds) + 1;
     token = malloc(n * sizeof *token);
-    snprintf(token, n, "%s\t%d\t%s\t%s\t%d\t%d\t%e\t%f\t", var_set[i]->chr, var_set[i]->pos, var_set[i]->ref, var_set[i]->alt, read_count, has_alt_count, prob, odds);
+    snprintf(token, n, "%s\t%d\t%s\t%s\t%d\t%d\t%e\t%f\t", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt, read_count, has_alt_count, prob, odds);
     str_resize(output, strlen(*output) + n);
     strcat(*output, token);
     free(token); token = NULL;
@@ -629,9 +629,9 @@ static inline void variant_print(char **output, const Vector *var_vector, size_t
     strcat(*output, "[");
     if (nvariants > 1) {
         for (i = 0; i < nvariants; ++i) {
-            n = snprintf(NULL, 0, "%d,%s,%s;", var_set[i]->pos, var_set[i]->ref, var_set[i]->alt) + 1;
+            n = snprintf(NULL, 0, "%d,%s,%s;", var_data[i]->pos, var_data[i]->ref, var_data[i]->alt) + 1;
             token = malloc(n * sizeof *token);
-            snprintf(token, n, "%d,%s,%s;", var_set[i]->pos, var_set[i]->ref, var_set[i]->alt);
+            snprintf(token, n, "%d,%s,%s;", var_data[i]->pos, var_data[i]->ref, var_data[i]->alt);
             str_resize(output, strlen(*output) + n);
             strcat(*output, token);
             free(token); token = NULL;
@@ -641,25 +641,25 @@ static inline void variant_print(char **output, const Vector *var_vector, size_t
     strcat(*output, "]\n");
 }
 
-static char *evaluate(const Vector *var_vector, const char *bam_file, const char *fa_file) {
+static char *evaluate(const Vector *var_set, const char *bam_file, const char *fa_file) {
     size_t i, n, seti, readi;
 
-    Variant **var_set = (Variant **)var_vector->data;
-    size_t nvariants = var_vector->size;
+    Variant **var_data = (Variant **)var_set->data;
+    size_t nvariants = var_set->size;
 
     /* Reads in variant region coordinates (vcf is 1-index while htslib is 0-index) */
-    n = snprintf(NULL, 0, "%s:%d-%d", var_set[0]->chr, var_set[0]->pos - 1, var_set[nvariants - 1]->pos - 1) + 1;
+    n = snprintf(NULL, 0, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos - 1, var_data[nvariants - 1]->pos - 1) + 1;
     char *region = malloc(n * sizeof *region);
-    snprintf(region, n, "%s:%d-%d", var_set[0]->chr, var_set[0]->pos - 1, var_set[nvariants - 1]->pos - 1);
+    snprintf(region, n, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos - 1, var_data[nvariants - 1]->pos - 1);
 
-    Vector *read_vector = bam_fetch(bam_file, region);
+    Vector *read_list = bam_fetch(bam_file, region);
     free(region); region = NULL;
-    if (read_vector->size == 0) {
-        free(read_vector); read_vector = NULL;
+    if (read_list->size == 0) {
+        free(read_list); read_list = NULL;
         return NULL;
     }
-    Read **read_set = (Read **)read_vector->data;
-    size_t nreads = read_vector->size;
+    Read **read_data = (Read **)read_list->data;
+    size_t nreads = read_list->size;
 
     /* Variant combinations as a tab delimited string, encoding array indices ('\t'+1)-indexed, then parsed into a an array of Vectors */
     int ncombos = 0;
@@ -671,7 +671,7 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
     char *s1, *s2, token[strlen(combo)];
     for (s1 = combo; sscanf(s1, "%[^\t]%n", token, &n1) == 1 && seti < ncombos; s1 += n1 + 1) {
         var_combo[seti] = vector_create(nvariants, VARIANT_T);
-        for (s2 = token; *s2 != '\0'; ++s2)  vector_add(var_combo[seti], var_set[*s2 - '\t' - 1]);
+        for (s2 = token; *s2 != '\0'; ++s2)  vector_add(var_combo[seti], var_data[*s2 - '\t' - 1]);
         ++seti;
         if (*(s1 + n1) != '\t') break;
     }
@@ -679,7 +679,7 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
     //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s\t", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
 
     /* Reference sequence */
-    Fasta *f = refseq_fetch(var_set[0]->chr, fa_file);
+    Fasta *f = refseq_fetch(var_data[0]->chr, fa_file);
     char *refseq = f->seq;
     int refseq_length = f->seq_length;
 
@@ -715,7 +715,7 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
             int is_secondary = 0;
             int n;
             char *s, token[64];
-            for (s = read_set[readi]->flag; sscanf(s, "%63[^,]%n", token, &n) == 1; s += n + 1) {
+            for (s = read_data[readi]->flag; sscanf(s, "%63[^,]%n", token, &n) == 1; s += n + 1) {
                 if (strcmp("UNMAP", token) == 0) is_unmap = 1;
                 else if (strcmp("REVERSE", token) == 0) is_reverse = 1;
                 else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
@@ -725,15 +725,15 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
             if (pao && is_secondary) continue;
 
             /* Read probability matrix */
-            double is_match[read_set[readi]->length], no_match[read_set[readi]->length];
-            for (i = 0; i < read_set[readi]->length; ++i) {
-                if (read_set[readi]->qual[i] == 0) read_set[readi]->qual[i] = -0.01;
-                double a = read_set[readi]->qual[i] * M_1_LOG10E; //convert to ln
+            double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
+            for (i = 0; i < read_data[readi]->length; ++i) {
+                if (read_data[readi]->qual[i] == 0) read_data[readi]->qual[i] = -0.01;
+                double a = read_data[readi]->qual[i] * M_1_LOG10E; //convert to ln
                 is_match[i] = log(1 - exp(a)); // log(1-err)
                 no_match[i] = a - LG3; // log(err/3)
             }
-            double readprobmatrix[read_set[readi]->length * 5];
-            set_prob_matrix(readprobmatrix, read_set[readi]->qseq, read_set[readi]->length, is_match, no_match);
+            double readprobmatrix[read_data[readi]->length * 5];
+            set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
 
             double elsewhere = 0;
             if (seti == 0) { // reference genome probability and "elsewhere" probability only needs to be calculated once
@@ -745,33 +745,33 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
                    c) lengthfactor = alpha ^ (read length - expected read length)
                 P(elsewhere) = (perfect + hamming) / lengthfactor 
                 */
-                double delta[read_set[readi]->length];
-                double a = sum(is_match, read_set[readi]->length);
-                for (i = 0; i < read_set[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
-                elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_set[readi]->length)) - (LGALPHA * (read_set[readi]->length - read_set[readi]->inferred_length));
+                double delta[read_data[readi]->length];
+                double a = sum(is_match, read_data[readi]->length);
+                for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
+                elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
                 pout[readi] = elsewhere;
                 /* Calculate the probability given reference genome */
-                prgu[readi] = calc_prob_distrib(readprobmatrix, read_set[readi]->length, refseq, refseq_length, read_set[readi]->pos);
+                prgu[readi] = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
             }
             /* Calculate the probability given alternative genome */
-            double prgv = calc_prob_distrib(readprobmatrix, read_set[readi]->length, altseq, altseq_length, read_set[readi]->pos);
+            double prgv = calc_prob_distrib(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
             if (debug) {
                 fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu[readi], prgv, pout[readi]);
-                fprintf(stderr, "%s\t%s\t%d\t%d\t%d\t", read_set[readi]->name, read_set[readi]->chr, read_set[readi]->pos, read_set[readi]->length, read_set[readi]->inferred_length);
-                fprintf(stderr, "%s\t", read_set[readi]->qseq);
-                for (i = 0; i < read_set[readi]->length; ++i) fprintf(stderr, "%.2f ", read_set[readi]->qual[i]);
+                fprintf(stderr, "%s\t%s\t%d\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->inferred_length);
+                fprintf(stderr, "%s\t", read_data[readi]->qseq);
+                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
                 fprintf(stderr, "\t");
-                if (read_set[readi]->flag != NULL) fprintf(stderr, "%s\t", read_set[readi]->flag);
-                if (read_set[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_set[readi]->multimap);
-                for (i = 0; i < read_set[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_set[readi]->cigar_oplen[i], read_set[readi]->cigar_opchr[i]);
+                if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
+                if (read_data[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimap);
+                for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
                 fprintf(stderr, "\n");
             }
 
             /* Multi-map alignments from XA tags: Zchr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
-            if (!pao && read_set[readi]->multimap != NULL) {
+            if (!pao && read_data[readi]->multimap != NULL) {
                 int xa_pos, n;
                 char xa_chr[64];
-                for (s = read_set[readi]->multimap + 1; sscanf(s, "%63[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
+                for (s = read_data[readi]->multimap + 1; sscanf(s, "%63[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                     if (*(s + n) != ';') break;
 
                     Fasta *f = refseq_fetch(xa_chr, fa_file);
@@ -779,12 +779,12 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
                     int xa_refseq_length = f->seq_length;
 
                     double *p_readprobmatrix = readprobmatrix;
-                    double newreadprobmatrix[read_set[readi]->length * 5];
+                    double newreadprobmatrix[read_data[readi]->length * 5];
                     if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
-                        char *rev_qseq = reverse_compl(read_set[readi]->qseq, read_set[readi]->length);
-                        double *rev_is_match = reverse(is_match, read_set[readi]->length);
-                        double *rev_no_match = reverse(no_match, read_set[readi]->length);
-                        set_prob_matrix(newreadprobmatrix, rev_qseq, read_set[readi]->length, rev_is_match, rev_no_match);
+                        char *rev_qseq = reverse_compl(read_data[readi]->qseq, read_data[readi]->length);
+                        double *rev_is_match = reverse(is_match, read_data[readi]->length);
+                        double *rev_no_match = reverse(no_match, read_data[readi]->length);
+                        set_prob_matrix(newreadprobmatrix, rev_qseq, read_data[readi]->length, rev_is_match, rev_no_match);
                         p_readprobmatrix = newreadprobmatrix;
                         free(rev_qseq); rev_qseq = NULL;
                         free(rev_is_match); rev_is_match = NULL;
@@ -792,14 +792,14 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
                     }
 
                     xa_pos = abs(xa_pos) - 1;
-                    double readprobability = calc_prob_distrib(p_readprobmatrix, read_set[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
+                    double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     if (seti == 0) {
                         pout[readi] = log_add_exp(pout[readi], elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
                         prgu[readi] = log_add_exp(prgu[readi], readprobability);
                     }
                     if (debug) fprintf(stderr, "%f\t", readprobability);
-                    if (strcmp(xa_chr, read_set[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
-                        if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < 50) readprobability = calc_prob_distrib(p_readprobmatrix, read_set[readi]->length, altseq, altseq_length, xa_pos);
+                    if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
+                        if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < 50) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu[readi], prgv);
@@ -826,7 +826,7 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
             if (debug) {
-                fprintf(stderr, "%d\t++\t%f\t%f\t%f\t%f\t%d\t%s\t", (int)seti, prgu[readi], phet, prgv, pout[readi], alt_count[seti], read_set[readi]->name);
+                fprintf(stderr, "%d\t++\t%f\t%f\t%f\t%f\t%d\t%s\t", (int)seti, prgu[readi], phet, prgv, pout[readi], alt_count[seti], read_data[readi]->name);
                 for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
             }
         }
@@ -855,7 +855,7 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
         double not_alt = ref;
         int has_alt_count = 0;
         for (seti = 0; seti < ncombos; ++seti) {
-            if (variant_find(var_combo[seti], var_set[i]) != -1) { // if variant is in this combination
+            if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
                 has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
                 if (alt_count[seti] > has_alt_count) has_alt_count = alt_count[seti];
             }
@@ -863,9 +863,9 @@ static char *evaluate(const Vector *var_vector, const char *bam_file, const char
                 not_alt = log_add_exp(not_alt, log_add_exp(alt[seti], het[seti]));
             }
         }
-        variant_print(&output, var_vector, i, read_count, has_alt_count, total, has_alt, not_alt);
+        variant_print(&output, var_set, i, read_count, has_alt_count, total, has_alt, not_alt);
     }
-    vector_destroy(read_vector); free(read_vector); read_vector = NULL;
+    vector_destroy(read_list); free(read_list); read_list = NULL;
     for (seti = 0; seti < ncombos; ++seti) { vector_free(var_combo[seti]); free(var_combo[seti]); var_combo[seti] = NULL; }
     free(var_combo); var_combo = NULL;
     return output;
@@ -905,11 +905,11 @@ static void *pool(void *work) {
     return NULL;
 }
 
-void process(const Vector *var_vector, char *bam_file, char *fa_file, FILE *out_fh) {
+void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh) {
     size_t i, j;
 
-    Variant **varlist = (Variant **)var_vector->data;
-    size_t nvariants = var_vector->size;
+    Variant **varlist = (Variant **)var_list->data;
+    size_t nvariants = var_list->size;
 
     /* Variants that are close together as sets */
     i = 0;
@@ -1059,7 +1059,7 @@ int main(int argc, char *argv[]) {
     if (out_file == NULL) out_fh = stdout;
     else out_fh = fopen(out_file, "w");
 
-    fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "numproc: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", numproc, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
+    //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "numproc: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", numproc, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
     /* Mapping table */
     memset(seqnt_map, 4, sizeof seqnt_map);
@@ -1077,13 +1077,13 @@ int main(int argc, char *argv[]) {
     compl_map['N'-'A'] = 'N';
 
     /* Start processing data */
-    Vector *var_vector = vcf_read(vcf_file);
+    Vector *var_list = vcf_read(vcf_file);
 
     refseq_hash = kh_init(rsh);
     //fasta_read(fa_file);
 
     pthread_mutex_init(&refseq_lock, NULL);
-    process(var_vector, bam_file, fa_file, out_fh);
+    process(var_list, bam_file, fa_file, out_fh);
     pthread_mutex_destroy(&refseq_lock);
 
 	khiter_t k;
@@ -1091,6 +1091,6 @@ int main(int argc, char *argv[]) {
 		if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
     }
 	kh_destroy(rsh, refseq_hash);
-    vector_destroy(var_vector); free(var_vector); var_vector = NULL;
+    vector_destroy(var_list); free(var_list); var_list = NULL;
     return 0;
 }

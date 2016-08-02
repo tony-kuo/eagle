@@ -184,11 +184,11 @@ static char *powerset(int n, int *ncombos) {
     char *combo = malloc(sizeof *combo);
     combo[0] = '\0';
 
-    combinations(&combo, 1, n, ncombos); // k = 1
+    combinations(&combo, 1, n, ncombos);
     if (n > 1) {
-        combinations(&combo, n, n, ncombos); // k = n
+        combinations(&combo, n, n, ncombos);
         int k;
-        for (k = 2; k <= n - 1; ++k) { // k = 2 : n - 1
+        for (k = 2; k <= n - 1; ++k) {
             combinations(&combo, k, n, ncombos);
             if (*ncombos - n - 1 >= maxh) break;
         }
@@ -261,7 +261,7 @@ static int nat_sort_var(const void *a, const void *b) {
     return nat_sort_cmp(a, b, VARIANT_T);
 }
 
-void destroy_variant(Variant *v) {
+void variant_destroy(Variant *v) {
     if (v == NULL) return;
     v->pos = 0;
     free(v->chr); v->chr = NULL;      
@@ -269,7 +269,7 @@ void destroy_variant(Variant *v) {
     free(v->alt); v->alt = NULL;
 }
 
-void destroy_read(Read *r) {
+void read_destroy(Read *r) {
     if (r == NULL) return;
     r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = 0;
     free(r->name); r->name = NULL;
@@ -282,7 +282,7 @@ void destroy_read(Read *r) {
     free(r->multimap); r->multimap = NULL;
 }
 
-void destroy_fasta(Fasta *f) {
+void fasta_destroy(Fasta *f) {
     if (f == NULL) return;
     f->seq_length = 0;
     free(f->seq); f->seq = NULL;      
@@ -353,13 +353,13 @@ void vector_destroy(Vector *a) {
     for (i = 0; i < a->size; ++i) {
         switch (var_type) {
             case VARIANT_T:
-                destroy_variant((Variant *)a->data[i]);
+                variant_destroy((Variant *)a->data[i]);
                 break;
             case READ_T:
-                destroy_read((Read *)a->data[i]);
+                read_destroy((Read *)a->data[i]);
                 break;
             case FASTA_T:
-                destroy_fasta((Fasta *)a->data[i]);
+                fasta_destroy((Fasta *)a->data[i]);
                 break;
             default:
                 break;
@@ -370,7 +370,7 @@ void vector_destroy(Vector *a) {
     free(a->data); a->data = NULL;
 }
 
-Vector *read_vcf(const char *filename) {
+Vector *vcf_read(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open VCF file %s\n", filename); }
 
@@ -410,7 +410,7 @@ Vector *read_vcf(const char *filename) {
     return var_vector;
 }
 
-void read_fasta(const char *fa_file) {
+void fasta_read(const char *fa_file) {
     faidx_t *fai = fai_load(fa_file);
     if (fai == NULL) { exit_err("failed to open FA index %s\n", fa_file); }
 
@@ -452,7 +452,7 @@ void read_fasta(const char *fa_file) {
     print_status("Read reference genome: %s\t%s", fa_file, asctime(time_info));
 }
 
-static Vector *fetch_reads(const char *bam_file, const char *region) {
+static Vector *bam_fetch(const char *bam_file, const char *region) {
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
@@ -514,12 +514,12 @@ static Vector *fetch_reads(const char *bam_file, const char *region) {
     return read_vector;
 }
 
-static Fasta *fetch_refseq(const char *name, const char *fa_file) {
+static Fasta *refseq_fetch(const char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
     size_t i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
-        Vector *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
+        Vector *node = &kh_val(refseq_hash, k);
         Fasta **f = (Fasta **)node->data;
         for (i = 0; i < node->size; ++i) {
             if (strcmp(f[i]->name, name) == 0) {
@@ -542,7 +542,7 @@ static Fasta *fetch_refseq(const char *name, const char *fa_file) {
 
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
-    Vector *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
+    Vector *node = &kh_val(refseq_hash, k);
     if(absent) vector_init(node, 8, FASTA_T);
     vector_add(node, f);
     fai_destroy(fai);
@@ -595,7 +595,7 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
     return altseq;
 }
 
-static inline int find_variant(const Vector *a, const Variant *v) {
+static inline int variant_find(const Vector *a, const Variant *v) {
     int i = 0;
     int j = a->size - 1;
     int n = (i + j) / 2;
@@ -609,7 +609,7 @@ static inline int find_variant(const Vector *a, const Variant *v) {
     return -1;
 }
 
-static inline void print_variant(char **output, const Vector *var_vector, size_t i, int read_count, int has_alt_count, double total, double has_alt, double not_alt) {
+static inline void variant_print(char **output, const Vector *var_vector, size_t i, int read_count, int has_alt_count, double total, double has_alt, double not_alt) {
     Variant **var_set = (Variant **)var_vector->data;
     size_t nvariants = var_vector->size;
 
@@ -641,7 +641,7 @@ static inline void print_variant(char **output, const Vector *var_vector, size_t
     strcat(*output, "]\n");
 }
 
-static char *evaluate_variants(const Vector *var_vector, const char *bam_file, const char *fa_file) {
+static char *evaluate(const Vector *var_vector, const char *bam_file, const char *fa_file) {
     size_t i, n, seti, readi;
 
     Variant **var_set = (Variant **)var_vector->data;
@@ -652,7 +652,7 @@ static char *evaluate_variants(const Vector *var_vector, const char *bam_file, c
     char *region = malloc(n * sizeof *region);
     snprintf(region, n, "%s:%d-%d", var_set[0]->chr, var_set[0]->pos - 1, var_set[nvariants - 1]->pos - 1);
 
-    Vector *read_vector = fetch_reads(bam_file, region);
+    Vector *read_vector = bam_fetch(bam_file, region);
     free(region); region = NULL;
     if (read_vector->size == 0) {
         free(read_vector); read_vector = NULL;
@@ -679,7 +679,7 @@ static char *evaluate_variants(const Vector *var_vector, const char *bam_file, c
     //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s\t", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
 
     /* Reference sequence */
-    Fasta *f = fetch_refseq(var_set[0]->chr, fa_file);
+    Fasta *f = refseq_fetch(var_set[0]->chr, fa_file);
     char *refseq = f->seq;
     int refseq_length = f->seq_length;
 
@@ -774,7 +774,7 @@ static char *evaluate_variants(const Vector *var_vector, const char *bam_file, c
                 for (s = read_set[readi]->multimap + 1; sscanf(s, "%63[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                     if (*(s + n) != ';') break;
 
-                    Fasta *f = fetch_refseq(xa_chr, fa_file);
+                    Fasta *f = refseq_fetch(xa_chr, fa_file);
                     char *xa_refseq = f->seq;
                     int xa_refseq_length = f->seq_length;
 
@@ -855,7 +855,7 @@ static char *evaluate_variants(const Vector *var_vector, const char *bam_file, c
         double not_alt = ref;
         int has_alt_count = 0;
         for (seti = 0; seti < ncombos; ++seti) {
-            if (find_variant(var_combo[seti], var_set[i]) != -1) { // if variant is in this combination
+            if (variant_find(var_combo[seti], var_set[i]) != -1) { // if variant is in this combination
                 has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
                 if (alt_count[seti] > has_alt_count) has_alt_count = alt_count[seti];
             }
@@ -863,7 +863,7 @@ static char *evaluate_variants(const Vector *var_vector, const char *bam_file, c
                 not_alt = log_add_exp(not_alt, log_add_exp(alt[seti], het[seti]));
             }
         }
-        print_variant(&output, var_vector, i, read_count, has_alt_count, total, has_alt, not_alt);
+        variant_print(&output, var_vector, i, read_count, has_alt_count, total, has_alt, not_alt);
     }
     vector_destroy(read_vector); free(read_vector); read_vector = NULL;
     for (seti = 0; seti < ncombos; ++seti) { vector_free(var_combo[seti]); free(var_combo[seti]); var_combo[seti] = NULL; }
@@ -893,7 +893,7 @@ static void *pool(void *work) {
         pthread_mutex_unlock(&w->q_lock);
         if (arg == NULL) break;
         
-        char *outstr = evaluate_variants(arg->var_set, arg->bam_file, arg->fa_file);
+        char *outstr = evaluate(arg->var_set, arg->bam_file, arg->fa_file);
         if (outstr == NULL) continue;
 
         pthread_mutex_lock(&w->r_lock);
@@ -905,7 +905,7 @@ static void *pool(void *work) {
     return NULL;
 }
 
-void process_variants(const Vector *var_vector, char *bam_file, char *fa_file, FILE *out_fh) {
+void process(const Vector *var_vector, char *bam_file, char *fa_file, FILE *out_fh) {
     size_t i, j;
 
     Variant **varlist = (Variant **)var_vector->data;
@@ -1077,13 +1077,13 @@ int main(int argc, char *argv[]) {
     compl_map['N'-'A'] = 'N';
 
     /* Start processing data */
-    Vector *var_vector = read_vcf(vcf_file);
+    Vector *var_vector = vcf_read(vcf_file);
 
     refseq_hash = kh_init(rsh);
-    //read_fasta(fa_file);
+    //fasta_read(fa_file);
 
     pthread_mutex_init(&refseq_lock, NULL);
-    process_variants(var_vector, bam_file, fa_file, out_fh);
+    process(var_vector, bam_file, fa_file, out_fh);
     pthread_mutex_destroy(&refseq_lock);
 
 	khiter_t k;

@@ -83,7 +83,7 @@ double calc_prob(const double *matrix, int read_length, const char *seq, int seq
     for (b = pos;  b < n; ++b) {
         if (b < 0) continue;
         if (b >= seq_length) break;
-        probability += matrix[5 * (b - pos) + seqnt_map[seq[b] - 'A']]; 
+        probability += matrix[5 * (b - pos) + seqnt_map[toupper(seq[b]) - 'A']]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
     }
     return probability;

@@ -63,7 +63,7 @@ Vector *vector_dup(Vector *a);
 void vector_free(Vector *a);
 void vector_destroy(Vector *a);
 
-Vector *read_vcf(const char *filename);
-void read_fasta(const char *fa_file);
-void process_variants(const Vector *var_vector, char *bam_file, char *fa_file, FILE *out_fh);
+Vector *vcf_read(const char *filename);
+void fasta_read(const char *fa_file);
+void process(const Vector *var_vector, char *bam_file, char *fa_file, FILE *out_fh);
 #endif

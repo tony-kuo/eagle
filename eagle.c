@@ -959,15 +959,18 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     Work *w = malloc(sizeof (Work));
     w->queue = queue;
     w->results = results;
+
     pthread_mutex_init(&w->q_lock, NULL);
     pthread_mutex_init(&w->r_lock, NULL);
 
     pthread_t tid[numproc];
-    for (i = 0; i < numproc; ++i) pthread_create(&tid[i], NULL, pool, w);
-    for (i = 0; i < numproc; ++i) pthread_join(tid[i], NULL);
+    for (i = 0; i < numproc - 1; ++i) pthread_create(&tid[i], NULL, pool, w);
+    pool(w);
+    for (i = 0; i < numproc - 1; ++i) pthread_join(tid[i], NULL);
 
     pthread_mutex_destroy(&w->q_lock);
     pthread_mutex_destroy(&w->r_lock);
+
     free(w); w = NULL;
     free(var_set); var_set = NULL;
 

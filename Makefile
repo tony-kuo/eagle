@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -g -Wall -O1 -pthread
+CFLAGS = -g -Wall -O2 -pthread
 
 HTSDIR = htslib-1.3.1
 INCLUDES = -I$(HTSDIR)

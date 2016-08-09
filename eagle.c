@@ -147,7 +147,7 @@ static inline double calc_prob_distrib(const double *matrix, int read_length, co
     double baseline = calc_prob(matrix, read_length, seq, seq_length, pos, -1000); // first probability at given pos, likely the highest, for initial baseline
     for (i = n1; i < n2; ++i) {
         if (i + read_length < 0) continue;
-        if (i >= seq_length) break;
+        if (i - read_length >= seq_length) break;
         probability = probability == 0 ? calc_prob(matrix, read_length, seq, seq_length, i, baseline) : log_add_exp(probability, calc_prob(matrix, read_length, seq, seq_length, i, baseline));
         if (probability > baseline) baseline = probability;
     }
@@ -714,8 +714,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             int is_reverse = 0;
             int is_secondary = 0;
             int n;
-            char *s, token[64];
-            for (s = read_data[readi]->flag; sscanf(s, "%63[^,]%n", token, &n) == 1; s += n + 1) {
+            char *s, token[strlen(read_data[readi]->flag) + 1];
+            for (s = read_data[readi]->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
                 if (strcmp("UNMAP", token) == 0) is_unmap = 1;
                 else if (strcmp("REVERSE", token) == 0) is_reverse = 1;
                 else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
@@ -770,10 +770,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             /* Multi-map alignments from XA tags: Zchr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
             if (!pao && read_data[readi]->multimap != NULL) {
                 int xa_pos, n;
-                char xa_chr[64];
-                for (s = read_data[readi]->multimap + 1; sscanf(s, "%63[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
-                    if (*(s + n) != ';') break;
-
+                char xa_chr[strlen(read_data[readi]->multimap) + 1];
+                for (s = read_data[readi]->multimap + 1; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                     Fasta *f = refseq_fetch(xa_chr, fa_file);
                     char *xa_refseq = f->seq;
                     int xa_refseq_length = f->seq_length;
@@ -791,7 +789,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                         free(rev_no_match); rev_no_match = NULL;
                     }
 
-                    xa_pos = abs(xa_pos) - 1;
+                    xa_pos = abs(xa_pos);
                     double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     if (seti == 0) {
                         pout[readi] = log_add_exp(pout[readi], elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
@@ -803,6 +801,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu[readi], prgv);
+                    if (*(s + n) != ';') break;
                 }
             }
 

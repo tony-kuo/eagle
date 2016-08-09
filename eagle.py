@@ -96,7 +96,7 @@ double calc_prob_distrib(const double *matrix, int read_length, const char *seq,
     double baseline = calc_prob(matrix, read_length, seq, seq_length, pos, -1000); // first probability at given pos, likely the highest, for initial baseline
     for (i = n1; i < n2; ++i) {
         if (i + read_length < 0) continue;
-        if (i >= seq_length) break;
+        if (i - read_length >= seq_length) break;
         probability = probability == 0 ? calc_prob(matrix, read_length, seq, seq_length, i, baseline) : log_add_exp(probability, calc_prob(matrix, read_length, seq, seq_length, i, baseline));
         if (probability > baseline) baseline = probability;
     }

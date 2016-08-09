@@ -53,7 +53,6 @@ static struct tm *time_info;
 
 /* Mapping tables */
 static int seqnt_map[26];
-static int compl_map[26];
 
 KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
@@ -107,14 +106,6 @@ static inline double *reverse(double *a, int size) {
     int i = 0;
     double *b = malloc(size * sizeof *b);
     while (--size >= 0) b[i++] = a[size];
-    return b;
-}
-
-static inline char *reverse_compl(char *a, int size) {
-    char *b = malloc((size + 1) * sizeof *b);
-    b[size] = '\0';
-    int i = 0;
-    while (--size >= 0) b[i++] = compl_map[a[size] - 'A'];
     return b;
 }
 
@@ -781,16 +772,10 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     int xa_refseq_length = f->seq_length;
 
                     double *p_readprobmatrix = readprobmatrix;
-                    double newreadprobmatrix[read_data[readi]->length * 5];
+                    double *newreadprobmatrix = NULL;
                     if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
-                        char *rev_qseq = reverse_compl(read_data[readi]->qseq, read_data[readi]->length);
-                        double *rev_is_match = reverse(is_match, read_data[readi]->length);
-                        double *rev_no_match = reverse(no_match, read_data[readi]->length);
-                        set_prob_matrix(newreadprobmatrix, rev_qseq, read_data[readi]->length, rev_is_match, rev_no_match);
+                        newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * 5);
                         p_readprobmatrix = newreadprobmatrix;
-                        free(rev_qseq); rev_qseq = NULL;
-                        free(rev_is_match); rev_is_match = NULL;
-                        free(rev_no_match); rev_no_match = NULL;
                     }
 
                     xa_pos = abs(xa_pos);
@@ -803,6 +788,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
+                    if (newreadprobmatrix != NULL){ free(newreadprobmatrix); newreadprobmatrix = NULL; }
                     if (*(s + n) != ';') break;
                 }
             }
@@ -1064,20 +1050,13 @@ int main(int argc, char *argv[]) {
 
     //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "numproc: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", numproc, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
-    /* Mapping table */
-    memset(seqnt_map, 4, sizeof seqnt_map);
+    /* Mapping table, symmetrical according to reverse complement */
+    memset(seqnt_map, 2, sizeof seqnt_map);
     seqnt_map['A'-'A'] = 0;
-    seqnt_map['T'-'A'] = 1;
-    seqnt_map['G'-'A'] = 2;
-    seqnt_map['C'-'A'] = 3;
-    seqnt_map['N'-'A'] = 4;
-
-    memset(compl_map, 0, sizeof compl_map);
-    compl_map['A'-'A'] = 'T';
-    compl_map['T'-'A'] = 'A';
-    compl_map['C'-'A'] = 'G';
-    compl_map['G'-'A'] = 'C';
-    compl_map['N'-'A'] = 'N';
+    seqnt_map['C'-'A'] = 1;
+    seqnt_map['N'-'A'] = 2;
+    seqnt_map['G'-'A'] = 3;
+    seqnt_map['T'-'A'] = 4;
 
     /* Start processing data */
     Vector *var_list = vcf_read(vcf_file);

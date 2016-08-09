@@ -34,8 +34,6 @@ LGOMEGA = np.log(OMEGA);
 LG1_OMEGA = np.log(1-OMEGA);
 LGALPHA = np.log(ALPHA);
 
-complement = { "A": "T", "C": "G", "G": "C", "T": "A", "a": "t", "c": "g", "g": "c", "t": "a" };
-
 ffi = FFI();
 ffi.cdef ("""
 void seqnt_map_init(void);
@@ -48,12 +46,12 @@ double calc_prob_distrib(const double *matrix, int read_length, const char *seq,
 C = ffi.verify ("""
 static int seqnt_map[26];
 void seqnt_map_init(void) {
-    memset(seqnt_map, 4, sizeof(seqnt_map)); // Default value 4 to array elements
+    memset(seqnt_map, 2, sizeof(seqnt_map)); // Default value 2 to array elements
     seqnt_map['A'-'A'] = 0;
-    seqnt_map['T'-'A'] = 1;
-    seqnt_map['G'-'A'] = 2;
-    seqnt_map['C'-'A'] = 3;
-    seqnt_map['N'-'A'] = 4;
+    seqnt_map['C'-'A'] = 1;
+    seqnt_map['N'-'A'] = 2;
+    seqnt_map['G'-'A'] = 3;
+    seqnt_map['T'-'A'] = 4;
 }
 double log_add_exp(double a, double b) {
     double max_exp = a > b ? a : b;
@@ -336,10 +334,8 @@ def evaluateVariant(args):
                     xa_pos = int(t[1]);
                     p_readprobmatrix = ffi.cast("double *", readprobmatrix.ctypes.data); # Pointer to read probability matrix
                     if (read.is_reverse == False and xa_pos < 0) or (read.is_reverse == True and xa_pos > 0): # If aligned strand is opposite of that from primary alignment
-                        newreadseq = "".join(complement.get(base,base) for base in reversed(read.query_sequence)).encode("utf-8"); # Reverse complement read sequence
-                        newreadprobmatrix = np.zeros(readlength*5);
+                        newreadprobmatrix = np.array(readprobmatrix[::-1]); # Reverse complement
                         p_readprobmatrix = ffi.cast("double *", newreadprobmatrix.ctypes.data); # Pointer to read probability matrix
-                        C.set_prob_matrix(p_readprobmatrix, newreadseq, readlength, list(ismatch[::-1]), list(nomatch[::-1]));
 
                     xa_pos = abs(xa_pos);
                     readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, refseq[t[0]], reflength[t[0]], xa_pos);

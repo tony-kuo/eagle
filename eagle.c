@@ -154,7 +154,7 @@ static inline double calc_prob_distrib(const double *matrix, int read_length, co
     return probability;
 }
 
-static void combinations(char **output, int k, int n, int *ncombos) {
+static void combinations(char **output, int k, int n, size_t *ncombos) {
     int i, c[k];
     for (i = 0; i < k; ++i) c[i] = i; // first combination
     while (1) { // while (next_comb(c, k, n)) {
@@ -180,12 +180,19 @@ static void combinations(char **output, int k, int n, int *ncombos) {
     }
 }
 
-static char *powerset(int n, int *ncombos) {
+static char *powerset(int n, size_t *ncombos) {
     char *combo = malloc(sizeof *combo);
     combo[0] = '\0';
 
-    combinations(&combo, 1, n, ncombos);
-    if (n > 1) {
+    if (n == 1) {
+        str_resize(&combo, 3);
+        combo[0] = '\t' + 1;
+        combo[1] = '\t';
+        combo[2] = '\0';
+        *ncombos = 1;
+    }
+    else if (n > 1) {
+        combinations(&combo, 1, n, ncombos);
         combinations(&combo, n, n, ncombos);
         int k;
         for (k = 2; k <= n - 1; ++k) {
@@ -662,7 +669,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     size_t nreads = read_list->size;
 
     /* Variant combinations as a tab delimited string, encoding array indices ('\t'+1)-indexed, then parsed into a an array of Vectors */
-    int ncombos = 0;
+    size_t ncombos = 0;
     char *combo = powerset(nvariants, &ncombos);
 
     Vector **var_combo = malloc(ncombos * sizeof (Vector *)); 
@@ -696,7 +703,6 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
     double ref = 0;
     double alt[ncombos], het[ncombos];
-    double pout[nreads], prgu[nreads];
     int ref_count[ncombos], alt_count[ncombos];
     for (seti = 0; seti < ncombos; ++seti) {
         alt[seti] = 0;
@@ -736,27 +742,25 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
 
             double elsewhere = 0;
-            if (seti == 0) { // reference genome probability and "elsewhere" probability only needs to be calculated once
-                /* 
-                Probability of read is from an outside paralogous "elsewhere". Approximate the probability distribution by accounting for the bulk with:
-                   a) perfect match = prod[ (1-e) ]
-                   b) hamming distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-                Also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability:
-                   c) lengthfactor = alpha ^ (read length - expected read length)
-                P(elsewhere) = (perfect + hamming) / lengthfactor 
-                */
-                double delta[read_data[readi]->length];
-                double a = sum(is_match, read_data[readi]->length);
-                for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
-                elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
-                pout[readi] = elsewhere;
-                /* Calculate the probability given reference genome */
-                prgu[readi] = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
-            }
+            /* 
+            Probability of read is from an outside paralogous "elsewhere". Approximate the probability distribution by accounting for the bulk with:
+               a) perfect match = prod[ (1-e) ]
+               b) hamming distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
+            Also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability:
+               c) lengthfactor = alpha ^ (read length - expected read length)
+            P(elsewhere) = (perfect + hamming) / lengthfactor 
+            */
+            double delta[read_data[readi]->length];
+            double a = sum(is_match, read_data[readi]->length);
+            for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
+            elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
+            double pout = elsewhere;
+            /* Calculate the probability given reference genome */
+            double prgu = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
             /* Calculate the probability given alternative genome */
             double prgv = calc_prob_distrib(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
             if (debug) {
-                fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu[readi], prgv, pout[readi]);
+                fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu, prgv, pout);
                 fprintf(stderr, "%s\t%s\t%d\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->inferred_length);
                 fprintf(stderr, "%s\t", read_data[readi]->qseq);
                 for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
@@ -791,41 +795,39 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
                     xa_pos = abs(xa_pos);
                     double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
-                    if (seti == 0) {
-                        pout[readi] = log_add_exp(pout[readi], elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                        prgu[readi] = log_add_exp(prgu[readi], readprobability);
-                    }
+                    pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
+                    prgu = log_add_exp(prgu, readprobability);
                     if (debug) fprintf(stderr, "%f\t", readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
                         if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < 50) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
-                    if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu[readi], prgv);
+                    if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (*(s + n) != ';') break;
                 }
             }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
-            if (seti == 0) prgu[readi] = log_add_exp(LGOMEGA - LG1_OMEGA + pout[readi], prgu[readi]);
-            prgv = log_add_exp(LGOMEGA - LG1_OMEGA + pout[readi], prgv);
+            prgu = log_add_exp(LGOMEGA - LG1_OMEGA + pout, prgu);
+            prgv = log_add_exp(LGOMEGA - LG1_OMEGA + pout, prgv);
 
             /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
-            double phet   = log_add_exp(LG50 + prgv, LG50 + prgu[readi]);
-            double phet10 = log_add_exp(LG10 + prgv, LG90 + prgu[readi]);
-            double phet90 = log_add_exp(LG90 + prgv, LG10 + prgu[readi]);
+            double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
+            double phet10 = log_add_exp(LG10 + prgv, LG90 + prgu);
+            double phet90 = log_add_exp(LG90 + prgv, LG10 + prgu);
             if (phet10 > phet) phet = phet10;
             if (phet90 > phet) phet = phet90;
 
             /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference */
-            if (prgv > prgu[readi] && prgv - prgu[readi] > 0.69) alt_count[seti] += 1;
-            else if (prgu[readi] > prgv && prgu[readi] - prgv > 0.69) ref_count[seti] += 1;
+            if (prgv > prgu && prgv - prgu > 0.69) alt_count[seti] += 1;
+            else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
 
             /* Priors */
-            if (seti == 0) ref += prgu[readi] + REFPRIOR;
+            if (seti == 0) ref += prgu + REFPRIOR;
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
             if (debug) {
-                fprintf(stderr, "%d\t++\t%f\t%f\t%f\t%f\t%d\t%s\t", (int)seti, prgu[readi], phet, prgv, pout[readi], alt_count[seti], read_data[readi]->name);
+                fprintf(stderr, "%d\t++\t%f\t%f\t%f\t%f\t%d\t%s\t", (int)seti, prgu, phet, prgv, pout, alt_count[seti], read_data[readi]->name);
                 for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
             }
         }
@@ -963,9 +965,8 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     pthread_mutex_init(&w->r_lock, NULL);
 
     pthread_t tid[numproc];
-    for (i = 0; i < numproc - 1; ++i) pthread_create(&tid[i], NULL, pool, w);
-    pool(w);
-    for (i = 0; i < numproc - 1; ++i) pthread_join(tid[i], NULL);
+    for (i = 0; i < numproc; ++i) pthread_create(&tid[i], NULL, pool, w);
+    for (i = 0; i < numproc; ++i) pthread_join(tid[i], NULL);
 
     pthread_mutex_destroy(&w->q_lock);
     pthread_mutex_destroy(&w->r_lock);

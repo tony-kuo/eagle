@@ -787,8 +787,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                         if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < 50) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
-                    if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (newreadprobmatrix != NULL){ free(newreadprobmatrix); newreadprobmatrix = NULL; }
+                    if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (*(s + n) != ';') break;
                 }
             }

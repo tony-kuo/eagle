@@ -693,8 +693,10 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     }
 
     double ref = 0;
-    double alt[ncombos], het[ncombos];
-    int ref_count[ncombos], alt_count[ncombos];
+    double *alt = malloc(ncombos * sizeof *alt);
+    double *het = malloc(ncombos * sizeof *het);
+    int *ref_count = malloc(ncombos * sizeof *ref_count);
+    int *alt_count = malloc(ncombos * sizeof *alt_count);
     for (seti = 0; seti < ncombos; ++seti) {
         alt[seti] = 0;
         het[seti] = 0;
@@ -739,7 +741,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                b) hamming distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
             Also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability:
                c) lengthfactor = alpha ^ (read length - expected read length)
-            P(elsewhere) = (perfect + hamming) / lengthfactor 
+            P(elsewhere) = (perfect + hamming_1) / lengthfactor 
             */
             double delta[read_data[readi]->length];
             double a = sum(is_match, read_data[readi]->length);
@@ -784,10 +786,10 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     prgu = log_add_exp(prgu, readprobability);
                     if (debug) fprintf(stderr, "%f\t", readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
-                        if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < 50) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
+                        if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < read_data[readi]->length) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
-                    if (newreadprobmatrix != NULL){ free(newreadprobmatrix); newreadprobmatrix = NULL; }
+                    if (newreadprobmatrix != NULL) { free(newreadprobmatrix); newreadprobmatrix = NULL; }
                     if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (*(s + n) != ';') break;
                 }
@@ -852,6 +854,10 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         }
         variant_print(&output, var_set, i, read_count, has_alt_count, total, has_alt, not_alt);
     }
+    free(alt); alt = NULL;
+    free(het); het = NULL;
+    free(ref_count); ref_count = NULL;
+    free(alt_count); alt_count = NULL;
     vector_destroy(read_list); free(read_list); read_list = NULL;
     for (seti = 0; seti < ncombos; ++seti) { vector_free(var_combo[seti]); free(var_combo[seti]); var_combo[seti] = NULL; }
     free(var_combo); var_combo = NULL;

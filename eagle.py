@@ -347,7 +347,7 @@ def evaluateVariant(args):
                     if debug: print(readprobability, end="\t");
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
-                        if abs(xa_pos - varid[1]-1) < 50: readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, altseq, altseqlength, xa_pos);
+                        if abs(xa_pos - varid[1]-1) < readlength: readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, altseq, altseqlength, xa_pos);
                     prgv = C.log_add_exp(prgv, readprobability);
                     if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu[readid], prgv));
 

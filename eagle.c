@@ -22,8 +22,8 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/khash.h"
 
 /* Constants */
-#define ALPHA 1.3    // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-#define OMEGA 1.0e-4 // Prior probability of read originating from an outside paralogous source
+#define OMEGA 1.0e-4  // Prior probability of read originating from an outside paralogous source
+#define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 #define REFPRIOR log(0.5)
 
 /* Precalculated log values */
@@ -34,8 +34,7 @@ This program is distributed under the terms of the GNU General Public License
 #define LG10 log(0.1)
 #define LG90 log(0.9)
 #define LGALPHA log(ALPHA)
-#define LGOMEGA log(OMEGA)
-#define LG1_OMEGA log(1.0-OMEGA)
+#define LGOMEGA log(OMEGA) - log(1.0-OMEGA)
 
 /* Command line arguments */
 static int numproc;
@@ -51,7 +50,7 @@ static time_t now;
 static struct tm *time_info; 
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
-/* Mapping tables */
+/* Mapping table */
 static int seqnt_map[26];
 
 KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
@@ -736,12 +735,12 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
             double elsewhere = 0;
             /* 
-            Probability of read is from an outside paralogous "elsewhere". Approximate the probability distribution by accounting for the bulk with:
+            Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
                a) perfect match = prod[ (1-e) ]
-               b) hamming distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-            Also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability:
+               b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
+            Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
                c) lengthfactor = alpha ^ (read length - expected read length)
-            P(elsewhere) = (perfect + hamming_1) / lengthfactor 
+            P(r|f) = (perfect + hamming_1) / lengthfactor 
             */
             double delta[read_data[readi]->length];
             double a = sum(is_match, read_data[readi]->length);
@@ -796,8 +795,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
-            prgu = log_add_exp(LGOMEGA - LG1_OMEGA + pout, prgu);
-            prgv = log_add_exp(LGOMEGA - LG1_OMEGA + pout, prgv);
+            prgu = log_add_exp(LGOMEGA + pout, prgu);
+            prgv = log_add_exp(LGOMEGA + pout, prgv);
 
             /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
             double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);

@@ -20,7 +20,7 @@ signal(SIGPIPE,SIG_DFL);
 
 # Constants
 OMEGA = 1E-4; # Prior probability of read originating from an outside paralogous source
-ALPHA = 1.3; # Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
+ALPHA = 1.3;  # Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
 # Precalculated log values 
 REFPRIOR = np.log(0.5);
@@ -30,8 +30,7 @@ LG3 = np.log(3);
 LG50 = np.log(0.5);
 LG10 = np.log(0.1);
 LG90 = np.log(0.9);
-LGOMEGA = np.log(OMEGA);
-LG1_OMEGA = np.log(1-OMEGA);
+LGOMEGA = np.log(OMEGA) - np.log(1-OMEGA);
 LGALPHA = np.log(ALPHA);
 
 ffi = FFI();
@@ -309,12 +308,12 @@ def evaluateVariant(args):
 
             # Reference genome probability and "elsewhere" probability only needs to be calculated once per readid
             if setid == 0:
-                # Calculate the probability for "elsewhere", assuming the read is from somewhere paralogous. Approximate probability distribution by accounting for the bulk with:
+                # Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
                 #   perfect match = prod[ (1-e) ]
                 #   hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-                # We also account for if reads have different lengths (hard clipped), where longer reads should have a relatively lower probability of originating from some paralogous elsewhere 
-                #   lengthfactor = alpha ^ (readlength - expected readlength)
-                # P(elsewhere) = (perfect + hamming) / lengthfactor
+                # Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
+                #   lengthfactor = alpha ^ (read length - expected read length)
+                # P(r|f) = (perfect + hamming_1) / lengthfactor
                 elsewhere = C.log_add_exp(sum(ismatch), sum(ismatch) + C.log_sum_exp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
                 pout[readid] = elsewhere;
                 # Calculate the probability given reference genome, once per varid for setid 0
@@ -352,8 +351,8 @@ def evaluateVariant(args):
                     if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu[readid], prgv));
 
             # Mixture model: probability that the read is from elsewhere, outside paralogous source
-            if setid == 0: prgu[readid] = C.log_add_exp(LGOMEGA - LG1_OMEGA + pout[readid], prgu[readid]);
-            prgv = C.log_add_exp(LGOMEGA - LG1_OMEGA + pout[readid], prgv);
+            if setid == 0: prgu[readid] = C.log_add_exp(LGOMEGA + pout[readid], prgu[readid]);
+            prgv = C.log_add_exp(LGOMEGA + pout[readid], prgv);
 
             # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
             phet = C.log_add_exp(LG50 + prgv, LG50 + prgu[readid]);

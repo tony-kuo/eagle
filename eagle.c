@@ -1042,8 +1042,7 @@ int main(int argc, char *argv[]) {
         }
     }
     if (vcf_file == NULL) { exit_usage("Missing variants given as VCF file!"); }
-    if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); }
-    if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
+    if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (numproc < 1) numproc = 1;
     if (distlim < 0) distlim = 0;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
@@ -1064,6 +1063,7 @@ int main(int argc, char *argv[]) {
     seqnt_map['T'-'A'] = 4;
 
     /* Start processing data */
+    clock_t tic = clock();
     Vector *var_list = vcf_read(vcf_file);
 
     refseq_hash = kh_init(rsh);
@@ -1072,6 +1072,9 @@ int main(int argc, char *argv[]) {
     pthread_mutex_init(&refseq_lock, NULL);
     process(var_list, bam_file, fa_file, out_fh);
     pthread_mutex_destroy(&refseq_lock);
+
+    clock_t toc = clock();
+    print_status("Elapsed time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
 	khiter_t k;
     for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {

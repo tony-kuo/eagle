@@ -37,7 +37,7 @@ This program is distributed under the terms of the GNU General Public License
 #define LGOMEGA log(OMEGA) - log(1.0-OMEGA)
 
 /* Command line arguments */
-static int numproc;
+static int nthread;
 static int distlim;
 static int maxh;
 static int mvh;
@@ -938,7 +938,7 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     } 
     print_status("Variants within %d bp:\t%i entries\t%s", distlim, (int)nsets, asctime(time_info));
 
-    print_status("Start:\t%d procs \t%s\t%s", numproc, bam_file, asctime(time_info));
+    print_status("Start:\t%d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
     Vector *queue = vector_create(nsets, VOID_T);
     Vector *results = vector_create(nsets, VOID_T);
     for (i = 0; i < nsets; ++i) {
@@ -955,9 +955,9 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     pthread_mutex_init(&w->q_lock, NULL);
     pthread_mutex_init(&w->r_lock, NULL);
 
-    pthread_t tid[numproc];
-    for (i = 0; i < numproc; ++i) pthread_create(&tid[i], NULL, pool, w);
-    for (i = 0; i < numproc; ++i) pthread_join(tid[i], NULL);
+    pthread_t tid[nthread];
+    for (i = 0; i < nthread; ++i) pthread_create(&tid[i], NULL, pool, w);
+    for (i = 0; i < nthread; ++i) pthread_join(tid[i], NULL);
 
     pthread_mutex_destroy(&w->q_lock);
     pthread_mutex_destroy(&w->r_lock);
@@ -983,7 +983,7 @@ static void print_usage() {
     printf("  -r --ref     FILE   reference sequence fasta file\n");
     printf("Options:\n");
     printf("  -o --out     FILE   output file (default: stdout)\n");
-    printf("  -t --numproc INT    number of processes to use (default: 1)\n");
+    printf("  -t --nthread INT    number of processes to use (default: 1)\n");
     printf("  -n --distlim INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
     printf("  -m --maxh    INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
     printf("     --mvh            consider nearby variants as *one* multi-variant hypothesis\n");
@@ -1000,7 +1000,7 @@ int main(int argc, char *argv[]) {
     char *bam_file = NULL;
     char *fa_file = NULL;
     char *out_file = NULL;
-    numproc = 1;
+    nthread = 1;
     distlim = 10;
     maxh = 1024;
     mvh = 0;
@@ -1013,7 +1013,7 @@ int main(int argc, char *argv[]) {
         {"bam", required_argument, 0, 'a'},
         {"ref", required_argument, 0, 'r'},
         {"out", optional_argument, 0, 'o'},
-        {"numproc", optional_argument, 0, 't'},
+        {"nthread", optional_argument, 0, 't'},
         {"distlim", optional_argument, 0, 'n'},
         {"hetbias", optional_argument, 0, 'b'},
         {"maxh", optional_argument, 0, 'm'},
@@ -1034,7 +1034,7 @@ int main(int argc, char *argv[]) {
             case 'a': bam_file = optarg; break;
             case 'r': fa_file= optarg; break;
             case 'o': out_file = optarg; break;
-            case 't': numproc = parse_num(optarg); break;
+            case 't': nthread = parse_num(optarg); break;
             case 'n': distlim = parse_num(optarg); break;
             case 'b': hetbias = parse_num(optarg); break;
             case 'm': maxh = parse_num(optarg); break;
@@ -1043,7 +1043,7 @@ int main(int argc, char *argv[]) {
     }
     if (vcf_file == NULL) { exit_usage("Missing variants given as VCF file!"); }
     if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
-    if (numproc < 1) numproc = 1;
+    if (nthread < 1) nthread = 1;
     if (distlim < 0) distlim = 0;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (maxh < 0) maxh = 1024;
@@ -1052,7 +1052,7 @@ int main(int argc, char *argv[]) {
     if (out_file == NULL) out_fh = stdout;
     else out_fh = fopen(out_file, "w");
 
-    //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "numproc: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", numproc, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
+    //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "nthread: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", nthread, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
     /* Mapping table, symmetrical according to reverse complement */
     memset(seqnt_map, 2, sizeof seqnt_map);
@@ -1074,7 +1074,7 @@ int main(int argc, char *argv[]) {
     pthread_mutex_destroy(&refseq_lock);
 
     clock_t toc = clock();
-    print_status("Elapsed time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
+    print_status("CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
 	khiter_t k;
     for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {

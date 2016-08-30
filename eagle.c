@@ -983,7 +983,7 @@ static void print_usage() {
     printf("  -r --ref     FILE   reference sequence fasta file\n");
     printf("Options:\n");
     printf("  -o --out     FILE   output file (default: stdout)\n");
-    printf("  -t --nthread INT    number of processes to use (default: 1)\n");
+    printf("  -t --nthread INT    number of threads to use (default: 1)\n");
     printf("  -n --distlim INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
     printf("  -m --maxh    INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
     printf("     --mvh            consider nearby variants as *one* multi-variant hypothesis\n");

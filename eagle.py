@@ -215,7 +215,7 @@ def processVariants(fn, var_list, outfile, numproc):
     for n in range(0, len(varid)): 
         if varid[n][0] in refseq: 
             args.append((fn, varid[n], var_list[varid[n]]));
-            #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing and nicer error messages
+            #results.extend(evaluateVariant((fn, varid[n], var_list[varid[n]]))); # single process, for testing and tracing error messages
     try:
         pool = Pool(processes=numproc);
         poolresults = pool.map_async(evaluateVariant, args);
@@ -240,35 +240,30 @@ def evaluateVariant(args):
     readset = list(samfile.fetch(reference=varid[0], start=max(0,varstart-1), end=min(varend+1,reflength[varid[0]])));
 
     v = [1] if len(varset) == 1 else [1, len(varset)];
-    if not multivariant: v.extend(range(2, len(varset)));
+    v.extend(range(2, len(varset)));
 
-    setid = 0;
+    seti = 0;
     setentry = {};
     for currentset in chain(*map(lambda x: combinations(varset, x), v)): # For each set combination in powerset of variants in set excluding empty set
-        if setid > 0 and setid >= maxh+len(varset)+1 and len(setentry[setid-1]) != len(currentset): break; # Stop if combinations limit reached and finished current k in n choose k
-        setentry[setid] = currentset;
-        setid += 1;
+        if seti > 0 and seti >= maxh+len(varset)+1 and len(setentry[seti-1]) != len(currentset): break; # Stop if combinations limit reached and finished current k in n choose k
+        setentry[seti] = currentset;
+        seti += 1;
 
-    if len(varset) == 1 or multivariant: # Eeither one variant or multiple variants as a haplotype, homozygous & non-homozygous
-        altprior = np.log(0.5 * (1-hetbias));
-        hetprior = np.log(0.5 * hetbias);
-    else:  # Variant set: divided evenly among the variant hypotheses, homozygous & non-homozygous
-        altprior = np.log(0.5 * (1-hetbias) / len(setentry));
-        hetprior = np.log(0.5 * hetbias / len(setentry));
+    # Variant set: divided evenly among the variant hypotheses, homozygous & non-homozygous
+    altprior = np.log(0.5 * (1-hetbias) / len(setentry));
+    hetprior = np.log(0.5 * hetbias / len(setentry));
 
     ref = 0.0;
     alt = {};
     het = {};
-    refcount = {};
-    altcount = {};
-    prgu = {};
-    pout = {};
-    for setid in setentry:
-        currentset = setentry[setid];
-        alt[setid] = 0.0;
-        het[setid] = 0.0;
-        refcount[setid] = 0;
-        altcount[setid] = 0;
+    ref_count = {};
+    alt_count = {};
+    for seti in setentry:
+        currentset = setentry[seti];
+        alt[seti] = 0.0;
+        het[seti] = 0.0;
+        ref_count[seti] = 0;
+        alt_count[seti] = 0;
 
         # Construct the variant sequence
         offset = 0;
@@ -306,23 +301,20 @@ def evaluateVariant(args):
             p_readprobmatrix = ffi.cast("double *", readprobmatrix.ctypes.data); # Pointer to read probability matrix
             C.set_prob_matrix(p_readprobmatrix, read.query_sequence.encode("utf-8"), readlength, list(ismatch), list(nomatch));
 
-            # Reference genome probability and "elsewhere" probability only needs to be calculated once per readid
-            if setid == 0:
-                # Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
-                #   perfect match = prod[ (1-e) ]
-                #   hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-                # Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
-                #   lengthfactor = alpha ^ (read length - expected read length)
-                # P(r|f) = (perfect + hamming_1) / lengthfactor
-                elsewhere = C.log_add_exp(sum(ismatch), sum(ismatch) + C.log_sum_exp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
-                pout[readid] = elsewhere;
-                # Calculate the probability given reference genome, once per varid for setid 0
-                readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start);
-                prgu[readid] = readprobability;
-
+            # Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
+            #   perfect match = prod[ (1-e) ]
+            #   hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
+            # Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
+            #   lengthfactor = alpha ^ (read length - expected read length)
+            # P(r|f) = (perfect + hamming_1) / lengthfactor
+            elsewhere = C.log_add_exp(sum(ismatch), sum(ismatch) + C.log_sum_exp(list(nomatch - ismatch), len(ismatch))) - (LGALPHA * (readlength - read.infer_query_length())); 
+            pout = elsewhere;
+            # Calculate the probability given reference genome, once per varid for seti 0
+            readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, refseq[samfile.getrname(read.reference_id)], reflength[samfile.getrname(read.reference_id)], read.reference_start);
+            prgu = readprobability;
             # Calculate the probability given alternate genome
             prgv = C.calc_prob_distrib(p_readprobmatrix, readlength, altseq, altseqlength, read.reference_start);
-            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, prgu[readid], prgv, pout[readid], read, currentset));
+            if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(seti, prgu, prgv, pout, read, currentset));
 
             # Multi-mapped alignments
             if not primaryonly and read.has_tag("XA"):
@@ -338,58 +330,73 @@ def evaluateVariant(args):
 
                     xa_pos = abs(xa_pos);
                     readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, refseq[t[0]], reflength[t[0]], xa_pos);
-                    if setid == 0: 
-                        # Probability given reference genome
-                        prgu[readid] = C.log_add_exp(prgu[readid], readprobability);
-                        # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                        pout[readid] = C.log_add_exp(pout[readid], elsewhere);
+                    # Probability given reference genome
+                    prgu = C.log_add_exp(prgu, readprobability);
+                    # The more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
+                    pout = C.log_add_exp(pout, elsewhere);
                     if debug: print(readprobability, end="\t");
                     # Probability given alternate genome
                     if t[0] == samfile.getrname(read.reference_id): # If secondary alignments are in same chromosome (ie. contains variant thus has modified coordinates), in case it also crosses the variant position, otherwise is the same as probability given reference
                         if abs(xa_pos - varid[1]-1) < readlength: readprobability = C.calc_prob_distrib(p_readprobmatrix, readlength, altseq, altseqlength, xa_pos);
                     prgv = C.log_add_exp(prgv, readprobability);
-                    if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu[readid], prgv));
+                    if debug: print("{0}\t{1}\t{2}".format(readprobability, prgu, prgv));
 
             # Mixture model: probability that the read is from elsewhere, outside paralogous source
-            if setid == 0: prgu[readid] = C.log_add_exp(LGOMEGA + pout[readid], prgu[readid]);
-            prgv = C.log_add_exp(LGOMEGA + pout[readid], prgv);
+            prgu = C.log_add_exp(LGOMEGA + pout, prgu);
+            prgv = C.log_add_exp(LGOMEGA + pout, prgv);
 
             # Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu))
-            phet = C.log_add_exp(LG50 + prgv, LG50 + prgu[readid]);
-            phet10 = C.log_add_exp(LG10 + prgv, LG90 + prgu[readid]);
-            phet90 = C.log_add_exp(LG90 + prgv, LG10 + prgu[readid]);
+            phet = C.log_add_exp(LG50 + prgv, LG50 + prgu);
+            phet10 = C.log_add_exp(LG10 + prgv, LG90 + prgu);
+            phet90 = C.log_add_exp(LG90 + prgv, LG10 + prgu);
             phet = max([phet, phet10, phet90]); # Use the best allele frequency probability
 
             # Read count is only incremented when the difference in probability is not ambiguous, ~log(2) difference
-            if prgv > prgu[readid] and prgv - prgu[readid] > 0.69: altcount[setid] += 1;
-            elif prgu[readid] > prgv and prgu[readid] - prgv > 0.69: refcount[setid] += 1;
+            if prgv > prgu and prgv - prgu > 0.69: alt_count[seti] += 1;
+            elif prgu > prgv and prgu - prgv > 0.69: ref_count[seti] += 1;
             
-            if setid == 0: ref += prgu[readid] + REFPRIOR; # Only one reference hypothesis
-            alt[setid] += prgv + altprior;
-            het[setid] += phet + hetprior;
-            if debug: print("{0}\t++\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu[readid], phet, prgv, pout[readid], altcount[setid], varid[0], readid, setentry[setid])); # log likelihoods
-        if debug: print("{0}\t==\t{1}\t{2}\t{3}\t{4}\t{5}".format(setid, ref, het[setid], alt[setid], altcount[setid], setentry[setid])); # log likelihoods
-    if not prgu: return ([]); # Return empty list if no read data
+            if seti == 0: ref += prgu + REFPRIOR; # Only one reference hypothesis
+            alt[seti] += prgv + altprior;
+            het[seti] += phet + hetprior;
+            if debug: print("{0}\t++\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(prgu, phet, prgv, pout, alt_count[seti], varid[0], readid, setentry[seti])); # log likelihoods
+        if debug: print("{0}\t==\t{1}\t{2}\t{3}\t{4}\t{5}".format(seti, ref, het[seti], alt[seti], alt_count[seti], setentry[seti])); # log likelihoods
+    if not alt: return ([]); # Return empty list if no read data
 
     outlist = [];
+    read_count = max(ref_count.values())+max(alt_count.values());
     total = [ref] + list(alt.values()) + list(het.values());
     total = C.log_sum_exp(total, len(total));
-    for v in varset:
-        marginal_alt = 0.0;
-        not_alt = ref;
-        marginal_count = 0;
-        for setid in alt:
-            if v in setentry[setid]: 
-                marginal_alt = C.log_add_exp(alt[setid], het[setid]) if marginal_alt == 0.0 else C.log_add_exp(marginal_alt, C.log_add_exp(alt[setid], het[setid]));
-                if altcount[setid] > marginal_count: marginal_count = altcount[setid];
-            else: 
-                not_alt = C.log_add_exp(not_alt, C.log_add_exp(alt[setid], het[setid]));
-        outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t".format(varid[0], v[0], v[1], v[2], max(refcount.values())+max(altcount.values()), marginal_count);
+    if mvh: # Max variant hypothesis
+        has_alt = -1000.0;
+        max_seti = 0;
+        for seti in setentry:
+            p = C.log_add_exp(alt[seti], het[seti]);
+            if p > has_alt:
+                has_alt = p;
+                max_seti = seti;
+        outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t".format(varid[0], setentry[max_seti][0][0], setentry[max_seti][0][1], setentry[max_seti][0][2], read_count, alt_count[max_seti]);
         # Probability and odds in log10
-        outstr += "{0}\t{1}\t".format((marginal_alt - total) * M_1_LN10, (marginal_alt - not_alt) * M_1_LN10); 
+        outstr += "{0}\t{1}\t".format((has_alt - total) * M_1_LN10, (has_alt - ref) * M_1_LN10); 
         # Print the variant set entries if exists    
-        outstr += "{0}".format(varset) if len(varset) > 1 else "[]";
+        outstr += "{0}".format(setentry[max_seti]) if len(varset) > 1 else "[]";
         outlist.append(outstr.strip());
+    else: # Marginal probabilities
+        for v in varset:
+            marginal_alt = 0.0;
+            not_alt = ref;
+            marginal_count = 0;
+            for seti in alt:
+                if v in setentry[seti]: 
+                    marginal_alt = C.log_add_exp(alt[seti], het[seti]) if marginal_alt == 0.0 else C.log_add_exp(marginal_alt, C.log_add_exp(alt[seti], het[seti]));
+                    if alt_count[seti] > marginal_count: marginal_count = alt_count[seti];
+                else: 
+                    not_alt = C.log_add_exp(not_alt, C.log_add_exp(alt[seti], het[seti]));
+            outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t".format(varid[0], v[0], v[1], v[2], read_count, marginal_count);
+            # Probability and odds in log10
+            outstr += "{0}\t{1}\t".format((marginal_alt - total) * M_1_LN10, (marginal_alt - not_alt) * M_1_LN10); 
+            # Print the variant set entries if exists    
+            outstr += "{0}".format(varset) if len(varset) > 1 else "[]";
+            outlist.append(outstr.strip());
     return (outlist);
 
 # Global Variables
@@ -397,7 +404,7 @@ debug = False;
 primaryonly = False;
 hetbias = 0.5;
 maxh = 1024;
-multivariant = False;
+mvh = False;
 refseq = {};
 reflength = {};
 def main():
@@ -409,7 +416,7 @@ def main():
     parser.add_argument("-t", type=int, default=1, help="number of processes to use (default: 1)");
     parser.add_argument("-n", type=int, default=10, help="consider nearby variants within n bases in the set of hypotheses (off: 0, default: 10)");
     parser.add_argument("--maxh", type=int, default=1024, help="the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)");
-    parser.add_argument("--mvh", action="store_true", help="consider nearby variants as *one* multi-variant hypothesis");
+    parser.add_argument("--mvh", action="store_true", help="instead of marginal probabilities, output only the maximum variant hypothesis in the set of hypotheses");
     parser.add_argument("--hetbias", type=float, default=0.5, help="prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)");
     parser.add_argument("--pao", action="store_true", help="consider primary alignments only");
     parser.add_argument("--debug", action="store_true", help="debug mode, printing information on every read for every variant");
@@ -418,11 +425,11 @@ def main():
         sys.exit(1);
     args = parser.parse_args();
 
-    global maxh, multivariant, hetbias, primaryonly, debug;
+    global maxh, mvh, hetbias, primaryonly, debug;
     numproc = max(1, args.t); # Main process counts as 1
     distlim = max(0, args.n);
     maxh = args.maxh;
-    multivariant = args.mvh;
+    mvh = args.mvh;
     hetbias = args.hetbias;
     primaryonly = args.pao;
     debug = args.debug;

@@ -681,15 +681,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     int refseq_length = f->seq_length;
 
     /* Prior probabilities based on variant combinations */
-    double alt_prior, het_prior;
-    if (nvariants == 1 || mvh) {
-        alt_prior = log(0.5 * (1 - hetbias));
-        het_prior = log(0.5 * hetbias);
-    }
-    else {
-        alt_prior = log(0.5 * (1 - hetbias) / ncombos);
-        het_prior = log(0.5 * hetbias / ncombos);
-    }
+    double alt_prior = log(0.5 * (1 - hetbias) / ncombos);
+    double het_prior = log(0.5 * hetbias / ncombos);
 
     double ref = 0;
     double *alt = malloc(ncombos * sizeof *alt);
@@ -825,7 +818,6 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         }
     }
 
-    /* Marginal probabilities */
     double total = ref;
     int max_ref_count = 0;
     int max_alt_count = 0;
@@ -838,20 +830,34 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
-    for (i = 0; i < nvariants; ++i) {
-        double has_alt = 0;
-        double not_alt = ref;
-        int has_alt_count = 0;
-        for (seti = 0; seti < ncombos; ++seti) {
-            if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
-                has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
-                if (alt_count[seti] > has_alt_count) has_alt_count = alt_count[seti];
-            }
-            else {
-                not_alt = log_add_exp(not_alt, log_add_exp(alt[seti], het[seti]));
+    if (mvh) { /* Max variant hypothesis */
+        double has_alt = -1000;
+        int max_seti = 0;
+        for (seti = 0; seti < ncombos; ++seti) { 
+            double p = log_add_exp(alt[seti], het[seti]);
+            if (p > has_alt) {
+                has_alt = p;
+                max_seti = seti;
             }
         }
-        variant_print(&output, var_set, i, read_count, has_alt_count, total, has_alt, not_alt);
+        variant_print(&output, var_combo[max_seti], 0, read_count, alt_count[max_seti], total, has_alt, ref);
+    }
+    else { /* Marginal probabilities */
+        for (i = 0; i < nvariants; ++i) {
+            double has_alt = 0;
+            double not_alt = ref;
+            int has_alt_count = 0;
+            for (seti = 0; seti < ncombos; ++seti) {
+                if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
+                    has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
+                    if (alt_count[seti] > has_alt_count) has_alt_count = alt_count[seti];
+                }
+                else {
+                    not_alt = log_add_exp(not_alt, log_add_exp(alt[seti], het[seti]));
+                }
+            }
+            variant_print(&output, var_set, i, read_count, has_alt_count, total, has_alt, not_alt);
+        }
     }
     free(alt); alt = NULL;
     free(het); het = NULL;
@@ -986,7 +992,7 @@ static void print_usage() {
     printf("  -t --nthread INT    number of threads to use (default: 1)\n");
     printf("  -n --distlim INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
     printf("  -m --maxh    INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
-    printf("     --mvh            consider nearby variants as *one* multi-variant hypothesis\n");
+    printf("     --mvh            instead of marginal probabilities, output only the maximum variant hypothesis in the set of hypotheses\n");
     printf("  -b --hetbias FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
     printf("     --pao            consider primary alignments only\n");
 }

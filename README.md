@@ -53,7 +53,7 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 --maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is finished and the number tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum. Default is 1024 (2^10).
 
---mvh  Instead of considering the combinations of variants in the hypotheses set, assume all variants in the set co-occur and test **one** multi-variant hypothesis.
+--mvh  Instead of the marginal probabilities over the hypotheses set, output only the maximum variant hypothesis (highest probability) among variant combinations in the set of hypotheses.  Keep in mind that *maxh* will limit the possible combinations tested.
 
 --hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
 

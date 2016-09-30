@@ -71,11 +71,19 @@ static inline void str_resize(char **str, size_t size) {
     else { *str = p; }
 }
 
-static inline int parse_num(const char *str) {
+static inline int parse_int(const char *str) {
     errno = 0;
     char *end;
     int num = strtol(str, &end, 0);
     if (end != str && *end != '\0') { exit_err("failed to convert '%s' to int with leftover string '%s'\n", str, end); }
+    return num;
+}
+
+static inline int parse_float(const char *str) {
+    errno = 0;
+    char *end;
+    double num = strtof(str, &end);
+    if (end != str && *end != '\0') { exit_err("failed to convert '%s' to float with leftover string '%s'\n", str, end); }
     return num;
 }
 
@@ -644,6 +652,12 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     Variant **var_data = (Variant **)var_set->data;
     size_t nvariants = var_set->size;
 
+    /* Reference sequence */
+    Fasta *f = refseq_fetch(var_data[0]->chr, fa_file);
+    if (f == NULL) return NULL;
+    char *refseq = f->seq;
+    int refseq_length = f->seq_length;
+
     /* Reads in variant region coordinates (vcf is 1-index while htslib is 0-index) */
     n = snprintf(NULL, 0, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos - 1, var_data[nvariants - 1]->pos - 1) + 1;
     char *region = malloc(n * sizeof *region);
@@ -674,11 +688,6 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     }
     free(combo); combo = NULL;
     //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s\t", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
-
-    /* Reference sequence */
-    Fasta *f = refseq_fetch(var_data[0]->chr, fa_file);
-    char *refseq = f->seq;
-    int refseq_length = f->seq_length;
 
     /* Prior probabilities based on variant combinations */
     double alt_prior = log(0.5 * (1 - hetbias) / ncombos);
@@ -726,7 +735,6 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             double readprobmatrix[read_data[readi]->length * 5];
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
 
-            double elsewhere = 0;
             /* 
             Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
                a) perfect match = prod[ (1-e) ]
@@ -738,13 +746,13 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             double delta[read_data[readi]->length];
             double a = sum(is_match, read_data[readi]->length);
             for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
-            elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
+            double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
             double pout = elsewhere;
             /* Calculate the probability given reference genome */
             double prgu = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
             /* Calculate the probability given alternative genome */
             double prgv = calc_prob_distrib(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
-            if (debug) {
+            if (debug >= 3) {
                 fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu, prgv, pout);
                 fprintf(stderr, "%s\t%s\t%d\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->inferred_length);
                 fprintf(stderr, "%s\t", read_data[readi]->qseq);
@@ -762,6 +770,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 char xa_chr[strlen(read_data[readi]->multimap) + 1];
                 for (s = read_data[readi]->multimap + 1; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                     Fasta *f = refseq_fetch(xa_chr, fa_file);
+                    if (f == NULL) continue;
                     char *xa_refseq = f->seq;
                     int xa_refseq_length = f->seq_length;
 
@@ -776,13 +785,13 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
                     prgu = log_add_exp(prgu, readprobability);
-                    if (debug) fprintf(stderr, "%f\t", readprobability);
+                    if (debug >= 3) fprintf(stderr, "%f\t", readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
                         if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < read_data[readi]->length) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     if (newreadprobmatrix != NULL) { free(newreadprobmatrix); newreadprobmatrix = NULL; }
-                    if (debug) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
+                    if (debug >= 3) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (*(s + n) != ';') break;
                 }
             }
@@ -806,14 +815,17 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (seti == 0) ref += prgu + REFPRIOR;
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
-            if (debug) {
-                fprintf(stderr, "%d\t++\t%f\t%f\t%f\t%f\t%d\t%s\t", (int)seti, prgu, phet, prgv, pout, alt_count[seti], read_data[readi]->name);
-                for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
+            if (debug >= 2) {
+                fprintf(stderr, "++\t%d\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
+                fprintf(stderr, "%s\t%s\t%d\t%s\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->qseq);
+                if (!pao && read_data[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimap);
+                for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+                fprintf(stderr, "\n");
             }
         }
         free(altseq); altseq = NULL;
-        if (debug) {
-            fprintf(stderr, "%d\t==\t%f\t%f\t%f\t%d\t", (int)seti, ref, het[seti], alt[seti], alt_count[seti]);
+        if (debug >= 1) {
+            fprintf(stderr, "==\t%d\t%f\t%f\t%f\t%d\t", (int)seti, ref, het[seti], alt[seti], alt_count[seti]);
             for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
         }
     }
@@ -984,22 +996,19 @@ static void print_usage() {
     printf("Usage: eagle [options] -v variants.vcf -a alignment.bam -r reference.fasta\n");
     printf("\n");
     printf("Required:\n");
-    printf("  -v --vcf     FILE   variants VCF file\n");
-    printf("  -a --bam     FILE   alignment data bam files (ref coord sorted and indexed)\n");
-    printf("  -r --ref     FILE   reference sequence fasta file\n");
+    printf("  -v --vcf=    FILE   variants VCF file\n");
+    printf("  -a --bam=    FILE   alignment data bam files (ref coord sorted and indexed)\n");
+    printf("  -r --ref=    FILE   reference sequence fasta file\n");
     printf("Options:\n");
-    printf("  -o --out     FILE   output file (default: stdout)\n");
-    printf("  -t --nthread INT    number of threads to use (default: 1)\n");
-    printf("  -n --distlim INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
-    printf("  -m --maxh    INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
-    printf("     --mvh            instead of marginal probabilities, output only the maximum variant hypothesis in the set of hypotheses\n");
-    printf("  -b --hetbias FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
-    printf("     --pao            consider primary alignments only\n");
+    printf("  -o --out=    FILE   output file (default: stdout)\n");
+    printf("  -t --nthread=INT    number of threads to use (default: 1)\n");
+    printf("  -n --distlim=INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
+    printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
+    printf("     --mvh=           instead of marginal probabilities, output only the maximum variant hypothesis in the set of hypotheses\n");
+    printf("  -b --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
+    printf("     --pao=           consider primary alignments only\n");
 }
 
-// gcc -Ihtslib -Lhtslib eagle.c htslib/libhts.a -lm -lz -lpthread -o eagle -g -O0
-// valgrind --leak-check=yes --track-origins=yes
-// valgrind --tool=drd --check-stack-var=yes
 int main(int argc, char *argv[]) {
     /* Command line parameters defaults */
     char *vcf_file = NULL;
@@ -1015,23 +1024,23 @@ int main(int argc, char *argv[]) {
     debug = 0;
 
     static struct option long_options[] = {
-        {"vcf", required_argument, 0, 'v'},
-        {"bam", required_argument, 0, 'a'},
-        {"ref", required_argument, 0, 'r'},
-        {"out", optional_argument, 0, 'o'},
-        {"nthread", optional_argument, 0, 't'},
-        {"distlim", optional_argument, 0, 'n'},
-        {"hetbias", optional_argument, 0, 'b'},
-        {"maxh", optional_argument, 0, 'm'},
+        {"vcf", required_argument, NULL, 'v'},
+        {"bam", required_argument, NULL, 'a'},
+        {"ref", required_argument, NULL, 'r'},
+        {"out", optional_argument, NULL, 'o'},
+        {"nthread", optional_argument, NULL, 't'},
+        {"distlim", optional_argument, NULL, 'n'},
+        {"hetbias", optional_argument, NULL, 'b'},
+        {"maxh", optional_argument, NULL, 'm'},
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
-        {"debug", no_argument, &debug, 1},
+        {"debug", optional_argument, NULL, 'd'},
         {0, 0, 0, 0}
     };
 
     int opt = 0;
     int option_index = 0;
-    while ((opt = getopt_long(argc, argv,"v:a:r:o:t:n:b:m:", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:n:b:m:d:", long_options, &option_index)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -1040,10 +1049,11 @@ int main(int argc, char *argv[]) {
             case 'a': bam_file = optarg; break;
             case 'r': fa_file= optarg; break;
             case 'o': out_file = optarg; break;
-            case 't': nthread = parse_num(optarg); break;
-            case 'n': distlim = parse_num(optarg); break;
-            case 'b': hetbias = parse_num(optarg); break;
-            case 'm': maxh = parse_num(optarg); break;
+            case 't': nthread = parse_int(optarg); break;
+            case 'n': distlim = parse_int(optarg); break;
+            case 'b': hetbias = parse_float(optarg); break;
+            case 'm': maxh = parse_int(optarg); break;
+            case 'd': debug = parse_int(optarg); break;
             default: exit_usage("Bad program call");
         }
     }
@@ -1053,6 +1063,7 @@ int main(int argc, char *argv[]) {
     if (distlim < 0) distlim = 0;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (maxh < 0) maxh = 1024;
+    if (debug < 0) debug = 0;
 
     FILE *out_fh;
     if (out_file == NULL) out_fh = stdout;

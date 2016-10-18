@@ -852,7 +852,6 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 max_seti = seti;
             }
         }
-        fprintf(stderr, "%d\t%f\n", max_seti, has_alt);
         variant_print(&output, var_combo[max_seti], 0, read_count, alt_count[max_seti], total, has_alt, ref);
     }
     else { /* Marginal probabilities */

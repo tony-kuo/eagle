@@ -843,15 +843,16 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     char *output = malloc(sizeof *output);
     output[0] = '\0';
     if (mvh) { /* Max variant hypothesis */
-        double has_alt = -1000;
         int max_seti = 0;
-        for (seti = 0; seti < ncombos; ++seti) { 
+        double has_alt = log_add_exp(alt[0], het[0]);
+        for (seti = 1; seti < ncombos; ++seti) { 
             double p = log_add_exp(alt[seti], het[seti]);
             if (p > has_alt) {
                 has_alt = p;
                 max_seti = seti;
             }
         }
+        fprintf(stderr, "%d\t%f\n", max_seti, has_alt);
         variant_print(&output, var_combo[max_seti], 0, read_count, alt_count[max_seti], total, has_alt, ref);
     }
     else { /* Marginal probabilities */

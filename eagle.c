@@ -43,7 +43,6 @@ static int maxh;
 static int mvh;
 static double hetbias;
 static int pao;   // primary alignment only (no multi-mapping modeling)
-static int no_op; // no outside paralog evaluation (no floor probability)
 static int debug;
 
 /* Time info */
@@ -766,7 +765,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
 
             /* Multi-map alignments from XA tags: Zchr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
-            if (!pao && read_data[readi]->multimap != NULL) {
+            if (read_data[readi]->multimap != NULL) {
                 int xa_pos, n;
                 char xa_chr[strlen(read_data[readi]->multimap) + 1];
                 for (s = read_data[readi]->multimap + 1; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
@@ -798,10 +797,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
-            if (no_op == 0) {
-                prgu = log_add_exp(LGOMEGA + pout, prgu);
-                prgv = log_add_exp(LGOMEGA + pout, prgv);
-            }
+            prgu = log_add_exp(LGOMEGA + pout, prgu);
+            prgv = log_add_exp(LGOMEGA + pout, prgv);
 
             /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
             double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
@@ -811,14 +808,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (phet90 > phet) phet = phet90;
 
             /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference */
-            if (no_op == 0) {
-                if (prgv > prgu && prgv - prgu > 0.69) alt_count[seti] += 1;
-                else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
-            }
-            else { // ~log(1.01) difference if no_op
-                if (prgv > prgu && prgv - prgu > 0.01) alt_count[seti] += 1;
-                else if (prgu > prgv && prgu - prgv > 0.01) ref_count[seti] += 1;
-            }
+            if (prgv > prgu && prgv - prgu > 0.69) alt_count[seti] += 1;
+            else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
 
             /* Priors */
             if (seti == 0) ref += prgu + REFPRIOR;
@@ -827,7 +818,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (debug >= 2) {
                 fprintf(stderr, "++\t%d\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
                 fprintf(stderr, "%s\t%s\t%d\t%s\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->qseq);
-                if (!pao && read_data[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimap);
+                if (read_data[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimap);
                 for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
                 fprintf(stderr, "\n");
             }
@@ -1029,7 +1020,6 @@ int main(int argc, char *argv[]) {
     mvh = 0;
     hetbias = 0.5;
     pao = 0;
-    no_op = 0;
     debug = 0;
 
     static struct option long_options[] = {
@@ -1043,7 +1033,6 @@ int main(int argc, char *argv[]) {
         {"maxh", optional_argument, NULL, 'm'},
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
-        {"no_op", no_argument, &no_op, 1},
         {"debug", optional_argument, NULL, 'd'},
         {0, 0, 0, 0}
     };

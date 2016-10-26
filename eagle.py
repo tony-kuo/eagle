@@ -317,7 +317,7 @@ def evaluateVariant(args):
             if debug: print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}".format(seti, prgu, prgv, pout, read, currentset));
 
             # Multi-mapped alignments
-            if not primaryonly and read.has_tag("XA"):
+            if read.has_tag("XA"):
                 for j in read.get_tag("XA").split(";"):
                     if len(j) <= 0: break; # Because last element is empty
                     t = j.split(",");

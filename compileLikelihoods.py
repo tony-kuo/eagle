@@ -34,12 +34,12 @@ def readFiles(files):
                 for i in ref:
                     for j in alt:
                         key = t[0]+'\t'+t[1]+'\t'+i+'\t'+j;
-                        depth = int(t[4]);
+                        depth = int(t[5]) + int(t[6]);
                         if depth > 0:
-                            af = float(t[5])/depth;
-                            prob = float(t[6]);
-                            lr = float(t[7]);
-                            in_set = t[8];
+                            af = float(t[6])/depth;
+                            prob = float(t[7]);
+                            lr = float(t[8]);
+                            in_set = t[9];
                             if key not in entry: entry[key] = {};
                             if fn not in entry[key]: entry[key][fn] = [];
                             entry[key][fn].append((depth, af, lr, prob, in_set));

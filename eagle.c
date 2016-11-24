@@ -574,8 +574,15 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
             var_alt = strdup("");
         }
         else {
-            var_ref = strdup(curr->ref);
-            var_alt = strdup(curr->alt);
+            char *s1 = curr->ref;
+            char *s2 = curr->alt;
+            while (*s1 == *s2) { // account for and disregard common prefix in variant
+                ++s1;
+                ++s2;
+                ++pos;
+            }
+            var_ref = strdup(s1);
+            var_alt = strdup(s2);
         }
         size_t var_ref_length = strlen(var_ref);
         size_t var_alt_length = strlen(var_alt);
@@ -782,8 +789,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     }
 
                     xa_pos = abs(xa_pos);
-                    double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
+                    double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     prgu = log_add_exp(prgu, readprobability);
                     if (debug >= 3) fprintf(stderr, "%f\t", readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference

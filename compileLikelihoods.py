@@ -12,7 +12,6 @@
 from __future__ import print_function
 import argparse, re, sys, os;
 import numpy as np;
-from scipy.misc import logsumexp;
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL) 
 
@@ -46,7 +45,7 @@ def readFiles(files):
         fh.close;
     return(entry);
 
-def compileEntries(entry, likelihood, af, keepone, isnegative):
+def compileEntries(entry, likelihood, af, depth, keepone, isnegative):
     new_entry = {};
     for key in entry:
         # Check LR
@@ -59,6 +58,9 @@ def compileEntries(entry, likelihood, af, keepone, isnegative):
         current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0]; # Max AF across files
         if isnegative and current[1] > af: valid = False;
         elif not isnegative and current[1] < af: valid = False;
+        # Check read depth
+        current = sorted(entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
+        if depth > 0 and current[0] < depth: valid = False;
 
         # Positive samples require: LR >= threshold, AF <= threshold
         # Negative samples require: LR <= threshold, AF >= threshold
@@ -109,17 +111,18 @@ def main():
     parser.add_argument('-maxlr', type=float, default=-3, help='threshold for maximum log likelihood ratio for negative samples (default: -3)');
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
     parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
+    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
     parser.add_argument('-s', action='store_true', help='somatic, it must exist in the negative sample and [Pr_positive * (1-Pr_negative) >= 0.99]');
     parser.add_argument('-p1', action='store_true', help='print only one positive entry among many (entry with max likelihood ratio)');
     parser.add_argument('-n1', action='store_true', help='print only one negative entry among many (entry with max likelihood ratio)');
     args = parser.parse_args();
 
     pos_entry = readFiles(args.p); 
-    pos_entry = compileEntries(pos_entry, args.minlr, args.minaf, args.p1, False);
+    pos_entry = compileEntries(pos_entry, args.minlr, args.minaf, args.mindepth, args.p1, False);
     neg_entry = {};
     if args.n:
         neg_entry = readFiles(args.n);
-        neg_entry = compileEntries(neg_entry, args.maxlr, args.maxaf, args.n1, True);
+        neg_entry = compileEntries(neg_entry, args.maxlr, args.maxaf, args.mindepth, args.n1, True);
 
     outputResults(pos_entry, neg_entry, args.s, args.p, args.n, args.p1, args.n1);
 

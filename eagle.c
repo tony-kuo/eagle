@@ -839,11 +839,9 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
     double total = ref;
     int max_ref_count = 0;
-    int max_alt_count = 0;
     for (seti = 0; seti < ncombos; ++seti) {
         total = log_add_exp(ref, log_add_exp(alt[seti], het[seti]));
         if (ref_count[seti] > max_ref_count) max_ref_count = ref_count[seti];
-        if (alt_count[seti] > max_alt_count) max_alt_count = alt_count[seti];
     }
 
     char *output = malloc(sizeof *output);

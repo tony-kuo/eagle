@@ -225,7 +225,7 @@ def processVariants(fn, var_list, outfile, numproc):
         pool.join();
 
     fh = open(outfile, "w") if len(outfile) > 0 else sys.stdout;
-    print("#SEQ\tPOS\tREF\tALT\tReads\tAltReads\tlog10_Prob\tlog10_Odds\tVarSet", file=fh);
+    print("#SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tlog10_Prob\tlog10_Odds\tVarSet", file=fh);
     for i in naturalSort(results): print(i, file=fh);
     fh.close();
     print("Done:\t{0}\t{1}".format(fn, datetime.now()), file=sys.stderr);
@@ -363,7 +363,7 @@ def evaluateVariant(args):
     if not alt: return ([]); # Return empty list if no read data
 
     outlist = [];
-    read_count = max(ref_count.values())+max(alt_count.values());
+    max_ref_count = max(ref_count.values());
     total = [ref] + list(alt.values()) + list(het.values());
     total = C.log_sum_exp(total, len(total));
     if mvh: # Max variant hypothesis
@@ -374,7 +374,7 @@ def evaluateVariant(args):
             if p > has_alt:
                 has_alt = p;
                 max_seti = seti;
-        outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t".format(varid[0], setentry[max_seti][0][0], setentry[max_seti][0][1], setentry[max_seti][0][2], read_count, alt_count[max_seti]);
+        outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t".format(varid[0], setentry[max_seti][0][0], setentry[max_seti][0][1], setentry[max_seti][0][2], len(readset), ref_count[max_seti], alt_count[max_seti]);
         # Probability and odds in log10
         outstr += "{0}\t{1}\t".format((has_alt - total) * M_1_LN10, (has_alt - ref) * M_1_LN10); 
         # Print the variant set entries if exists    
@@ -382,8 +382,8 @@ def evaluateVariant(args):
         outlist.append(outstr.strip());
     else: # Marginal probabilities
         for v in varset:
-            marginal_alt = 0.0;
             not_alt = ref;
+            marginal_alt = 0.0;
             marginal_count = 0;
             for seti in alt:
                 if v in setentry[seti]: 
@@ -391,7 +391,7 @@ def evaluateVariant(args):
                     if alt_count[seti] > marginal_count: marginal_count = alt_count[seti];
                 else: 
                     not_alt = C.log_add_exp(not_alt, C.log_add_exp(alt[seti], het[seti]));
-            outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t".format(varid[0], v[0], v[1], v[2], read_count, marginal_count);
+            outstr = "{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t".format(varid[0], v[0], v[1], v[2], len(readset), max_ref_count, marginal_count);
             # Probability and odds in log10
             outstr += "{0}\t{1}\t".format((marginal_alt - total) * M_1_LN10, (marginal_alt - not_alt) * M_1_LN10); 
             # Print the variant set entries if exists    

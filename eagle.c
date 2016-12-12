@@ -27,14 +27,14 @@ This program is distributed under the terms of the GNU General Public License
 #define REFPRIOR log(0.5)
 
 /* Precalculated log values */
-#define M_1_LOG10E 1.0/M_LOG10E
-#define M_1_LN10 1.0/M_LN10
-#define LG3 log(3.0)
-#define LG50 log(0.5)
-#define LG10 log(0.1)
-#define LG90 log(0.9)
-#define LGALPHA log(ALPHA)
-#define LGOMEGA log(OMEGA) - log(1.0-OMEGA)
+#define M_1_LOG10E (1.0/M_LOG10E)
+#define M_1_LN10 (1.0/M_LN10)
+#define LG3 (log(3.0))
+#define LG50 (log(0.5))
+#define LG10 (log(0.1))
+#define LG90 (log(0.9))
+#define LGALPHA (log(ALPHA))
+#define LGOMEGA (log(OMEGA) - log(1.0-OMEGA))
 
 /* Command line arguments */
 static int nthread;
@@ -79,7 +79,7 @@ static inline int parse_int(const char *str) {
     return num;
 }
 
-static inline int parse_float(const char *str) {
+static inline float parse_float(const char *str) {
     errno = 0;
     char *end;
     double num = strtof(str, &end);
@@ -314,6 +314,9 @@ void vector_add(Vector *a, void *entry) {
 void vector_del(Vector *a, int i) {
     a->data[i] = NULL;
     if (i == --a->size) return;
+
+    memcpy(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    return;
 
     void **p = malloc(a->capacity * sizeof (void *));
     if (i == 0 && a->size > 0) {
@@ -566,12 +569,12 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
         char *var_ref, *var_alt;
         if (curr->ref[0] == '-') { // account for "-" variant representations
             ++pos;
-            var_ref = strdup("");
-            var_alt = strdup(curr->alt);
+            var_ref = "";
+            var_alt = curr->alt;
         }
         else if (curr->alt[0] == '-') { // account for "-" variant representations
-            var_ref = strdup(curr->ref);
-            var_alt = strdup("");
+            var_ref = curr->ref;
+            var_alt = "";
         }
         else {
             char *s1 = curr->ref;
@@ -581,8 +584,8 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
                 ++s2;
                 ++pos;
             }
-            var_ref = strdup(s1);
-            var_alt = strdup(s2);
+            var_ref = s1;
+            var_alt = s2;
         }
         size_t var_ref_length = strlen(var_ref);
         size_t var_alt_length = strlen(var_alt);
@@ -601,8 +604,6 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
             free(altseq); altseq = NULL;
             altseq = newalt;
         }
-        free(var_ref); var_ref = NULL;
-        free(var_alt); var_alt = NULL;
     }
     return altseq;
 }
@@ -743,6 +744,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
 
             /* 
+            Exact Formuation:
             Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
                a) perfect match = prod[ (1-e) ]
                b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
@@ -754,6 +756,9 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             double a = sum(is_match, read_data[readi]->length);
             for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
             double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
+            /* Constant outside paralog term, testing, seems to perform near identically to the exact formulation above for fixed read length sequences */
+            //double elsewhere = -2.4; // < 10%
+            
             double pout = elsewhere;
             /* Calculate the probability given reference genome */
             double prgu = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
@@ -797,7 +802,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                         if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < read_data[readi]->length) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
-                    if (newreadprobmatrix != NULL) { free(newreadprobmatrix); newreadprobmatrix = NULL; }
+                    free(newreadprobmatrix); newreadprobmatrix = NULL;
                     if (debug >= 3) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (*(s + n) != ';') break;
                 }
@@ -1013,7 +1018,7 @@ static void print_usage() {
     printf("     --pao=           consider primary alignments only\n");
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char **argv) {
     /* Command line parameters defaults */
     char *vcf_file = NULL;
     char *bam_file = NULL;

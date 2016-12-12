@@ -1,17 +1,10 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-C implementation
-
 **Requires**: htslib (http://www.htslib.org/)
 Set HTSDIR in the make file to the htslib folder and make.
 
 Usage: `eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
 
-Python implementation [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI
-
-**Requires**: pysam, cffi, numpy
-
-Usage: `python eagle.py -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
 
 **Inputs**
 
@@ -68,3 +61,11 @@ The read counts represent reads that are unambiguously for the reference or alte
 If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratio in hetergenous samples and tune the bias appropriately, this will likely increase type I errors, depending on the threshold chosen.
 
 Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are output as separate entries. Furthermore, if they are near other variants, it will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will naively retain the one with the maximum probability, for entries with identical coordinates.
+
+
+I recommend using the C implementation as it is much faster, but the legacy Python implementation has been left in the repository [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI. I can't promise this will be kept updated.
+
+**Requires**: pysam, cffi, numpy
+
+Usage: `python eagle.py -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
+

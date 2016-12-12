@@ -316,18 +316,6 @@ void vector_del(Vector *a, int i) {
     if (i == --a->size) return;
 
     memcpy(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
-    return;
-
-    void **p = malloc(a->capacity * sizeof (void *));
-    if (i == 0 && a->size > 0) {
-        memcpy(&(p[0]), &(a->data[1]), a->size * sizeof (void *));
-    }
-    else {
-        memcpy(&(p[0]), &(a->data[0]), i * sizeof (void *));
-        memcpy(&(p[i]), &(a->data[i + 1]), (a->size - i) * sizeof *p);
-    }
-    free(a->data); a->data = NULL;
-    a->data = p;
 }
 
 void *vector_pop(Vector *a) {

@@ -315,6 +315,7 @@ void vector_del(Vector *a, int i) {
     a->data[i] = NULL;
     if (i == --a->size) return;
     memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    a->data[a->size] = NULL;
 }
 
 void *vector_pop(Vector *a) {

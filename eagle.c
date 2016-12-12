@@ -42,7 +42,7 @@ static int distlim;
 static int maxh;
 static int mvh;
 static double hetbias;
-static int pao;   // primary alignment only (no multi-mapping modeling)
+static int pao;
 static int debug;
 
 /* Time info */
@@ -314,8 +314,8 @@ void vector_add(Vector *a, void *entry) {
 void vector_del(Vector *a, int i) {
     a->data[i] = NULL;
     if (i == --a->size) return;
-
     memcpy(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    a->data[a->size] = NULL;
 }
 
 void *vector_pop(Vector *a) {

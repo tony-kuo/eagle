@@ -24,7 +24,9 @@ This program is distributed under the terms of the GNU General Public License
 /* Constants */
 #define OMEGA 1.0e-4  // Prior probability of read originating from an outside paralogous source
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-#define REFPRIOR log(0.5)
+#define REFPRIOR (log(0.5))
+
+#define NT_CODES 17    // Size of nucleotide code table
 
 /* Precalculated log values */
 #define M_1_LOG10E (1.0/M_LOG10E)
@@ -119,8 +121,46 @@ static inline double *reverse(double *a, int size) {
 static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
     int i, b; // array[width * row + col] = value
     for (b = 0; b < read_length; ++b) {
-        for (i = 0; i < 5; ++i) matrix[5 * b + i] = no_match[b];
-        matrix[5 * b + seqnt_map[seq[b] - 'A']] = is_match[b];
+        for (i = 0; i < NT_CODES; ++i) matrix[NT_CODES * b + i] = no_match[b];
+        matrix[NT_CODES * b + seqnt_map[seq[b] - 'A']] = is_match[b];
+        switch (seq[b]) {
+        case 'A':
+            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 9] = is_match[b];
+            break;
+        case 'T':
+            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 9] = is_match[b];
+            break;
+        case 'C':
+            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 10] = is_match[b];
+            break;
+        case 'G':
+            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 10] = is_match[b];
+            break;
+        }
     }
 }
 
@@ -131,7 +171,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     for (b = pos;  b < n; ++b) {
         if (b < 0) continue;
         if (b >= seq_length) break;
-        probability += matrix[5 * (b - pos) + seqnt_map[seq[b] - 'A']]; 
+        probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[b] - 'A']]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
     }
     return probability;
@@ -683,7 +723,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         if (*(s1 + n1) != '\t') break;
     }
     free(combo); combo = NULL;
-    //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s\t", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
+    //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", (int)seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
 
     /* Prior probabilities based on variant combinations */
     double alt_prior = log(0.5 * (1 - hetbias) / ncombos);
@@ -728,7 +768,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 is_match[i] = log(1 - exp(a)); // log(1-err)
                 no_match[i] = a - LG3; // log(err/3)
             }
-            double readprobmatrix[read_data[readi]->length * 5];
+            double readprobmatrix[read_data[readi]->length * NT_CODES];
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
 
             /* 
@@ -777,7 +817,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     double *p_readprobmatrix = readprobmatrix;
                     double *newreadprobmatrix = NULL;
                     if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
-                        newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * 5);
+                        newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * NT_CODES);
                         p_readprobmatrix = newreadprobmatrix;
                     }
 
@@ -1069,12 +1109,30 @@ int main(int argc, char **argv) {
     //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "nthread: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", nthread, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
     /* Mapping table, symmetrical according to reverse complement */
-    memset(seqnt_map, 2, sizeof seqnt_map);
+    memset(seqnt_map, 0, sizeof(int) * 26);
+
     seqnt_map['A'-'A'] = 0;
     seqnt_map['C'-'A'] = 1;
-    seqnt_map['N'-'A'] = 2;
-    seqnt_map['G'-'A'] = 3;
-    seqnt_map['T'-'A'] = 4;
+
+    /* Ambiguous codes */
+    seqnt_map['H'-'A'] = 2; // A, C, T
+    seqnt_map['B'-'A'] = 3; // C, G, T
+    seqnt_map['R'-'A'] = 4; // A, G
+    seqnt_map['K'-'A'] = 5; // G, T
+    seqnt_map['S'-'A'] = 6; // G, C
+    seqnt_map['W'-'A'] = 7; // A, T
+
+    seqnt_map['N'-'A'] = 8;
+    seqnt_map['X'-'A'] = 8;
+
+    // W also in 9, S also in 10
+    seqnt_map['M'-'A'] = 11; // A, C
+    seqnt_map['Y'-'A'] = 12; // C, T
+    seqnt_map['V'-'A'] = 13; // A, C, G
+    seqnt_map['D'-'A'] = 14; // A, G, T
+
+    seqnt_map['G'-'A'] = 15;
+    seqnt_map['T'-'A'] = 16;
 
     /* Start processing data */
     clock_t tic = clock();

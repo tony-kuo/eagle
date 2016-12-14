@@ -131,7 +131,7 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
             matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 9] = is_match[b];
+            matrix[NT_CODES * b + 9] = is_match[b]; // also W
             break;
         case 'T':
             matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
@@ -140,7 +140,7 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
             matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 9] = is_match[b];
+            matrix[NT_CODES * b + 9] = is_match[b]; // also W
             break;
         case 'C':
             matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
@@ -149,7 +149,7 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
             matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 10] = is_match[b];
+            matrix[NT_CODES * b + 10] = is_match[b]; // also S
             break;
         case 'G':
             matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
@@ -158,7 +158,7 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
             matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
             matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 10] = is_match[b];
+            matrix[NT_CODES * b + 10] = is_match[b]; // also S
             break;
         }
     }
@@ -1108,7 +1108,7 @@ int main(int argc, char **argv) {
 
     //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "nthread: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", nthread, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
-    /* Mapping table, symmetrical according to reverse complement */
+    /* Mapping table, symmetrical according to complement */
     memset(seqnt_map, 0, sizeof(int) * 26);
 
     seqnt_map['A'-'A'] = 0;
@@ -1133,6 +1133,7 @@ int main(int argc, char **argv) {
 
     seqnt_map['G'-'A'] = 15;
     seqnt_map['T'-'A'] = 16;
+    seqnt_map['U'-'A'] = 16;
 
     /* Start processing data */
     clock_t tic = clock();

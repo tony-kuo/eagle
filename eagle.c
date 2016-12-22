@@ -1029,9 +1029,9 @@ static void print_usage() {
     printf("Usage: eagle [options] -v variants.vcf -a alignment.bam -r reference.fasta\n");
     printf("\n");
     printf("Required:\n");
-    printf("  -v --vcf=    FILE   variants VCF file\n");
-    printf("  -a --bam=    FILE   alignment data bam files (ref coord sorted and indexed)\n");
-    printf("  -r --ref=    FILE   reference sequence fasta file\n");
+    printf("  -v --vcf=    FILE   variants VCF file (default: stdin)\n");
+    printf("  -a --bam=    FILE   alignment data bam files (ref-coord sorted with bai index file)\n");
+    printf("  -r --ref=    FILE   reference sequence fasta file with fai index file\n");
     printf("Options:\n");
     printf("  -o --out=    FILE   output file (default: stdout)\n");
     printf("  -t --nthread=INT    number of threads to use (default: 1)\n");

@@ -871,11 +871,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     }
 
     double total = ref;
-    int max_ref_count = 0;
-    for (seti = 0; seti < ncombos; ++seti) {
-        total = log_add_exp(ref, log_add_exp(alt[seti], het[seti]));
-        if (ref_count[seti] > max_ref_count) max_ref_count = ref_count[seti];
-    }
+    for (seti = 0; seti < ncombos; ++seti) { total = log_add_exp(ref, log_add_exp(alt[seti], het[seti])); }
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
@@ -891,21 +887,25 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         }
         variant_print(&output, var_combo[max_seti], 0, (int)nreads, ref_count[max_seti], alt_count[max_seti], total, has_alt, ref);
     }
-    else { /* Marginal probabilities */
+    else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < nvariants; ++i) {
             double has_alt = 0;
             double not_alt = ref;
-            int has_alt_count = 0;
+            int acount = 0;
+            int rcount = 0;
             for (seti = 0; seti < ncombos; ++seti) {
                 if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
                     has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
-                    if (alt_count[seti] > has_alt_count) has_alt_count = alt_count[seti];
+                    if (alt_count[seti] > acount) {
+                        acount = alt_count[seti];
+                        rcount = ref_count[seti];
+                    }
                 }
                 else {
                     not_alt = log_add_exp(not_alt, log_add_exp(alt[seti], het[seti]));
                 }
             }
-            variant_print(&output, var_set, i, (int)nreads, max_ref_count, has_alt_count, total, has_alt, not_alt);
+            variant_print(&output, var_set, i, (int)nreads, rcount, acount, total, has_alt, not_alt);
         }
     }
     free(alt); alt = NULL;

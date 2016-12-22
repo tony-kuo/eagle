@@ -406,10 +406,7 @@ void vector_destroy(Vector *a) {
     free(a->data); a->data = NULL;
 }
 
-Vector *vcf_read(const char *filename) {
-    FILE *file = fopen(filename, "r");
-    if (file == NULL) { exit_err("failed to open VCF file %s\n", filename); }
-
+Vector *vcf_read(FILE *file) {
     Vector *var_list = vector_create(64, VARIANT_T);
 
     char *line = NULL;
@@ -422,7 +419,7 @@ Vector *vcf_read(const char *filename) {
         int pos;
         char chr[line_length], ref[line_length], alt[line_length];
         int t = sscanf(line, "%s %d %*[^\t ] %s %s", chr, &pos, ref, alt);
-        if (t < 4) { exit_err("bad fields in VCF file %s\n", filename); }
+        if (t < 4) { exit_err("bad fields in VCF file\n"); }
 
         int n1, n2;
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];
@@ -442,7 +439,6 @@ Vector *vcf_read(const char *filename) {
     free(line); line = NULL;
     fclose(file);
     qsort(var_list->data, var_list->size, sizeof (void *), nat_sort_var);
-    print_status("Read VCF: %s\t%i entries\t%s", filename, (int)var_list->size, asctime(time_info));
     return var_list;
 }
 
@@ -1094,7 +1090,15 @@ int main(int argc, char **argv) {
             default: exit_usage("Bad program call");
         }
     }
-    if (vcf_file == NULL) { exit_usage("Missing variants given as VCF file!"); }
+
+    FILE *vcf_fh = stdin;
+    if (vcf_file != NULL) { // default vcf file handle is stdin unless a vcf file option is used
+        vcf_fh = fopen(vcf_file, "r");
+        if (vcf_fh == NULL) { exit_err("failed to open VCF file %s\n", vcf_file); }
+    }
+    else {
+        vcf_file = "stdin";
+    }
     if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (nthread < 1) nthread = 1;
     if (distlim < 0) distlim = 0;
@@ -1102,9 +1106,8 @@ int main(int argc, char **argv) {
     if (maxh < 0) maxh = 1024;
     if (debug < 0) debug = 0;
 
-    FILE *out_fh;
-    if (out_file == NULL) out_fh = stdout;
-    else out_fh = fopen(out_file, "w");
+    FILE *out_fh = stdout;
+    if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
     //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "nthread: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", nthread, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
@@ -1137,7 +1140,8 @@ int main(int argc, char **argv) {
 
     /* Start processing data */
     clock_t tic = clock();
-    Vector *var_list = vcf_read(vcf_file);
+    Vector *var_list = vcf_read(vcf_fh);
+    print_status("Read VCF: %s\t%i entries\t%s", vcf_file, (int)var_list->size, asctime(time_info));
 
     refseq_hash = kh_init(rsh);
     //fasta_read(fa_file);

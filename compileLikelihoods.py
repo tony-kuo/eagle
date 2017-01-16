@@ -69,10 +69,10 @@ def compileEntries(entry, likelihood, af, depth, keepone, isnegative):
             else: new_entry[key] = entry[key];
     return(new_entry);
 
-def outputResults(pos_entry, neg_entry, somatic, pos_files, neg_files, pos_keepone, neg_keepone):
+def outputResults(pos_entry, neg_entry, pos_files, neg_files, pos_keepone, neg_keepone):
     header = 0;
     for key in naturalSort(pos_entry):
-        if somatic:
+        if neg_entry:
             if not neg_entry or key not in neg_entry: continue;
             pos_prob = sorted(pos_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
             neg_prob = sorted(neg_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
@@ -104,7 +104,7 @@ def outputResults(pos_entry, neg_entry, somatic, pos_files, neg_files, pos_keepo
         print(outstr.strip());
 
 def main():
-    parser = argparse.ArgumentParser(description='Compile results from output of evalVariant [multiple, positive/negative]');
+    parser = argparse.ArgumentParser(description='Compile results from output of evalVariant [multiple, positive/negative]. If negative samples provided, somatic mutations are compiled where data for variant must exist in the negative sample and not support the variant [so Pr_positive * (1-Pr_negative) >= 0.99]');
     parser.add_argument('-p', nargs='+', help='positive samples [f1 f2...]');
     parser.add_argument('-n', nargs='+', help='negative samples [f1 f2...]');
     parser.add_argument('-minlr', type=float, default=3, help='threshold for minimum log likelihood ratio for positive samples (default: 3)');
@@ -112,7 +112,6 @@ def main():
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
     parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
     parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
-    parser.add_argument('-s', action='store_true', help='somatic, it must exist in the negative sample and [Pr_positive * (1-Pr_negative) >= 0.99]');
     parser.add_argument('-p1', action='store_true', help='print only one positive entry among many (entry with max likelihood ratio)');
     parser.add_argument('-n1', action='store_true', help='print only one negative entry among many (entry with max likelihood ratio)');
     args = parser.parse_args();
@@ -124,7 +123,7 @@ def main():
         neg_entry = readFiles(args.n);
         neg_entry = compileEntries(neg_entry, args.maxlr, args.maxaf, args.mindepth, args.n1, True);
 
-    outputResults(pos_entry, neg_entry, args.s, args.p, args.n, args.p1, args.n1);
+    outputResults(pos_entry, neg_entry, args.p, args.n, args.p1, args.n1);
 
 if __name__ == '__main__':
     try:

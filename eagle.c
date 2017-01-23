@@ -871,7 +871,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
-    if (mvh) { /* Max variant hypothesis */
+    if (mvh) { /* Max likelihood variant hypothesis */
         int max_seti = 0;
         double has_alt = log_add_exp(alt[0], het[0]);
         for (seti = 1; seti < ncombos; ++seti) { 
@@ -1037,7 +1037,7 @@ static void print_usage() {
     printf("  -t --nthread=INT    number of threads to use (default: 1)\n");
     printf("  -n --distlim=INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
-    printf("     --mvh=           instead of marginal probabilities, output only the maximum variant hypothesis in the set of hypotheses\n");
+    printf("     --mvh=           instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
     printf("  -b --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
     printf("     --pao=           consider primary alignments only\n");
 }

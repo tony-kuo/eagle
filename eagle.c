@@ -967,21 +967,38 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
         var_set[nsets++] = curr;
     }
     /* Heterozygous non-reference variants as separate entries */
-    int flag = 1;
-    while (flag) {
-        flag = 0;
+    int flag_add = 1;
+    while (flag_add) {
+        flag_add = 0;
         size_t n = 0;
         for (i = 0; i < nsets; ++i) {
             if (var_set[i]->size == 1) continue;
-            for (j = 0; j < var_set[i]->size - 1; ++j) {
+
+            int flag_nonset = 1;
+            for (j = 0; j < var_set[i]->size - 1; ++j) { // check if all entries have the same position
                 Variant *curr = (Variant *)var_set[i]->data[j];
                 Variant *next = (Variant *)var_set[i]->data[j + 1];
-                if (curr->pos == next->pos) {
-                    flag = 1;
-                    Vector *dup = vector_dup(var_set[i]);
-                    vector_del(var_set[i], j);
-                    vector_del(dup, j + 1);
+                if (curr->pos != next->pos) flag_nonset = 0;
+            }
+            if (flag_nonset) { // only 1 entry, with multiple heterozygous non-reference variants
+                while (var_set[i]->size > 1) {
+                    Variant *curr = (Variant *)vector_pop(var_set[i]);
+                    Vector *dup = vector_create(8, VARIANT_T);
+                    vector_add(dup, curr);
                     var_set[nsets + n++] = dup;
+                }
+            }
+            else { // multiple entries comprising a set
+                for (j = 0; j < var_set[i]->size - 1; ++j) {
+                    Variant *curr = (Variant *)var_set[i]->data[j];
+                    Variant *next = (Variant *)var_set[i]->data[j + 1];
+                    if (curr->pos == next->pos) {
+                        flag_add = 1;
+                        Vector *dup = vector_dup(var_set[i]);
+                        vector_del(var_set[i], j);
+                        vector_del(dup, j + 1);
+                        var_set[nsets + n++] = dup;
+                    }
                 }
             }
         }

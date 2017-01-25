@@ -418,7 +418,7 @@ Vector *vcf_read(FILE *file) {
 
         int pos;
         char chr[line_length], ref[line_length], alt[line_length];
-        int t = sscanf(line, "%s %d %*[^\t ] %s %s", chr, &pos, ref, alt);
+        int t = sscanf(line, "%s %d %*[^\t] %s %s", chr, &pos, ref, alt);
         if (t < 4) { exit_err("bad fields in VCF file\n"); }
 
         int n1, n2;

@@ -690,10 +690,10 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     char *refseq = f->seq;
     int refseq_length = f->seq_length;
 
-    /* Reads in variant region coordinates (vcf is 1-index while htslib is 0-index) */
-    n = snprintf(NULL, 0, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos - 1, var_data[nvariants - 1]->pos - 1) + 1;
+    /* Reads in variant region coordinates */
+    n = snprintf(NULL, 0, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos, var_data[nvariants - 1]->pos) + 1;
     char *region = malloc(n * sizeof *region);
-    snprintf(region, n, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos - 1, var_data[nvariants - 1]->pos - 1);
+    snprintf(region, n, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos, var_data[nvariants - 1]->pos);
 
     Vector *read_list = bam_fetch(bam_file, region);
     free(region); region = NULL;
@@ -1054,9 +1054,9 @@ static void print_usage() {
     printf("  -t --nthread=INT    number of threads to use (default: 1)\n");
     printf("  -n --distlim=INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
-    printf("     --mvh=           instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
+    printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
+    printf("     --pao            consider primary alignments only\n");
     printf("  -b --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
-    printf("     --pao=           consider primary alignments only\n");
 }
 
 int main(int argc, char **argv) {

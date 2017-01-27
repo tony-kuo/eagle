@@ -316,7 +316,7 @@ void variant_destroy(Variant *v) {
 
 void read_destroy(Read *r) {
     if (r == NULL) return;
-    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = 0;
+    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
     free(r->name); r->name = NULL;
     free(r->chr); r->chr = NULL;
     free(r->qseq); r->qseq = NULL;
@@ -324,7 +324,7 @@ void read_destroy(Read *r) {
     free(r->flag); r->flag = NULL;
     free(r->cigar_opchr); r->cigar_opchr = NULL;
     free(r->cigar_oplen); r->cigar_oplen = NULL;
-    free(r->multimap); r->multimap = NULL;
+    free(r->multimapXA); r->multimapXA = NULL;
 }
 
 void fasta_destroy(Fasta *f) {
@@ -531,9 +531,11 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
             if (s != NULL) read->flag = strdup(s);
             free(s); s = NULL;
 
-            read->multimap = NULL;
-            s = (char *)bam_aux_get(aln, "XA");
-            if (s != NULL) read->multimap = strdup(s);
+            read->multimapXA = NULL;
+            if (bam_aux_get(aln, "XA")) read->multimapXA = strdup(bam_aux2Z(bam_aux_get(aln, "XA")));
+
+            read->multimapNH = 1;
+            if (bam_aux_get(aln, "NH")) read->multimapNH = bam_aux2i(bam_aux_get(aln, "NH"));
 
             vector_add(read_list, read);
         }
@@ -795,16 +797,17 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
                 fprintf(stderr, "\t");
                 if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
-                if (read_data[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimap);
+                if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
+                if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
                 for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
                 fprintf(stderr, "\n");
             }
 
-            /* Multi-map alignments from XA tags: Zchr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
-            if (read_data[readi]->multimap != NULL) {
+            /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
+            if (read_data[readi]->multimapXA != NULL) {
                 int xa_pos, n;
-                char xa_chr[strlen(read_data[readi]->multimap) + 1];
-                for (s = read_data[readi]->multimap + 1; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
+                char xa_chr[strlen(read_data[readi]->multimapXA) + 1];
+                for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                     Fasta *f = refseq_fetch(xa_chr, fa_file);
                     if (f == NULL) continue;
                     char *xa_refseq = f->seq;
@@ -831,6 +834,14 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     if (*(s + n) != ';') break;
                 }
             }
+            else if (read_data[readi]->multimapNH > 1) {
+                double readprobability = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
+                for (i = 0; i < read_data[readi]->multimapNH; ++i) {
+                    pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
+                    prgu = log_add_exp(prgu, readprobability);
+                    prgv = log_add_exp(prgv, readprobability);
+                }
+            }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
             prgu = log_add_exp(LGOMEGA + pout, prgu);
@@ -854,7 +865,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (debug >= 2) {
                 fprintf(stderr, "++\t%d\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
                 fprintf(stderr, "%s\t%s\t%d\t%s\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->qseq);
-                if (read_data[readi]->multimap != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimap);
+                if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
+                if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
                 for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
                 fprintf(stderr, "\n");
             }

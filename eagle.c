@@ -444,7 +444,15 @@ Vector *vcf_read(FILE *file) {
 
 void fasta_read(const char *fa_file) {
     faidx_t *fai = fai_load(fa_file);
-    if (fai == NULL) { exit_err("failed to open FA index %s\n", fa_file); }
+    if (fai == NULL) { 
+        errno = fai_build(fa_file);
+        if (errno == 0) {
+            fai = fai_load(fa_file);
+        }
+        else {
+            exit_err("failed to build and open FA index %s\n", fa_file);
+        }
+    }
 
     char *filename = malloc((strlen(fa_file) + 5) * sizeof *filename);
     filename[0] = '\0';
@@ -565,7 +573,15 @@ static Fasta *refseq_fetch(const char *name, const char *fa_file) {
     }
 
     faidx_t *fai = fai_load(fa_file);
-    if (fai == NULL) { exit_err("failed to open FA index %s\n", fa_file); }
+    if (fai == NULL) { 
+       errno = fai_build(fa_file);
+        if (errno == 0) {
+            fai = fai_load(fa_file);
+        }
+        else {
+            exit_err("failed to build and open FA index %s\n", fa_file);
+        }
+    }
     if (!faidx_has_seq(fai, name)) { exit_err("failed to find sequence %s in reference %s\n", name, fa_file); }
 
     Fasta *f = malloc(sizeof (Fasta));

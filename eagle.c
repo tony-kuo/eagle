@@ -67,6 +67,13 @@ char *strdup(const char *src) {
 }
 */
 
+static inline int has_numbers(const char *str) {
+    while (*str != '\0') {
+        if (isdigit(*str++) == 0) return 1;
+    }
+    return 0;
+}
+
 static inline void str_resize(char **str, size_t size) {
     char *p = realloc(*str, size * sizeof *str);
     if (p == NULL) { exit_err("failed to realloc in str_resize\n"); }
@@ -419,7 +426,7 @@ Vector *vcf_read(FILE *file) {
         int pos;
         char chr[line_length], ref[line_length], alt[line_length];
         int t = sscanf(line, "%s %d %*[^\t] %s %s", chr, &pos, ref, alt);
-        if (t < 4) { exit_err("bad fields in VCF file\n"); }
+        if (t < 4 || has_numbers(ref) || has_numbers(alt)) { exit_err("bad fields in VCF file\n"); }
 
         int n1, n2;
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];

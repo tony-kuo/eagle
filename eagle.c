@@ -69,7 +69,7 @@ char *strdup(const char *src) {
 
 static inline int has_numbers(const char *str) {
     while (*str != '\0') {
-        if (isdigit(*str++) == 0) return 1;
+        if (isdigit(*str++) == 1) return 1;
     }
     return 0;
 }

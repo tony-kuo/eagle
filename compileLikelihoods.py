@@ -33,7 +33,8 @@ def readFiles(files):
                 for i in ref:
                     for j in alt:
                         key = t[0]+'\t'+t[1]+'\t'+i+'\t'+j;
-                        depth = int(t[5]) + int(t[6]);
+                        depth = int(t[4]);
+                        #depth = int(t[5]) + int(t[6]);
                         if depth > 0:
                             af = float(t[6])/depth;
                             prob = float(t[7]);
@@ -75,7 +76,7 @@ def compileLOH(pos_entry, neg_entry, minlr, maxlr, depth):
 
         current = sorted(neg_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
         if current[2] < minlr: continue;
-        if 0.3 < current[1] > 0.7: continue; # neg should be heterozygous variant
+        if current[1] < 0.3 or current[1] > 0.7: continue; # neg should be heterozygous variant
         current = sorted(neg_entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
         if depth > 0 and current[0] < depth: continue;
 

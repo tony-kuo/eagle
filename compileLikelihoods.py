@@ -40,37 +40,57 @@ def readFiles(files):
                             lr = float(t[8]);
                             in_set = t[9];
                             if key not in entry: entry[key] = {};
-                            if fn not in entry[key]: entry[key][fn] = [];
-                            entry[key][fn].append((depth, af, lr, prob, in_set));
+                            if fn not in entry[key]: entry[key][fn] = [(depth, af, lr, prob, in_set)];
+                            else: entry[key][fn].append((depth, af, lr, prob, in_set));
         fh.close;
     return(entry);
 
-def compileEntries(entry, likelihood, af, depth, keepone, isnegative):
+def compileEntries(entry, likelihood, af, depth, isnegative):
     new_entry = {};
     for key in entry:
         # Check LR
         for fn in entry[key]: entry[key][fn] = sorted(entry[key][fn], key=lambda tup:tup[2], reverse=True)[0]; # Max LR per file for entries with same key
         current = sorted(entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
-        valid = True;
-        if isnegative and current[2] > likelihood: valid = False;
-        elif not isnegative and current[2] < likelihood: valid = False;
+        
+        if isnegative and current[2] > likelihood: continue;
+        elif not isnegative and current[2] < likelihood: continue;
         # Check AF
         current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0]; # Max AF across files
-        if isnegative and current[1] > af: valid = False;
-        elif not isnegative and current[1] < af: valid = False;
+        if isnegative and current[1] > af: continue;
+        elif not isnegative and current[1] < af: continue;
         # Check read depth
         current = sorted(entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
-        if depth > 0 and current[0] < depth: valid = False;
+        if depth > 0 and current[0] < depth: continue;
 
         # Positive samples require: LR >= threshold, AF <= threshold
         # Negative samples require: LR <= threshold, AF >= threshold
-        if valid:
-            if keepone: new_entry[key] = current;
-            else: new_entry[key] = entry[key];
+        new_entry[key] = entry[key];
     return(new_entry);
 
-def outputResults(pos_entry, neg_entry, pos_files, neg_files, pos_keepone, neg_keepone):
-    header = 0;
+def compileLOH(pos_entry, neg_entry, minlr, maxlr, depth):
+    new_pos_entry = {};
+    new_neg_entry = {};
+    for key in pos_entry:
+        if key not in neg_entry: continue;
+
+        current = sorted(neg_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
+        if current[2] < minlr: continue;
+        if 0.3 < current[1] > 0.7: continue; # neg should be heterozygous variant
+        current = sorted(neg_entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
+        if depth > 0 and current[0] < depth: continue;
+
+        current = sorted(pos_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
+        if maxlr < current[2] < minlr: continue; # if pos is in uncertainty "deadzone"
+        if 0.1 < current[1] < 0.9: continue; # pos should be homozygous
+        current = sorted(pos_entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
+        if depth > 0 and current[0] < depth: continue;
+
+        new_neg_entry[key] = neg_entry[key];
+        new_pos_entry[key] = pos_entry[key];
+    return(new_pos_entry, new_neg_entry);
+
+def outputResults(pos_entry, neg_entry, pos_files, neg_files):
+    header = True;
     for key in naturalSort(pos_entry):
         if neg_entry:
             if not neg_entry or key not in neg_entry: continue;
@@ -80,50 +100,60 @@ def outputResults(pos_entry, neg_entry, pos_files, neg_files, pos_keepone, neg_k
                 #print(pos_prob, neg_prob, np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])));
                 continue;
 
-        if header == 0:
-            header = 1;
-            outstr = '#\t\t\t\t';
-            if not pos_keepone: outstr += '\t\t\t\t'.join(pos_files);
-            else: outstr += '\t\t\t\t';
-            if neg_files and not neg_keepone: outstr += '\t\t\t\t' + '\t\t\t\t'.join(neg_files);
+        if header:
+            header = False;
+            outstr = '#\t\t\t\t' + '\t\t\t\t'.join(pos_files);
+            if neg_files: outstr += '\t\t\t\t' + '\t\t\t\t'.join(neg_files);
             print(outstr);
 
         outstr = '{0}\t'.format(key);
-        if pos_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][0], pos_entry[key][1], pos_entry[key][2], pos_entry[key][4]);
-        else:
-            for fn in pos_files: 
-                if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][4]);
-                else: outstr += '\t\t\t\t';
+        for fn in pos_files: 
+            if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][4]);
+            else: outstr += '\t\t\t\t';
         if neg_entry and key in neg_entry:
-            if neg_keepone: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}'.format(neg_entry[key][0], neg_entry[key][1], neg_entry[key][2], neg_entry[key][4]);
-            else:
-                for fn in neg_files: 
-                    fn = fn.split(',')[0];
-                    if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][4]);
-                    else: outstr += '\t\t\t\t';
+            for fn in neg_files: 
+                if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][4]);
+                else: outstr += '\t\t\t\t';
+            outstr += '\tSOM';
+        print(outstr.strip());
+
+def outputLOH(pos_entry, neg_entry, pos_files, neg_files):
+    for key in naturalSort(pos_entry):
+        if key not in neg_entry: continue;
+
+        outstr = '{0}\t'.format(key);
+        for fn in pos_files: 
+            if fn in pos_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(pos_entry[key][fn][0], pos_entry[key][fn][1], pos_entry[key][fn][2], pos_entry[key][fn][4]);
+            else: outstr += '\t\t\t\t';
+        for fn in neg_files: 
+            if fn in neg_entry[key]: outstr += '{0}\t{1:.4}\t{2:.4}\t{3}\t'.format(neg_entry[key][fn][0], neg_entry[key][fn][1], neg_entry[key][fn][2], neg_entry[key][fn][4]);
+            else: outstr += '\t\t\t\t';
+        outstr += '\tLOH';
         print(outstr.strip());
 
 def main():
     parser = argparse.ArgumentParser(description='Compile results from output of evalVariant [multiple, positive/negative]. If negative samples provided, somatic mutations are compiled where data for variant must exist in the negative sample and not support the variant [so Pr_positive * (1-Pr_negative) >= 0.99]');
     parser.add_argument('-p', nargs='+', help='positive samples [f1 f2...]');
     parser.add_argument('-n', nargs='+', help='negative samples [f1 f2...]');
-    parser.add_argument('-minlr', type=float, default=3, help='threshold for minimum log likelihood ratio for positive samples (default: 3)');
-    parser.add_argument('-maxlr', type=float, default=-3, help='threshold for maximum log likelihood ratio for negative samples (default: -3)');
+    parser.add_argument('-minlr', type=float, default=6, help='threshold for minimum log likelihood ratio for positive samples (default: 6)');
+    parser.add_argument('-maxlr', type=float, default=-6, help='threshold for maximum log likelihood ratio for negative samples (default: -6)');
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
     parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
     parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
-    parser.add_argument('-p1', action='store_true', help='print only one positive entry among many (entry with max likelihood ratio)');
-    parser.add_argument('-n1', action='store_true', help='print only one negative entry among many (entry with max likelihood ratio)');
     args = parser.parse_args();
 
-    pos_entry = readFiles(args.p); 
-    pos_entry = compileEntries(pos_entry, args.minlr, args.minaf, args.mindepth, args.p1, False);
+    pos = readFiles(args.p); 
+    pos_entry = compileEntries(pos, args.minlr, args.minaf, args.mindepth, False);
     neg_entry = {};
+    pos_loh_entry = {};
+    neg_loh_entry = {};
     if args.n:
-        neg_entry = readFiles(args.n);
-        neg_entry = compileEntries(neg_entry, args.maxlr, args.maxaf, args.mindepth, args.n1, True);
+        neg = readFiles(args.n);
+        neg_entry = compileEntries(neg, args.maxlr, args.maxaf, args.mindepth, True);
+        (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth);
 
-    outputResults(pos_entry, neg_entry, args.p, args.n, args.p1, args.n1);
+    outputResults(pos_entry, neg_entry, args.p, args.n);
+    outputLOH(pos_loh_entry, neg_loh_entry, args.p, args.n);
 
 if __name__ == '__main__':
     try:

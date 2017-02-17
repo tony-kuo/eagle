@@ -41,6 +41,7 @@ This program is distributed under the terms of the GNU General Public License
 /* Command line arguments */
 static int nthread;
 static int distlim;
+static int maxdist;
 static int maxh;
 static int mvh;
 static double hetbias;
@@ -867,8 +868,9 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
-            prgu = log_add_exp(LGOMEGA + pout, prgu);
-            prgv = log_add_exp(LGOMEGA + pout, prgv);
+            pout += LGOMEGA;
+            prgu = log_add_exp(pout, prgu);
+            prgv = log_add_exp(pout, prgv);
 
             /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
             double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
@@ -997,7 +999,10 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
         Vector *curr = vector_create(8, VARIANT_T);
         vector_add(curr, var_data[i]);
         size_t j = i + 1;
-        while (distlim > 0 && j < nvariants && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) vector_add(curr, var_data[j++]);
+        while (distlim > 0 && j < nvariants && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) {
+            if (maxdist > 0 && abs(var_data[j]->pos - var_data[i]->pos) > maxdist) break;
+            vector_add(curr, var_data[j++]);
+        }
         i = j;
         var_set[nsets++] = curr;
     }
@@ -1039,7 +1044,7 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
         }
         nsets += n;
     } 
-    print_status("Variants within %d bp:\t%i entries\t%s", distlim, (int)nsets, asctime(time_info));
+    print_status("Variants within %d (max window: %d) bp:\t%i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info));
 
     print_status("Start:\t%d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
     Vector *queue = vector_create(nsets, VOID_T);
@@ -1088,6 +1093,7 @@ static void print_usage() {
     printf("  -o --out=    FILE   output file (default: stdout)\n");
     printf("  -t --nthread=INT    number of threads to use (default: 1)\n");
     printf("  -n --distlim=INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
+    printf("  -w --maxdist=INT    maximum number of bases between any two variants in a set of hypotheses (off: 0, default: 0)\n");
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
     printf("     --pao            consider primary alignments only\n");
@@ -1102,6 +1108,7 @@ int main(int argc, char **argv) {
     char *out_file = NULL;
     nthread = 1;
     distlim = 10;
+    maxdist = 0;
     maxh = 1024;
     mvh = 0;
     hetbias = 0.5;
@@ -1115,6 +1122,7 @@ int main(int argc, char **argv) {
         {"out", optional_argument, NULL, 'o'},
         {"nthread", optional_argument, NULL, 't'},
         {"distlim", optional_argument, NULL, 'n'},
+        {"maxdist", optional_argument, NULL, 'w'},
         {"hetbias", optional_argument, NULL, 'b'},
         {"maxh", optional_argument, NULL, 'm'},
         {"mvh", no_argument, &mvh, 1},
@@ -1125,7 +1133,7 @@ int main(int argc, char **argv) {
 
     int opt = 0;
     int option_index = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:n:b:m:d:", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:n:w:b:m:d:", long_options, &option_index)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -1136,6 +1144,7 @@ int main(int argc, char **argv) {
             case 'o': out_file = optarg; break;
             case 't': nthread = parse_int(optarg); break;
             case 'n': distlim = parse_int(optarg); break;
+            case 'w': maxdist = parse_int(optarg); break;
             case 'b': hetbias = parse_float(optarg); break;
             case 'm': maxh = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
@@ -1153,7 +1162,8 @@ int main(int argc, char **argv) {
     }
     if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (nthread < 1) nthread = 1;
-    if (distlim < 0) distlim = 0;
+    if (distlim < 0) distlim = 10;
+    if (maxdist < 0) maxdist = 0;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (maxh < 0) maxh = 1024;
     if (debug < 0) debug = 0;

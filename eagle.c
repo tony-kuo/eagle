@@ -858,13 +858,12 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     if (*(s + n) != ';') break;
                 }
             }
-            else if (read_data[readi]->multimapNH > 1) {
-                double readprobability = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
-                for (i = 0; i < read_data[readi]->multimapNH; ++i) {
-                    pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                    prgu = log_add_exp(prgu, readprobability);
-                    prgv = log_add_exp(prgv, readprobability);
-                }
+            else if (read_data[readi]->multimapNH > 1) { // scale by the number of multimap positions
+                double n = log(read_data[readi]->multimapNH - 1);
+                double readprobability = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos) + n;
+                pout += log_add_exp(pout, elsewhere + n);
+                prgu += log_add_exp(prgu, readprobability);
+                prgv += log_add_exp(prgu, readprobability);
             }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */

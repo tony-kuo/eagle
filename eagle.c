@@ -44,9 +44,10 @@ static int distlim;
 static int maxdist;
 static int maxh;
 static int mvh;
-static double hetbias;
 static int pao;
+static int isc;
 static int debug;
+static double hetbias;
 
 /* Time info */
 static time_t now; 
@@ -519,17 +520,11 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
             read->tid = aln->core.tid;
             read->chr = strdup(bam_header->target_name[read->tid]);
             read->pos = aln->core.pos;
-            read->length = aln->core.l_qseq;
 
-            read->qseq = malloc((read->length + 1) * sizeof read->qseq);
-            read->qual = malloc(read->length * sizeof read->qual);
-            uint8_t *qual = bam_get_qual(aln);
-            for (i = 0; i < read->length; ++i) {
-                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln),i)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = (double)qual[i] / -10;
-            }
-            read->qseq[read->length] = '\0';
 
+            int seen_M = 0;
+            size_t s_offset = 0; // offset for softclip at start
+            size_t e_offset = 0; // offset for softclip at end
             uint32_t *cigar = bam_get_cigar(aln);
             read->n_cigar = aln->core.n_cigar;
             read->cigar_oplen = malloc(read->n_cigar * sizeof read->cigar_oplen);
@@ -537,9 +532,23 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
             for (i = 0; i < read->n_cigar; ++i) {
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
+
+                if (isc && read->cigar_opchr[i] == 'M') seen_M = 1;
+                else if (isc && seen_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
+                else if (isc && seen_M == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
             }
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
+
+            read->length = aln->core.l_qseq - (s_offset + e_offset);
+            read->qseq = malloc((read->length + 1) * sizeof read->qseq);
+            read->qual = malloc(read->length  * sizeof read->qual);
+            uint8_t *qual = bam_get_qual(aln);
+            for (i = 0; i < read->length; ++i) {
+                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
+                read->qual[i] = (double)qual[i + s_offset] / -10;
+            }
+            read->qseq[read->length] = '\0';
 
             char *s;
             read->flag = NULL;
@@ -887,17 +896,20 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
             if (debug >= 2) {
-                fprintf(stderr, "++\t%d\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
-                fprintf(stderr, "%s\t%s\t%d\t%s\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->qseq);
+                fprintf(stderr, "++%d\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
+                fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
+                for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+                fprintf(stderr, "\t");
+                for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+                fprintf(stderr, "\t");
                 if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
-                for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
-                fprintf(stderr, "\n");
+                fprintf(stderr, "%s\n", read_data[readi]->qseq);
             }
         }
         free(altseq); altseq = NULL;
         if (debug >= 1) {
-            fprintf(stderr, "==\t%d\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref, het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
+            fprintf(stderr, "==%d\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref, het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
             for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
         }
     }
@@ -1096,6 +1108,7 @@ static void print_usage() {
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
     printf("     --pao            consider primary alignments only\n");
+    printf("     --isc            ignore soft-clipped bases\n");
     printf("  -b --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
 }
 
@@ -1110,9 +1123,10 @@ int main(int argc, char **argv) {
     maxdist = 0;
     maxh = 1024;
     mvh = 0;
-    hetbias = 0.5;
     pao = 0;
+    isc = 0;
     debug = 0;
+    hetbias = 0.5;
 
     static struct option long_options[] = {
         {"vcf", required_argument, NULL, 'v'},
@@ -1122,11 +1136,12 @@ int main(int argc, char **argv) {
         {"nthread", optional_argument, NULL, 't'},
         {"distlim", optional_argument, NULL, 'n'},
         {"maxdist", optional_argument, NULL, 'w'},
-        {"hetbias", optional_argument, NULL, 'b'},
         {"maxh", optional_argument, NULL, 'm'},
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
+        {"isc", no_argument, &isc, 1},
         {"debug", optional_argument, NULL, 'd'},
+        {"hetbias", optional_argument, NULL, 'b'},
         {0, 0, 0, 0}
     };
 

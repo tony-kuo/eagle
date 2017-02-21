@@ -591,7 +591,7 @@ static Fasta *refseq_fetch(const char *name, const char *fa_file) {
 
     faidx_t *fai = fai_load(fa_file);
     if (fai == NULL) { 
-       errno = fai_build(fa_file);
+        errno = fai_build(fa_file);
         if (errno == 0) {
             fai = fai_load(fa_file);
         }
@@ -904,6 +904,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 fprintf(stderr, "\t");
                 if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+                if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
                 fprintf(stderr, "%s\n", read_data[readi]->qseq);
             }
         }
@@ -1184,8 +1185,6 @@ int main(int argc, char **argv) {
 
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
-
-    //fprintf(stderr, "VCF: %s\nBAM: %s\nREF: %s\n", vcf_file, bam_file, fa_file); fprintf(stderr, "nthread: %d, distlim: %d, hetbias: %.2f, maxh: %d\n", nthread, distlim, hetbias, maxh); fprintf(stderr, "mvh: %d, pao: %d, debug: %d\n\n", mvh, pao, debug);
 
     /* Mapping table, symmetrical according to complement */
     memset(seqnt_map, 0, sizeof(int) * 26);

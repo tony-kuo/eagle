@@ -20,13 +20,14 @@ A tab-delimited text file with one row per variant and columns representing:
 2. coordinate position
 3. reference sequence
 4. alternative sequence
-5. total number of reads
-6. number of reads supporting alternative sequence
-7. log 10 probability
-8. log 10 likelihood ratio (odds)
-9. variants in the set of nearby variant if any, otherwise []
+5. total number of reads seen
+6. number of reads supporting reference sequence
+7. number of reads supporting alternative sequence
+8. log 10 probability
+9. log 10 likelihood ratio (odds)
+10. variants in the set of nearby variant if any, otherwise []
 
-The read counts represent reads that are unambiguously for the reference or alternative sequence (2x the probability favoring one over the other), as opposed to aligned reads. Our model attempts to account for reads that might be misaligned due to repetitive sequences in the hypothesis.
+The read counts represent reads that are unambiguously for the reference or alternative sequence (2x the probability favoring one over the other), as opposed to aligned reads. Our model attempts to account for various uncertainties in the hypotheses.
 
 **Input/Output Parameters**
 
@@ -42,15 +43,19 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 -t INT  The number of processes to use. Default is 1.
 
--n INT  Group nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp.
+-n INT  Group/chain nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp (0 for off).
+
+-w INT  Maximum number of bases between any two variants in the set of hypotheses. This sets a window size that allows for larger values of -n without chaining an excessive number of variants. Default is 0 bp (off).
 
 --maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is finished and the number tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum. Default is 1024 (2^10).
 
 --mvh  Instead of the marginal probabilities over the hypotheses set, output only the maximum variant hypothesis (highest probability) among variant combinations in the set of hypotheses.  Keep in mind that *maxh* will limit the possible combinations tested.
 
---hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
-
 --pao  Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
+
+--isc  Ignore soft-clipped bases in reads when calculating the probabilities.
+
+--hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
 
 **Usage Notes**
 

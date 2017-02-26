@@ -520,7 +520,9 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
             read->tid = aln->core.tid;
             read->chr = strdup(bam_header->target_name[read->tid]);
             read->pos = aln->core.pos;
-
+            read->prgu = 0;
+            read->prgv = 0;
+            read->pout = 0;
 
             int seen_M = 0;
             size_t s_offset = 0; // offset for softclip at start
@@ -826,13 +828,15 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (debug >= 3) {
                 fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu, prgv, pout);
                 fprintf(stderr, "%s\t%s\t%d\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->inferred_length);
-                fprintf(stderr, "%s\t", read_data[readi]->qseq);
-                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
+                for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
                 fprintf(stderr, "\t");
-                if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
+                for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+                fprintf(stderr, "\t");
                 if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
-                for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+                if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
+                fprintf(stderr, "%s\t", read_data[readi]->qseq);
+                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
                 fprintf(stderr, "\n");
             }
 
@@ -857,13 +861,11 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
                     double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     prgu = log_add_exp(prgu, readprobability);
-                    if (debug >= 3) fprintf(stderr, "%f\t", readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
                         if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < read_data[readi]->length) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     free(newreadprobmatrix); newreadprobmatrix = NULL;
-                    if (debug >= 3) fprintf(stderr, "%f\t%f\t%f\n", readprobability, prgu, prgv);
                     if (*(s + n) != ';') break;
                 }
             }
@@ -891,6 +893,12 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (prgv > prgu && prgv - prgu > 0.69) alt_count[seti] += 1;
             else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
 
+            if (debug <= -1) {
+                read_data[readi]->prgu = read_data[readi]->prgu == 0 ? prgu : log_add_exp(read_data[readi]->prgu, prgu);
+                read_data[readi]->prgv = read_data[readi]->prgv == 0 ? prgv : log_add_exp(read_data[readi]->prgv, prgv);
+                read_data[readi]->pout = read_data[readi]->pout == 0 ? pout : log_add_exp(read_data[readi]->pout, pout);
+            }
+
             /* Priors */
             if (seti == 0) ref += prgu + REFPRIOR;
             alt[seti] += prgv + alt_prior;
@@ -905,13 +913,31 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
                 if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
-                fprintf(stderr, "%s\n", read_data[readi]->qseq);
+                fprintf(stderr, "\n");
             }
         }
         free(altseq); altseq = NULL;
         if (debug >= 1) {
             fprintf(stderr, "==%d\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref, het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
             for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
+        }
+    }
+
+    if (debug <= -1) {
+        for (readi = 0; readi < nreads; ++readi) {
+            if (read_data[readi]->prgu == 0 && read_data[readi]->prgv == 0 && read_data[readi]->pout == 0) continue; // unprocessed read
+            flockfile(stderr);
+            fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
+            fprintf(stderr, "%f\t%f\t%f\t", read_data[readi]->prgu, read_data[readi]->prgv, read_data[readi]->pout);
+            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+            fprintf(stderr, "\t");
+            if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
+            if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+            if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
+            fprintf(stderr, "[");
+            for (i = 0; i < nvariants; ++i) { fprintf(stderr, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt); }
+            fprintf(stderr, "]\n");
+            funlockfile(stderr);
         }
     }
 
@@ -1181,7 +1207,6 @@ int main(int argc, char **argv) {
     if (maxdist < 0) maxdist = 0;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (maxh < 0) maxh = 1024;
-    if (debug < 0) debug = 0;
 
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used

@@ -520,9 +520,9 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
             read->tid = aln->core.tid;
             read->chr = strdup(bam_header->target_name[read->tid]);
             read->pos = aln->core.pos;
-            read->prgu = 0;
-            read->prgv = 0;
-            read->pout = 0;
+            read->prgu = -1000;
+            read->prgv = -1000;
+            read->pout = -1000;
 
             int seen_M = 0;
             size_t s_offset = 0; // offset for softclip at start
@@ -894,9 +894,16 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
 
             if (debug <= -1) {
-                read_data[readi]->prgu = prgu > read_data[readi]->prgu ? prgu : read_data[readi]->prgu;
-                read_data[readi]->prgv = prgu > read_data[readi]->prgv ? prgv : read_data[readi]->prgv;
-                read_data[readi]->pout = prgu > read_data[readi]->pout ? pout : read_data[readi]->pout;
+                if (seti == 0) {
+                    read_data[readi]->prgu = prgu;
+                    read_data[readi]->prgv = prgu;
+                    read_data[readi]->pout = prgu;
+                }
+                else {
+                    read_data[readi]->prgu = prgu > read_data[readi]->prgu ? prgu : read_data[readi]->prgu;
+                    read_data[readi]->prgv = prgu > read_data[readi]->prgv ? prgv : read_data[readi]->prgv;
+                    read_data[readi]->pout = prgu > read_data[readi]->pout ? pout : read_data[readi]->pout;
+                }
             }
 
             /* Priors */

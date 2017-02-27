@@ -896,13 +896,13 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (debug <= -1) {
                 if (seti == 0) {
                     read_data[readi]->prgu = prgu;
-                    read_data[readi]->prgv = prgu;
-                    read_data[readi]->pout = prgu;
+                    read_data[readi]->prgv = prgv;
+                    read_data[readi]->pout = pout;
                 }
                 else {
                     read_data[readi]->prgu = prgu > read_data[readi]->prgu ? prgu : read_data[readi]->prgu;
-                    read_data[readi]->prgv = prgu > read_data[readi]->prgv ? prgv : read_data[readi]->prgv;
-                    read_data[readi]->pout = prgu > read_data[readi]->pout ? pout : read_data[readi]->pout;
+                    read_data[readi]->prgv = prgv > read_data[readi]->prgv ? prgv : read_data[readi]->prgv;
+                    read_data[readi]->pout = pout > read_data[readi]->pout ? pout : read_data[readi]->pout;
                 }
             }
 

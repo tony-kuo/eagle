@@ -37,6 +37,7 @@ typedef struct {
     int tid, pos, length, inferred_length, n_cigar, multimapNH;
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
     double *qual;
+    double prgu, prgv, pout;
 } Read;
 
 typedef struct {

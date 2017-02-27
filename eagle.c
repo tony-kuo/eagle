@@ -894,9 +894,9 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
 
             if (debug <= -1) {
-                read_data[readi]->prgu = read_data[readi]->prgu == 0 ? prgu : log_add_exp(read_data[readi]->prgu, prgu);
-                read_data[readi]->prgv = read_data[readi]->prgv == 0 ? prgv : log_add_exp(read_data[readi]->prgv, prgv);
-                read_data[readi]->pout = read_data[readi]->pout == 0 ? pout : log_add_exp(read_data[readi]->pout, pout);
+                read_data[readi]->prgu = prgu > read_data[readi]->prgu ? prgu : read_data[readi]->prgu;
+                read_data[readi]->prgv = prgu > read_data[readi]->prgv ? prgv : read_data[readi]->prgv;
+                read_data[readi]->pout = prgu > read_data[readi]->pout ? pout : read_data[readi]->pout;
             }
 
             /* Priors */

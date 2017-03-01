@@ -22,7 +22,7 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/khash.h"
 
 /* Constants */
-#define OMEGA 1.0e-4  // Prior probability of read originating from an outside paralogous source
+#define OMEGA 1.0e-5  // Prior probability of read originating from an outside paralogous source
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 #define REFPRIOR (log(0.5))
 
@@ -779,6 +779,10 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
         /* Aligned reads */
         for (readi = 0; readi < nreads; ++readi) {
+            Variant *first = (Variant *)var_combo[seti]->data[0];
+            Variant *last = (Variant *)var_combo[seti]->data[var_combo[seti]->size - 1];
+            if (read_data[readi]->pos > first->pos || read_data[readi]->pos + read_data[readi]->length < last->pos) continue;
+
             int is_unmap = 0;
             int is_reverse = 0;
             int is_secondary = 0;
@@ -939,11 +943,12 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
             if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
-            if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+            else if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+            else fprintf(stderr, "0\t");
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
-            fprintf(stderr, "[");
+            else fprintf(stderr, "NONE\t");
             for (i = 0; i < nvariants; ++i) { fprintf(stderr, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt); }
-            fprintf(stderr, "]\n");
+            fprintf(stderr, "\n");
             funlockfile(stderr);
         }
     }

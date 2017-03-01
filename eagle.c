@@ -813,6 +813,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     int *ref_count = malloc(ncombos * sizeof *ref_count);
     int *alt_count = malloc(ncombos * sizeof *alt_count);
     for (seti = 0; seti < ncombos; ++seti) {
+        ref[seti] = 0;
         alt[seti] = 0;
         het[seti] = 0;
         ref_count[seti] = 0;
@@ -1039,6 +1040,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             variant_print(&output, var_set, i, (int)nreads, rcount, acount, total, has_alt, not_alt);
         }
     }
+    free(ref); ref = NULL;
     free(alt); alt = NULL;
     free(het); het = NULL;
     free(ref_count); ref_count = NULL;

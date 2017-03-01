@@ -22,9 +22,8 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/khash.h"
 
 /* Constants */
-#define OMEGA 1.0e-5  // Prior probability of read originating from an outside paralogous source
+#define OMEGA 1.0e-4  // Prior probability of read originating from an outside paralogous source
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-#define REFPRIOR (log(0.5))
 
 #define NT_CODES 17    // Size of nucleotide code table
 
@@ -40,6 +39,7 @@ This program is distributed under the terms of the GNU General Public License
 
 /* Command line arguments */
 static int nthread;
+static int sharedr;
 static int distlim;
 static int maxdist;
 static int maxh;
@@ -501,7 +501,55 @@ void fasta_read(const char *fa_file) {
     print_status("Read reference genome: %s\t%s", fa_file, asctime(time_info));
 }
 
-static Vector *bam_fetch(const char *bam_file, const char *region) {
+static int bam_fetch_pos(const char *bam_file, const char *chr, const int pos1, const int pos2, const int returnfirst) {
+    /* Reads in variant j = i + 1 region coordinates */
+    size_t n = snprintf(NULL, 0, "%s:%d-%d", chr, pos1, pos2) + 1;
+    char *region = malloc(n * sizeof *region);
+    snprintf(region, n, "%s:%d-%d", chr, pos1, pos2);
+
+    samFile *sam_in = sam_open(bam_file, "r"); // open bam file
+    if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
+    bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
+    if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
+    hts_idx_t *bam_idx = sam_index_load(sam_in, bam_file); // bam index
+    if (bam_idx == NULL) { exit_err("failed to open BAM index %s\n", bam_file); }
+
+    int first = -1;
+    int last = -1;
+    hts_itr_t *iter = sam_itr_querys(bam_idx, bam_header, region); // read iterator
+    if (iter != NULL) {
+        bam1_t *aln = bam_init1(); // initialize an alignment
+        while (sam_itr_next(sam_in, iter, aln) >= 0) {
+            if (first == -1) {
+                first = aln->core.pos;
+            }
+            else {
+                first = aln->core.pos < first ? aln->core.pos : first;
+            }
+            if (last == -1) {
+                last = aln->core.pos + aln->core.l_qseq;
+            }
+            else {
+                last = aln->core.pos + aln->core.l_qseq > last ? aln->core.pos + aln->core.l_qseq : last;
+            }
+        }
+        bam_destroy1(aln);
+    }
+    hts_itr_destroy(iter);
+    hts_idx_destroy(bam_idx);
+    bam_hdr_destroy(bam_header);
+    sam_close(sam_in);
+    free(region); region = NULL;
+    if (returnfirst) return(first);
+    return(last);
+}
+
+static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
+    /* Reads in variant region coordinates */
+    size_t n = snprintf(NULL, 0, "%s:%d-%d", chr, pos1, pos2) + 1;
+    char *region = malloc(n * sizeof *region);
+    snprintf(region, n, "%s:%d-%d", chr, pos1, pos2);
+
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
@@ -573,6 +621,7 @@ static Vector *bam_fetch(const char *bam_file, const char *region) {
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
     return read_list;
+    free(region); region = NULL;
 }
 
 static Fasta *refseq_fetch(const char *name, const char *fa_file) {
@@ -716,7 +765,7 @@ static inline void variant_print(char **output, const Vector *var_set, size_t i,
 }
 
 static char *evaluate(const Vector *var_set, const char *bam_file, const char *fa_file) {
-    size_t i, n, seti, readi;
+    size_t i, seti, readi;
 
     Variant **var_data = (Variant **)var_set->data;
     size_t nvariants = var_set->size;
@@ -728,12 +777,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     int refseq_length = f->seq_length;
 
     /* Reads in variant region coordinates */
-    n = snprintf(NULL, 0, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos, var_data[nvariants - 1]->pos) + 1;
-    char *region = malloc(n * sizeof *region);
-    snprintf(region, n, "%s:%d-%d", var_data[0]->chr, var_data[0]->pos, var_data[nvariants - 1]->pos);
-
-    Vector *read_list = bam_fetch(bam_file, region);
-    free(region); region = NULL;
+    Vector *read_list = bam_fetch(bam_file, var_data[0]->chr, var_data[0]->pos, var_data[nvariants - 1]->pos);
     if (read_list->size == 0) {
         free(read_list); read_list = NULL;
         return NULL;
@@ -759,10 +803,11 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
     //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", (int)seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
 
     /* Prior probabilities based on variant combinations */
+    double ref_prior = log(0.5 / ncombos);
     double alt_prior = log(0.5 * (1 - hetbias) / ncombos);
     double het_prior = log(0.5 * hetbias / ncombos);
 
-    double ref = 0;
+    double *ref = malloc(ncombos * sizeof *ref);
     double *alt = malloc(ncombos * sizeof *alt);
     double *het = malloc(ncombos * sizeof *het);
     int *ref_count = malloc(ncombos * sizeof *ref_count);
@@ -779,9 +824,11 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
         /* Aligned reads */
         for (readi = 0; readi < nreads; ++readi) {
+            /* Only consider reads that map to all in current combination
             Variant *first = (Variant *)var_combo[seti]->data[0];
             Variant *last = (Variant *)var_combo[seti]->data[var_combo[seti]->size - 1];
             if (read_data[readi]->pos > first->pos || read_data[readi]->pos + read_data[readi]->length < last->pos) continue;
+            */
 
             int is_unmap = 0;
             int is_reverse = 0;
@@ -911,7 +958,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
 
             /* Priors */
-            if (seti == 0) ref += prgu + REFPRIOR;
+            ref[seti] += prgu + ref_prior;
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
             if (debug >= 2) {
@@ -929,7 +976,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         }
         free(altseq); altseq = NULL;
         if (debug >= 1) {
-            fprintf(stderr, "==%d\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref, het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
+            fprintf(stderr, "==%d\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref[seti], het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
             for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
         }
     }
@@ -953,8 +1000,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         }
     }
 
-    double total = ref;
-    for (seti = 0; seti < ncombos; ++seti) { total = log_add_exp(ref, log_add_exp(alt[seti], het[seti])); }
+    double total = log_add_exp(ref[0], log_add_exp(alt[0], het[0]));
+    for (seti = 1; seti < ncombos; ++seti) { total = log_add_exp(total, log_add_exp(ref[seti], log_add_exp(alt[seti], het[seti]))); }
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
@@ -968,15 +1015,16 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 max_seti = seti;
             }
         }
-        variant_print(&output, var_combo[max_seti], 0, (int)nreads, ref_count[max_seti], alt_count[max_seti], total, has_alt, ref);
+        variant_print(&output, var_combo[max_seti], 0, (int)nreads, ref_count[max_seti], alt_count[max_seti], total, has_alt, ref[max_seti]);
     }
     else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < nvariants; ++i) {
             double has_alt = 0;
-            double not_alt = ref;
+            double not_alt = 0;
             int acount = 0;
             int rcount = 0;
             for (seti = 0; seti < ncombos; ++seti) {
+                not_alt = not_alt == 0 ? ref[seti] : log_add_exp(not_alt, ref[seti]);
                 if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
                     has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
                     if (alt_count[seti] > acount) {
@@ -1036,31 +1084,72 @@ static void *pool(void *work) {
 }
 
 void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh) {
-    size_t i, j;
+    size_t i, j, n;
 
     Variant **var_data = (Variant **)var_list->data;
     size_t nvariants = var_list->size;
 
-    /* Variants that are close together as sets */
     i = 0;
     size_t nsets = 0;
     Vector **var_set = malloc((nvariants * 2)  * sizeof (Vector *));
-    while (i < nvariants) {
-        Vector *curr = vector_create(8, VARIANT_T);
-        vector_add(curr, var_data[i]);
-        size_t j = i + 1;
-        while (distlim > 0 && j < nvariants && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) {
-            if (maxdist > 0 && abs(var_data[j]->pos - var_data[i]->pos) > maxdist) break;
-            vector_add(curr, var_data[j++]);
+    if (sharedr == 1) { /* Variants that share a read: shared with a given first variant */
+        while (i < nvariants) {
+            Vector *curr = vector_create(8, VARIANT_T);
+            vector_add(curr, var_data[i]);
+
+            /* Reads in variant i region coordinates */
+            int i_last = bam_fetch_pos(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos, 0);
+
+            j = i + 1;
+            while (j < nvariants && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) {
+                /* Reads in variant j = i + 1 region coordinates */
+                int j_first = bam_fetch_pos(bam_file, var_data[j]->chr, var_data[j]->pos, var_data[j]->pos, 1);
+            
+                if (j_first > i_last) break;
+                vector_add(curr, var_data[j++]);
+            }
+            i = j;
+            var_set[nsets++] = curr;
         }
-        i = j;
-        var_set[nsets++] = curr;
+    }
+    else if (sharedr == 2) { /* Variants that share a read: any sharing with a neighboring variant */
+        while (i < nvariants) {
+            Vector *curr = vector_create(8, VARIANT_T);
+            vector_add(curr, var_data[i]);
+
+            j = i + 1;
+            while (j < nvariants && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) {
+                /* Reads in variant i region coordinates */
+                int i_last = bam_fetch_pos(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos, 0);
+                int j_first = bam_fetch_pos(bam_file, var_data[j]->chr, var_data[j]->pos, var_data[j]->pos, 1);
+            
+                if (j_first > i_last) break;
+                vector_add(curr, var_data[j]);
+                ++i;
+                ++j;
+            }
+            i = j;
+            var_set[nsets++] = curr;
+        }
+    }
+    else { /* Variants that are close together as sets */
+        while (i < nvariants) {
+            Vector *curr = vector_create(8, VARIANT_T);
+            vector_add(curr, var_data[i]);
+            size_t j = i + 1;
+            while (distlim > 0 && j < nvariants && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) {
+                if (maxdist > 0 && abs(var_data[j]->pos - var_data[i]->pos) > maxdist) break;
+                vector_add(curr, var_data[j++]);
+            }
+            i = j;
+            var_set[nsets++] = curr;
+        }
     }
     /* Heterozygous non-reference variants as separate entries */
     int flag_add = 1;
     while (flag_add) {
         flag_add = 0;
-        size_t n = 0;
+        n = 0;
         for (i = 0; i < nsets; ++i) {
             if (var_set[i]->size == 1) continue;
 
@@ -1094,7 +1183,9 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
         }
         nsets += n;
     } 
-    print_status("Variants within %d (max window: %d) bp:\t%i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info));
+    if (sharedr == 1) { print_status("Variants shared reads to first in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
+    else if (sharedr == 2) { print_status("Variants shared reads to any in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
+    else { print_status("Variants within %d (max window: %d) bp:\t%i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
 
     print_status("Start:\t%d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
     Vector *queue = vector_create(nsets, VOID_T);
@@ -1142,7 +1233,8 @@ static void print_usage() {
     printf("Options:\n");
     printf("  -o --out=    FILE   output file (default: stdout)\n");
     printf("  -t --nthread=INT    number of threads to use (default: 1)\n");
-    printf("  -n --distlim=INT    consider nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
+    printf("  -s --sharedr=INT    group nearby variants that share a read as a set of hypotheses (distance based/off: 0, shared with first: 1, shared with any: 2\n");
+    printf("  -n --distlim=INT    group nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
     printf("  -w --maxdist=INT    maximum number of bases between any two variants in a set of hypotheses (off: 0, default: 0)\n");
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
@@ -1158,6 +1250,7 @@ int main(int argc, char **argv) {
     char *fa_file = NULL;
     char *out_file = NULL;
     nthread = 1;
+    sharedr = 0;
     distlim = 10;
     maxdist = 0;
     maxh = 1024;
@@ -1173,6 +1266,7 @@ int main(int argc, char **argv) {
         {"ref", required_argument, NULL, 'r'},
         {"out", optional_argument, NULL, 'o'},
         {"nthread", optional_argument, NULL, 't'},
+        {"sharedr", optional_argument, NULL, 's'},
         {"distlim", optional_argument, NULL, 'n'},
         {"maxdist", optional_argument, NULL, 'w'},
         {"maxh", optional_argument, NULL, 'm'},
@@ -1186,7 +1280,7 @@ int main(int argc, char **argv) {
 
     int opt = 0;
     int option_index = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:n:w:b:m:d:", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:n:w:b:m:d:", long_options, &option_index)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -1196,6 +1290,7 @@ int main(int argc, char **argv) {
             case 'r': fa_file= optarg; break;
             case 'o': out_file = optarg; break;
             case 't': nthread = parse_int(optarg); break;
+            case 's': sharedr = parse_int(optarg); break;
             case 'n': distlim = parse_int(optarg); break;
             case 'w': maxdist = parse_int(optarg); break;
             case 'b': hetbias = parse_float(optarg); break;
@@ -1215,6 +1310,7 @@ int main(int argc, char **argv) {
     }
     if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (nthread < 1) nthread = 1;
+    if (sharedr < 0 || sharedr > 2) sharedr = 0;
     if (distlim < 0) distlim = 10;
     if (maxdist < 0) maxdist = 0;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;

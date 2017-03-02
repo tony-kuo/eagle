@@ -1217,8 +1217,8 @@ static void print_usage() {
     printf("Options:\n");
     printf("  -o --out=    FILE   output file (default: stdout)\n");
     printf("  -t --nthread=INT    number of threads to use (default: 1)\n");
-    printf("  -s --sharedr=INT    group nearby variants that share a read as a set of hypotheses (distance based/off: 0, shared with first: 1, shared with any: 2\n");
-    printf("  -n --distlim=INT    group nearby variants within n bases as a set of hypotheses (off: 0, default: 10)\n");
+    printf("  -s --sharedr=INT    group nearby variants that share a read (default distance based/off: 0, shared with first: 1, shared with any: 2\n");
+    printf("  -n --distlim=INT    group nearby variants within n bases (off: 0, default: 10)\n");
     printf("  -w --maxdist=INT    maximum number of bases between any two variants in a set of hypotheses (off: 0, default: 0)\n");
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");

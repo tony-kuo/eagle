@@ -22,10 +22,10 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/khash.h"
 
 /* Constants */
-#define OMEGA 1.0e-4  // Prior probability of read originating from an outside paralogous source
+#define OMEGA 1.0e-5  // Prior probability of read originating from an outside paralogous source
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
-#define NT_CODES 17    // Size of nucleotide code table
+#define NT_CODES 17   // Size of nucleotide code table
 
 /* Precalculated log values */
 #define M_1_LOG10E (1.0/M_LOG10E)
@@ -501,7 +501,7 @@ void fasta_read(const char *fa_file) {
     print_status("Read reference genome: %s\t%s", fa_file, asctime(time_info));
 }
 
-static int bam_fetch_pos(const char *bam_file, const char *chr, const int pos1, const int pos2, const int returnfirst) {
+static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant j = i + 1 region coordinates */
     size_t n = snprintf(NULL, 0, "%s:%d-%d", chr, pos1, pos2) + 1;
     char *region = malloc(n * sizeof *region);
@@ -514,24 +514,12 @@ static int bam_fetch_pos(const char *bam_file, const char *chr, const int pos1, 
     hts_idx_t *bam_idx = sam_index_load(sam_in, bam_file); // bam index
     if (bam_idx == NULL) { exit_err("failed to open BAM index %s\n", bam_file); }
 
-    int first = -1;
     int last = -1;
     hts_itr_t *iter = sam_itr_querys(bam_idx, bam_header, region); // read iterator
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
-            if (first == -1) {
-                first = aln->core.pos;
-            }
-            else {
-                first = aln->core.pos < first ? aln->core.pos : first;
-            }
-            if (last == -1) {
-                last = aln->core.pos + aln->core.l_qseq;
-            }
-            else {
-                last = aln->core.pos + aln->core.l_qseq > last ? aln->core.pos + aln->core.l_qseq : last;
-            }
+            last = aln->core.pos + aln->core.l_qseq;
         }
         bam_destroy1(aln);
     }
@@ -540,7 +528,6 @@ static int bam_fetch_pos(const char *bam_file, const char *chr, const int pos1, 
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
     free(region); region = NULL;
-    if (returnfirst) return(first);
     return(last);
 }
 
@@ -1100,32 +1087,27 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
             vector_add(curr, var_data[i]);
 
             /* Reads in variant i region coordinates */
-            int i_last = bam_fetch_pos(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos, 0);
+            int i_last = bam_fetch_last(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos);
 
             j = i + 1;
-            while (j < nvariants && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) {
-                /* Reads in variant j = i + 1 region coordinates */
-                int j_first = bam_fetch_pos(bam_file, var_data[j]->chr, var_data[j]->pos, var_data[j]->pos, 1);
-            
-                if (j_first > i_last) break;
+            while (j < nvariants && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) { // while last read in i will reach j
+                if (var_data[j]->pos > i_last) break;
                 vector_add(curr, var_data[j++]);
             }
             i = j;
             var_set[nsets++] = curr;
         }
     }
-    else if (sharedr == 2) { /* Variants that share a read: any sharing with a neighboring variant */
+    else if (sharedr == 2) { /* Variants that share a read: shared with any neighboring variant */
         while (i < nvariants) {
             Vector *curr = vector_create(8, VARIANT_T);
             vector_add(curr, var_data[i]);
 
             j = i + 1;
-            while (j < nvariants && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) {
+            while (j < nvariants && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) { // while last read in i will reach j
                 /* Reads in variant i region coordinates */
-                int i_last = bam_fetch_pos(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos, 0);
-                int j_first = bam_fetch_pos(bam_file, var_data[j]->chr, var_data[j]->pos, var_data[j]->pos, 1);
-            
-                if (j_first > i_last) break;
+                int i_last = bam_fetch_last(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos);
+                if (var_data[j]->pos > i_last) break;
                 vector_add(curr, var_data[j]);
                 ++i;
                 ++j;
@@ -1185,8 +1167,8 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
         }
         nsets += n;
     } 
-    if (sharedr == 1) { print_status("Variants shared reads to first in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
-    else if (sharedr == 2) { print_status("Variants shared reads to any in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
+    if (sharedr == 1) { print_status("Variants with shared reads to first in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
+    else if (sharedr == 2) { print_status("Variants with shared reads to any in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
     else { print_status("Variants within %d (max window: %d) bp:\t%i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
 
     print_status("Start:\t%d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
@@ -1229,8 +1211,8 @@ static void print_usage() {
     printf("Usage: eagle [options] -v variants.vcf -a alignment.bam -r reference.fasta\n");
     printf("\n");
     printf("Required:\n");
-    printf("  -v --vcf=    FILE   variants VCF file (default: stdin)\n");
-    printf("  -a --bam=    FILE   alignment data bam files (ref-coord sorted with bai index file)\n");
+    printf("  -v --vcf=    FILE   variants VCF file, ref-coord sorted (default: stdin)\n");
+    printf("  -a --bam=    FILE   alignment data bam files, ref-coord sorted with bai index file\n");
     printf("  -r --ref=    FILE   reference sequence fasta file with fai index file\n");
     printf("Options:\n");
     printf("  -o --out=    FILE   output file (default: stdout)\n");

@@ -43,6 +43,8 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 -t INT  The number of processes to use. Default is 1.
 
+-s INT  Group/chain nearby variants based on shared reads.  Default is 0 which is off and uses the distance based method instead.  Option 1 will group variants if any read that crosses the first variant also cross the variant under consideration.  Option 2 will group variants if any read that crosses any variant in the set also cross the variant under consideration.  Option 2 will chain together a greater number of variants, such that a full test of all combinations will exceed maxh. Option 1 is typically more computationally efficient and sufficient as a more aggressive chaining than the distance based method.  Alternatively, setting the distance limit to a bigger value (i.e. a third the read length, limited to read length) will yield similar results.
+
 -n INT  Group/chain nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp (0 for off).
 
 -w INT  Maximum number of bases between any two variants in the set of hypotheses. This sets a window size that allows for larger values of -n without chaining an excessive number of variants. Default is 0 bp (off).

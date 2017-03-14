@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -g -Wall -O2 -pthread
 
-HTSDIR = htslib-1.3.1
+HTSDIR = htslib-1.3.2
 INCLUDES = -I$(HTSDIR)
 LFLAGS = -L$(HTSDIR)
 LIBS = $(HTSDIR)/libhts.a -lm -lz -lpthread

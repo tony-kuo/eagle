@@ -327,6 +327,7 @@ void read_destroy(Read *r) {
     if (r == NULL) return;
     r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
     r->prgu = r->prgv = r->pout = 0;
+    r->maxseti = 0;
     free(r->name); r->name = NULL;
     free(r->chr); r->chr = NULL;
     free(r->qseq); r->qseq = NULL;
@@ -559,6 +560,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
             read->prgu = -1000;
             read->prgv = -1000;
             read->pout = -1000;
+            read->maxseti = 0;
 
             int seen_M = 0;
             size_t s_offset = 0; // offset for softclip at start
@@ -938,11 +940,13 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     read_data[readi]->prgu = prgu;
                     read_data[readi]->prgv = prgv;
                     read_data[readi]->pout = pout;
+                    read_data[readi]->maxseti = 0;
                 }
                 else {
-                    read_data[readi]->prgu = prgu > read_data[readi]->prgu ? prgu : read_data[readi]->prgu;
-                    read_data[readi]->prgv = prgv > read_data[readi]->prgv ? prgv : read_data[readi]->prgv;
-                    read_data[readi]->pout = pout > read_data[readi]->pout ? pout : read_data[readi]->pout;
+                    if (prgv > read_data[readi]->prgv) {
+                        read_data[readi]->prgv = prgv;
+                        read_data[readi]->maxseti = seti;
+                    }
                 }
             }
 
@@ -983,7 +987,8 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             else fprintf(stderr, "0\t");
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
-            for (i = 0; i < nvariants; ++i) { fprintf(stderr, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt); }
+            for (i = 0; i < var_combo[read_data[readi]->maxseti]->size; ++i) { Variant *curr = (Variant *)var_combo[read_data[readi]->maxseti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+            //for (i = 0; i < nvariants; ++i) { fprintf(stderr, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt); }
             fprintf(stderr, "\n");
             funlockfile(stderr);
         }

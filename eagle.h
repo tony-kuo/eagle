@@ -38,6 +38,7 @@ typedef struct {
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
     double *qual;
     double prgu, prgv, pout;
+    size_t maxseti;
 } Read;
 
 typedef struct {

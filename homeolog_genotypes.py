@@ -15,8 +15,8 @@
 # lastdb -uNEAR -R01 query query.fa
 # lastal -D10000000000 query -P8 database.fa | last-map-probs -m 0.49 > d2.maf
 
-#python ~/homeolog_genotypes.py -o output -g $GTF d1.maf d2.maf # coordinates based on database.fa
-#cut -f 1,6 output.rna.vcf | sort -k1 | uniq > database.query.txt
+# python ~/homeolog_genotypes.py -o output -g $GTF d1.maf d2.maf # coordinates based on database.fa
+# cut -f 1,6 output.rna.vcf | sort -k1 | uniq > database.query.txt
 
 from __future__ import print_function;
 import argparse;

@@ -500,7 +500,7 @@ void fasta_read(const char *fa_file) {
     free(line); line = NULL;
     fclose(file);
     fai_destroy(fai);
-    if (debug == 0) { print_status("Read reference genome: %s\t%s", fa_file, asctime(time_info)); }
+    print_status("# Read reference genome: %s\t%s", fa_file, asctime(time_info));
 }
 
 static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1, const int pos2) {
@@ -1173,12 +1173,12 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
         }
         nsets += n;
     } 
-    if (debug == 0 && sharedr == 1) { print_status("Variants with shared reads to first in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
-    else if (debug == 0 && sharedr == 2) { print_status("Variants with shared reads to any in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
-    else if (debug == 0) { print_status("Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
+    if (sharedr == 1) { print_status("# Variants with shared reads to first in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
+    else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
+    else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
 
-    if (debug == 0) { print_status("Options: maxh=%d mvh=%d pao=%d isc=%d\n", maxh, mvh, pao, isc); }
-    if (debug == 0) { print_status("Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info)); }
+    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d\n", maxh, mvh, pao, isc);
+    print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
     Vector *queue = vector_create(nsets, VOID_T);
     Vector *results = vector_create(nsets, VOID_T);
     for (i = 0; i < nsets; ++i) {
@@ -1206,11 +1206,11 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     free(var_set); var_set = NULL;
 
     qsort(results->data, results->size, sizeof (void *), nat_sort_str);
-    fprintf(out_fh, "#SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");
+    fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");
     for (i = 0; i < results->size; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;
-    if (debug == 0) { print_status("Done:\t%s\t%s", bam_file, asctime(time_info)); }
+    print_status("# Done:\t%s\t%s", bam_file, asctime(time_info));
 }
 
 static void print_usage() {
@@ -1340,7 +1340,7 @@ int main(int argc, char **argv) {
     /* Start processing data */
     clock_t tic = clock();
     Vector *var_list = vcf_read(vcf_fh);
-    if (debug == 0) { print_status("Read VCF: %s\t%i entries\t%s", vcf_file, (int)var_list->size, asctime(time_info)); }
+    print_status("# Read VCF: %s\t%i entries\t%s", vcf_file, (int)var_list->size, asctime(time_info));
 
     refseq_hash = kh_init(rsh);
     //fasta_read(fa_file);
@@ -1350,7 +1350,7 @@ int main(int argc, char **argv) {
     pthread_mutex_destroy(&refseq_lock);
 
     clock_t toc = clock();
-    if (debug == 0) { print_status("CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600); }
+    print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
 	khiter_t k;
     for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {

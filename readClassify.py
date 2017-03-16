@@ -17,8 +17,9 @@
 from __future__ import print_function;
 import argparse;
 import sys;
-from numpy import logaddexp;
+import numpy as np;
 from re import split, match;
+from datetime import datetime;
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL) 
 
@@ -39,43 +40,36 @@ def readVar(fn):
             else:
                 entry.extend(["{},{}".format(t[0], a) for a in split(';', t[9][1:-1])[0:-1]]);
 
-    print("Read:\t{0}\t{1} variants".format(fn, len(entry)), file=sys.stderr);
+    print("Read:\t{}\t{} variants\t{}".format(fn, len(entry), datetime.now()), file=sys.stderr);
     return(entry);
 
-def readEAGLE(files, varlist):
+def readEAGLE(fn, varlist):
+    #B_genome_base-36324     Chr1    999796  -70.812579      -60.964306      -92.313537      150M    0       PAIRED,PROPER_PAIR,REVERSE,READ2        Chr1,999943,C,T;
+    fh = open(fn);
+    tabletype = np.dtype([('rid','O'), ('chr','O'), ('pos','O'), ('prgu',float), ('prgv',float), ('pout',float), ('cigar','O'), ('multimap','O'), ('flags','O'), ('var','O')])
+    table = np.loadtxt(fh, dtype=tabletype, delimiter='\t');
+
     entry = {};
-    for fn in files: 
-        with open(fn, 'r') as fh:
-            for line in fh:
-                if match('^#', line): continue;
+    for i in range(0, len(table)):
+        rid = table['rid'][i];
+        if rid not in entry:
+            entry[rid] = {};
+            entry[rid]['var'] = {};
+            entry[rid]['prgu'] = table['prgu'][i];
+            entry[rid]['prgv'] = table['prgv'][i];
+            entry[rid]['pout'] = table['pout'][i];
+            entry[rid]['mult'] = False;
+        else:
+            entry[rid]['prgu'] = np.logaddexp(table['prgu'][i], entry[rid]['prgu']);
+            entry[rid]['prgu'] = np.logaddexp(table['prgv'][i], entry[rid]['prgv']);
+        entry[rid]['var'][table['var'][i]] = 0;
+        
+        if varlist and entry[rid]['mult'] == False: # check for the "ref-like allele" in multi-allelic variants
+            for v in table['var'][i].split(';')[0:-1]:
+                entry[rid]['mult'] = True;
+                break;
 
-                t = line.strip().split('\t');
-                if (len(t) < 10): continue;
-
-                rid = t[0];
-                prgu = float(t[3]);
-                prgv = float(t[4]);
-                pout = float(t[5]);
-
-                if rid not in entry:
-                    entry[rid] = {};
-                    entry[rid]['var'] = {};
-                    entry[rid]['prgu'] = prgu;
-                    entry[rid]['prgv'] = prgv;
-                    entry[rid]['pout'] = pout;
-                    entry[rid]['mult'] = False;
-                else:
-                    entry[rid]['prgu'] = logaddexp(prgu, entry[rid]['prgu']);
-                    entry[rid]['prgv'] = logaddexp(prgv, entry[rid]['prgv']);
-                entry[rid]['var'][t[-1]] = 0;
-
-                if varlist and entry[rid]['mult'] == False: # check for the "ref-like allele" in multi-allelic variants
-                    for v in t[-1].split(';')[0:-1]:
-                        if v not in varlist: 
-                            entry[rid]['mult'] = True;
-                            break;
-
-    print("Read:\t{0}\t{1} entries".format(files, len(entry)), file=sys.stderr);
+    print("Read:\t{}\t{} entries\t{}".format(fn, len(entry), datetime.now()), file=sys.stderr);
     return(entry);
 
 def classifyReads(entry):
@@ -174,7 +168,7 @@ def classifySAM(sam, prefix, ref, alt, unk, mul):
 
 def main():
     parser = argparse.ArgumentParser(description="Classify reads based on EAGLE read likelihoods from -d -1 mode");
-    parser.add_argument('files', nargs='+', help="EAGLE read info files");
+    parser.add_argument('files', help="EAGLE read info file");
     parser.add_argument('-o', type=str, help="output files prefix for SAM files");
     parser.add_argument('-s', type=str, default="", help="corresponding SAM file of reads to be classified (- for piped input)");
     parser.add_argument('-v', type=str, default="", help="corresponding EAGLE results (with --mvh) for variant phase information");

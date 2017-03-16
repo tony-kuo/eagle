@@ -1177,6 +1177,7 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     else if (sharedr == 2) { print_status("Variants with shared reads to any in set:\t%i entries\t%s", (int)nsets, asctime(time_info)); }
     else { print_status("Variants within %d (max window: %d) bp:\t%i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
 
+    print_status("Options: maxh=%d\tmvh=%d\tpao=%d\tisc=%d\n", maxh, mvh, pao, isc);
     print_status("Start:\t%d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
     Vector *queue = vector_create(nsets, VOID_T);
     Vector *results = vector_create(nsets, VOID_T);

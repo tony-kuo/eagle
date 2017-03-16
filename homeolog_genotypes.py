@@ -6,10 +6,9 @@
 # Utility Script
 # Finds reciprocal best hit mRNA transcripts from LAST MAF output
 # Determines sequences differences as putative candidate variants / genotypes
-# Writes genotypes into VCFs in the RNA and DNA coordinates of the "database" reference genome
+# Writes genotypes into VCFs in the RNA and DNA coordinates of the reference genome
 
-# Example:
-## LAST on transcripts, database is the REF's transcripts
+# Example: running LAST on transcripts, database is the REF's transcripts, query is the ALT's transcripts
 # lastdb -uNEAR -R01 database database.fa
 # lastal -D10000000000 database -P8 query.fa | last-map-probs -m 0.49 > d1.maf
 # lastdb -uNEAR -R01 query query.fa

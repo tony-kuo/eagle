@@ -184,7 +184,6 @@ def main():
         sys.exit(1);
     args = parser.parse_args();
 
-
     if args.l:
         (ref, alt, unk, mul) = readLIST(args.files);
     else:

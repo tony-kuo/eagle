@@ -22,7 +22,6 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/khash.h"
 
 /* Constants */
-#define OMEGA 1.0e-5  // Prior probability of read originating from an outside paralogous source
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
 #define NT_CODES 17   // Size of nucleotide code table
@@ -35,7 +34,6 @@ This program is distributed under the terms of the GNU General Public License
 #define LG10 (log(0.1))
 #define LG90 (log(0.9))
 #define LGALPHA (log(ALPHA))
-#define LGOMEGA (log(OMEGA) - log(1.0-OMEGA))
 
 /* Command line arguments */
 static int nthread;
@@ -48,6 +46,7 @@ static int pao;
 static int isc;
 static int debug;
 static double hetbias;
+static double omega, lgomega;
 
 /* Time info */
 static time_t now; 
@@ -307,7 +306,7 @@ static int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
     return cmp;
 }
 
-static int nat_sort_str(const void *a, const void *b) {
+static int nat_sort_vector(const void *a, const void *b) {
     return nat_sort_cmp(a, b, VOID_T);
 }
 
@@ -505,10 +504,6 @@ void fasta_read(const char *fa_file) {
 
 static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant j = i + 1 region coordinates */
-    size_t n = snprintf(NULL, 0, "%s:%d-%d", chr, pos1, pos2) + 1;
-    char *region = malloc(n * sizeof *region);
-    snprintf(region, n, "%s:%d-%d", chr, pos1, pos2);
-
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
@@ -517,7 +512,8 @@ static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1,
     if (bam_idx == NULL) { exit_err("failed to open BAM index %s\n", bam_file); }
 
     int last = -1;
-    hts_itr_t *iter = sam_itr_querys(bam_idx, bam_header, region); // read iterator
+    int tid = bam_name2id(bam_header, chr);
+    hts_itr_t *iter = sam_itr_queryi(bam_idx, tid, pos1-1, pos2); // read iterator
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
@@ -529,15 +525,12 @@ static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1,
     hts_idx_destroy(bam_idx);
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
-    free(region); region = NULL;
     return(last);
 }
 
 static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant region coordinates */
-    size_t n = snprintf(NULL, 0, "%s:%d-%d", chr, pos1, pos2) + 1;
-    char *region = malloc(n * sizeof *region);
-    snprintf(region, n, "%s:%d-%d", chr, pos1, pos2);
+    Vector *read_list = vector_create(64, READ_T);
 
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
@@ -546,8 +539,8 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
     hts_idx_t *bam_idx = sam_index_load(sam_in, bam_file); // bam index
     if (bam_idx == NULL) { exit_err("failed to open BAM index %s\n", bam_file); }
 
-    Vector *read_list = vector_create(64, READ_T);
-    hts_itr_t *iter = sam_itr_querys(bam_idx, bam_header, region); // read iterator
+    int tid = bam_name2id(bam_header, chr);
+    hts_itr_t *iter = sam_itr_queryi(bam_idx, tid, pos1-1, pos2); // read iterator
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
@@ -611,7 +604,6 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
     return read_list;
-    free(region); region = NULL;
 }
 
 static Fasta *refseq_fetch(const char *name, const char *fa_file) {
@@ -742,9 +734,9 @@ static inline void variant_print(char **output, const Vector *var_set, size_t i,
     strcat(*output, "[");
     if (nvariants > 1) {
         for (i = 0; i < nvariants; ++i) {
-            n = snprintf(NULL, 0, "%d,%s,%s;", var_data[i]->pos, var_data[i]->ref, var_data[i]->alt) + 1;
+            n = snprintf(NULL, 0, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt) + 1;
             token = malloc(n * sizeof *token);
-            snprintf(token, n, "%d,%s,%s;", var_data[i]->pos, var_data[i]->ref, var_data[i]->alt);
+            snprintf(token, n, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt);
             str_resize(output, strlen(*output) + n);
             strcat(*output, token);
             free(token); token = NULL;
@@ -920,7 +912,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
-            pout += LGOMEGA;
+            pout += lgomega;
             prgu = log_add_exp(pout, prgu);
             prgv = log_add_exp(pout, prgv);
 
@@ -980,16 +972,17 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             flockfile(stderr);
             fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
             fprintf(stderr, "%f\t%f\t%f\t", read_data[readi]->prgu, read_data[readi]->prgv, read_data[readi]->pout);
-            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
             if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
             else if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
             else fprintf(stderr, "0\t");
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
+            fprintf(stderr, "[");
             for (i = 0; i < var_combo[read_data[readi]->maxseti]->size; ++i) { Variant *curr = (Variant *)var_combo[read_data[readi]->maxseti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
             //for (i = 0; i < nvariants; ++i) { fprintf(stderr, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt); }
-            fprintf(stderr, "\n");
+            fprintf(stderr, "]\n");
             funlockfile(stderr);
         }
     }
@@ -1177,7 +1170,7 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
     else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
 
-    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d\n", maxh, mvh, pao, isc);
+    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d omega=%g\n", maxh, mvh, pao, isc, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
     Vector *queue = vector_create(nsets, VOID_T);
     Vector *results = vector_create(nsets, VOID_T);
@@ -1205,7 +1198,7 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
     free(w); w = NULL;
     free(var_set); var_set = NULL;
 
-    qsort(results->data, results->size, sizeof (void *), nat_sort_str);
+    qsort(results->data, results->size, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");
     for (i = 0; i < results->size; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
@@ -1231,7 +1224,8 @@ static void print_usage() {
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
     printf("     --pao            consider primary alignments only\n");
     printf("     --isc            ignore soft-clipped bases\n");
-    printf("  -b --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
+    printf("     --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
+    printf("     --omega=  FLOAT  prior probability of originating from outside paralogous source (value between [0,1], default: 1e-5)\n");
 }
 
 int main(int argc, char **argv) {
@@ -1250,6 +1244,7 @@ int main(int argc, char **argv) {
     isc = 0;
     debug = 0;
     hetbias = 0.5;
+    omega = 1.0e-5;
 
     static struct option long_options[] = {
         {"vcf", required_argument, NULL, 'v'},
@@ -1265,13 +1260,13 @@ int main(int argc, char **argv) {
         {"pao", no_argument, &pao, 1},
         {"isc", no_argument, &isc, 1},
         {"debug", optional_argument, NULL, 'd'},
-        {"hetbias", optional_argument, NULL, 'b'},
+        {"hetbias", optional_argument, NULL, 990},
+        {"omega", optional_argument, NULL, 991},
         {0, 0, 0, 0}
     };
 
     int opt = 0;
-    int option_index = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:n:w:b:m:d:", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:n:w:m:d:", long_options, &opt)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -1284,12 +1279,14 @@ int main(int argc, char **argv) {
             case 's': sharedr = parse_int(optarg); break;
             case 'n': distlim = parse_int(optarg); break;
             case 'w': maxdist = parse_int(optarg); break;
-            case 'b': hetbias = parse_float(optarg); break;
             case 'm': maxh = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
-            default: exit_usage("Bad program call");
+            case 990: hetbias = parse_float(optarg); break;
+            case 991: omega = parse_float(optarg); break;
+            default: exit_usage("Bad options");
         }
     }
+    if (optind > argc) { exit_usage("Bad program call"); }
 
     FILE *vcf_fh = stdin;
     if (vcf_file != NULL) { // default vcf file handle is stdin unless a vcf file option is used
@@ -1299,13 +1296,16 @@ int main(int argc, char **argv) {
     else {
         vcf_file = "stdin";
     }
-    if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
+    if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } 
+    if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (nthread < 1) nthread = 1;
     if (sharedr < 0 || sharedr > 2) sharedr = 0;
     if (distlim < 0) distlim = 10;
     if (maxdist < 0) maxdist = 0;
-    if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (maxh < 0) maxh = 1024;
+    if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
+    if (omega < 0 || omega > 1) omega = 1e-5;
+    lgomega = (log(omega) - log(1.0-omega));
 
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used

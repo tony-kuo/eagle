@@ -243,7 +243,7 @@ static void add_to_varlist(Vector *var_list, char *set) {
         v->pos = pos;
         v->ref = strdup(ref);
         v->alt = strdup(alt);
-        if (variant_find(var_list, v) == -1) vector_add(var_list, v);
+        vector_add(var_list, v);
         if (*(s + n) == ']') break;
     }
 }

@@ -445,8 +445,20 @@ void classify_reads(Vector *var_list, const char* bam_file, const char *output_p
 
     bam1_t *aln = bam_init1(); // initialize an alignment
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
-        char *name = (char *)aln->data;
+        /* Mapped & Primary alignments only */
+        int n;
+        int is_unmap = 0;
+        int is_secondary = 0;
+        char *s, token[strlen(bam_flag2str(aln->core.flag)) + 1];
+        for (s = bam_flag2str(aln->core.flag); sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+            if (strcmp("UNMAP", token) == 0) is_unmap = 1;
+            else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
+            if (*(s + n) != ',') break;
+        }
+        if (is_unmap || is_secondary) continue;
 
+        /* Write reads to appropriate file */
+        char *name = (char *)aln->data;
         if (str_find(ref, name) >= 0) {
             out = ref_out;
         }

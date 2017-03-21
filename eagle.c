@@ -1199,9 +1199,7 @@ void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh
 }
 
 static void print_usage() {
-    printf("\n");
-    printf("Usage: eagle [options] -v variants.vcf -a alignment.bam -r reference.fasta\n");
-    printf("\n");
+    printf("\nUsage: eagle [options] -v variants.vcf -a alignment.bam -r reference.fasta\n\n");
     printf("Required:\n");
     printf("  -v --vcf=    FILE   variants VCF file (default: stdin)\n");
     printf("  -a --bam=    FILE   alignment data bam files, ref-coord sorted with bai index file\n");

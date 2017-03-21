@@ -1,7 +1,5 @@
 /*
-EAGLE: explicit alternative genome likelihood evaluator
-Given the sequencing data and candidate variant, explicitly test 
-the alternative hypothesis against the reference hypothesis
+Utility program that classifies reads based on EAGLE calculated likelihoods
 
 Copyright 2016 Tony Kuo
 This program is distributed under the terms of the GNU General Public License

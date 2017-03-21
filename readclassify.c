@@ -216,27 +216,18 @@ void vector_destroy(Vector *a) {
     free(a->data); a->data = NULL;
 }
 
-static inline int variant_find(const Vector *a, const Variant *v, const int sorted) {
+static inline int variant_find(const Vector *a, const Variant *v) {
     int i = 0;
-    if (sorted) {
-        int j = a->size - 1;
-        int n = (i + j) / 2;
-        while (i <= j) {
-            Variant *curr = (Variant *)a->data[n];
-            if (strcmp(v->chr, curr->chr) == 0 && strcmp(v->ref, curr->ref) == 0 && strcmp(v->alt, curr->alt) == 0 && v->pos == curr->pos) return n;
-            if (v->pos > curr->pos) i = n + 1;
-            else j = n - 1;
-            n = (i + j) / 2;
-        }
-        return -1;
+    int j = a->size - 1;
+    int n = (i + j) / 2;
+    while (i <= j) {
+        Variant *curr = (Variant *)a->data[n];
+        if (strcmp(v->chr, curr->chr) == 0 && strcmp(v->ref, curr->ref) == 0 && strcmp(v->alt, curr->alt) == 0 && v->pos == curr->pos) return n;
+        if (v->pos > curr->pos) i = n + 1;
+        else j = n - 1;
+        n = (i + j) / 2;
     }
-    else {
-        for (i = 0; i < a->size; ++i) {
-            Variant *curr = (Variant *)a->data[i];
-            if (strcmp(v->chr, curr->chr) == 0 && strcmp(v->ref, curr->ref) == 0 && strcmp(v->alt, curr->alt) == 0 && v->pos == curr->pos) return i;
-        }
-        return -1;
-    }
+    return -1;
 }
 
 static void add_to_varlist(Vector *var_list, char *set) {
@@ -252,7 +243,7 @@ static void add_to_varlist(Vector *var_list, char *set) {
         v->pos = pos;
         v->ref = strdup(ref);
         v->alt = strdup(alt);
-        if (variant_find(var_list, v, 0) == -1) vector_add(var_list, v);
+        if (variant_find(var_list, v) == -1) vector_add(var_list, v);
         if (*(s + n) == ']') break;
     }
 }
@@ -381,7 +372,7 @@ void classify_reads(Vector *var_list, const char* bam_file, const char *output_p
                 }
                 multiallele = 0;
                 for (i = 0; i < nvariants; ++i) { // check if variants are not in the EAGLE output, suggesting variants in a different phase, 
-                    if (variant_find(var_list, v[i], 1) == -1) multiallele = 1;
+                    if (variant_find(var_list, v[i]) == -1) multiallele = 1;
                 }
                 if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
                     vector_add(ref, r[readi]->name);

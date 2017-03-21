@@ -10,6 +10,7 @@ MAIN = eagle
 
 all: HTSLIB
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(LIBS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) readclassify.c -o readclassify $(LIBS)
 
 HTSLIB:
 	$(MAKE) -C $(HTSDIR)/

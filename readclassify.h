@@ -23,7 +23,7 @@ This program is distributed under the terms of the GNU General Public License
 #define exit_err(M, ...) fprintf(stderr, "ERROR: (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__); exit(EXIT_FAILURE)
 #define exit_usage(M, ...) print_usage(); fprintf(stderr, "\n" M "\n"); exit(EXIT_FAILURE)
 
-enum type {VOID_T, STR_T, VARIANT_T, READ_T};
+enum type {VOID_T, STR_T, READ_T};
 
 typedef struct {
     size_t size, capacity;
@@ -42,17 +42,11 @@ void vector_destroy(Vector *a);
 
 typedef struct {
     int pos;
-    char *chr, *ref, *alt;
-} Variant;
-
-typedef struct {
-    int pos;
     char *name, *chr;
     double prgu, prgv, pout;
     Vector *var_list;
 } Read;
 
-void freeVariant(Variant *v);
 void freeRead(Read *r);
 
 #endif

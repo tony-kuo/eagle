@@ -1339,14 +1339,15 @@ int main(int argc, char **argv) {
     process(var_list, bam_file, fa_file, out_fh);
     pthread_mutex_destroy(&refseq_lock);
 
+    khiter_t k;
+    for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {
+        if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
+    }
+    kh_destroy(rsh, refseq_hash);
+    vector_destroy(var_list); free(var_list); var_list = NULL;
+
     clock_t toc = clock();
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
-	khiter_t k;
-    for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {
-		if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
-    }
-	kh_destroy(rsh, refseq_hash);
-    vector_destroy(var_list); free(var_list); var_list = NULL;
     return 0;
 }

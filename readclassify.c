@@ -480,6 +480,8 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
             }
         }
     }
+    fflush(stdout);
+    print_status("# Reads Classified:\t%s", asctime(time_info));
 
     if (!listonly) {
         qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
@@ -488,6 +490,7 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
         qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
 
         process_bam(bam_file, output_prefix, ref, alt, mul, unk);
+        print_status("# BAM Processed:\t%s", asctime(time_info));
     }
     vector_free(ref); free(ref); ref = NULL;
     vector_free(alt); free(alt); alt = NULL;
@@ -528,7 +531,7 @@ static void process_list(const char *filename, const char *bam_file, const char 
     }
     free(line); line = NULL;
     fclose(file);
-    print_status("# Read classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
+    print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
 
     qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
     qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
@@ -536,6 +539,7 @@ static void process_list(const char *filename, const char *bam_file, const char 
     qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
 
     process_bam(bam_file, output_prefix, ref, alt, mul, unk);
+    print_status("# BAM Processed:\t%s", asctime(time_info));
 
     vector_destroy(ref); free(ref); ref = NULL;
     vector_destroy(alt); free(alt); alt = NULL;
@@ -625,7 +629,6 @@ int main(int argc, char **argv) {
     }
 
     clock_t toc = clock();
-    print_status("# Done:\t%s\t%s", readinfo_file, asctime(time_info));
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
     return 0;

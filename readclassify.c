@@ -220,7 +220,7 @@ static int var_read(const char* filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open file %s\n", filename); }
 
-    int nvar = 0;
+    int nvars = 0;
     char *line = NULL;
     ssize_t read_file = 0;
     size_t line_length = 0;
@@ -255,21 +255,22 @@ static int var_read(const char* filename) {
             }
             vector_add(node, v);
 
-            ++nvar;
+            ++nvars;
             if (*(s + n) == ']') break;
         }
 
     }
     free(line); line = NULL;
     fclose(file);
-    return(nvar);
+    return nvars;
 }
 
-static void readinfo_read(const char* filename) {
+static int readinfo_read(const char* filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open file %s\n", filename); }
 
     size_t i;
+    int nreads = 0;
     char *line = NULL;
     ssize_t read_file = 0;
     size_t line_length = 0;
@@ -314,10 +315,12 @@ static void readinfo_read(const char* filename) {
             Vector *node = &kh_val(read_hash, k);
             if (absent) vector_init(node, 8, READ_T);
             vector_add(node, r);
+            ++nreads;
         }
     }
     free(line); line = NULL;
     fclose(file);
+    return nreads;
 }
 
 void classify_reads(const char* bam_file, const char *output_prefix) {
@@ -542,11 +545,12 @@ int main(int argc, char **argv) {
     clock_t tic = clock();
 
     var_hash = kh_init(vh);
-    int nvar = var_read(var_file);
-    print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, nvar, asctime(time_info));
+    int nvars = var_read(var_file);
+    print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, nvars, asctime(time_info));
 
     read_hash = kh_init(rh);
-    readinfo_read(readinfo_file);
+    int nreads = readinfo_read(readinfo_file);
+    print_status("# Read EAGLE: %s\t%i reads\t%s", readinfo_file, nreads, asctime(time_info));
 
     classify_reads(bam_file, output_prefix);
 

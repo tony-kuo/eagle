@@ -422,18 +422,15 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
                     multiallele = 1;
                     int prev_pos = -1;
-                    for (i = 1; i < nvariants; ++i) { 
+                    for (i = 0; i < nvariants; ++i) { 
                         int pos;
                         int t = sscanf(v[i], "%*[^,],%d,%*[^,],%*[^,],", &pos);
                         if (t < 1) { exit_err("bad fields in %s\n", v[i]); }
-                        if (prev_pos == -1) {
-                            prev_pos = pos;
-                            continue;
-                        }
-                        if (pos - prev_pos != 0) {
+                        if (prev_pos != -1 && pos - prev_pos != 0) {
                             multiallele = 0;
                             break;
                         }
+                        prev_pos = pos;
                     }
                     if (multiallele) {
                         vector_add(mul, r[readi]->name);

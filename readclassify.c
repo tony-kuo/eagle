@@ -283,7 +283,6 @@ static int readinfo_read(const char* filename) {
         char name[line_length], chr[line_length], set[line_length];
         int t = sscanf(line, "%s %s %d %lf %lf %lf %*[^\t] %*[^\t] %*[^\t] %s", name, chr, &pos, &prgu, &prgv, &pout, set);
         if (t < 7) { exit_err("bad fields in EAGLE read info file\n"); }
-        //fprintf(stderr, "%d\t%s %s %d %f %f %f %s\n", t, name, chr, pos, prgu, prgv, pout, set);
 
         khiter_t k = kh_get(rh, read_hash, name);
         if (k != kh_end(read_hash)) {
@@ -323,7 +322,87 @@ static int readinfo_read(const char* filename) {
     return nreads;
 }
 
-void classify_reads(const char* bam_file, const char *output_prefix) {
+static void process_bam(const char *bam_file, const char *output_prefix, const Vector *ref, const Vector *alt, const Vector *mul, const Vector *unk) {
+    samFile *sam_in = sam_open(bam_file, "r"); // open bam file
+    if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
+    bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
+    if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
+
+    /* Split input bam files into respectively categories' output bam files */
+    samFile *out;
+    char out_fn[999];
+
+    snprintf(out_fn, 999, "%s.ref.bam", output_prefix);
+    samFile *ref_out = sam_open(out_fn, "wb"); // write bam
+    if (ref_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+    if (sam_hdr_write(ref_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+
+    snprintf(out_fn, 999, "%s.alt.bam", output_prefix);
+    samFile *alt_out = sam_open(out_fn, "wb"); // write bam
+    if (alt_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+    if (sam_hdr_write(alt_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+
+    snprintf(out_fn, 999, "%s.mul.bam", output_prefix);
+    samFile *mul_out = sam_open(out_fn, "wb"); // write bam
+    if (mul_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+    if (sam_hdr_write(mul_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+
+    snprintf(out_fn, 999, "%s.com.bam", output_prefix);
+    samFile *com_out = sam_open(out_fn, "wb"); // write bam
+    if (com_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+    if (sam_hdr_write(com_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+
+    bam1_t *aln = bam_init1(); // initialize an alignment
+    while (sam_read1(sam_in, bam_header, aln) >= 0) {
+        /* Mapped & Primary alignments only */
+        int n;
+        int is_unmap = 0;
+        int is_secondary = 0;
+        char *flag = bam_flag2str(aln->core.flag);
+        char *s, token[strlen(flag) + 1];
+        for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+            if (strcmp("UNMAP", token) == 0) is_unmap = 1;
+            else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
+            if (*(s + n) != ',') break;
+        }
+        free(flag); flag = NULL;
+        if (is_unmap || is_secondary) continue;
+
+        /* Write reads to appropriate file */
+        char *name = (char *)aln->data;
+        if (str_find(ref, name) >= 0) {
+            out = ref_out;
+        }
+        else if (str_find(alt, name) >= 0) {
+            out = alt_out;
+        }
+        else if (str_find(mul, name) >= 0) {
+            out = alt_out;
+        }
+        else if (str_find(unk, name) == -1) {
+            out = com_out;
+        }
+        else {
+            out = NULL;
+        }
+
+        if (out != NULL) {
+            int r = sam_write1(out, bam_header, aln);
+            if (r < 0) { exit_err("Bad program call"); }
+        }
+    }
+    bam_destroy1(aln);
+    bam_hdr_destroy(bam_header);
+    sam_close(sam_in);
+
+    out = NULL;
+    sam_close(ref_out);
+    sam_close(alt_out);
+    sam_close(mul_out);
+    sam_close(com_out);
+}
+
+static void classify_reads(const char *bam_file, const char *output_prefix) {
     Vector *ref = vector_create(64, VOID_T); // reference
     Vector *alt = vector_create(64, VOID_T); // alternative
     Vector *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
@@ -408,85 +487,60 @@ void classify_reads(const char* bam_file, const char *output_prefix) {
         qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
         qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
 
-        samFile *sam_in = sam_open(bam_file, "r"); // open bam file
-        if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
-        bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
-        if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
-
-        /* Split input bam files into respectively categories' output bam files */
-        samFile *out;
-        char out_fn[999];
-
-        snprintf(out_fn, 999, "%s.ref.bam", output_prefix);
-        samFile *ref_out = sam_open(out_fn, "wb"); // write bam
-        if (ref_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-        if (sam_hdr_write(ref_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
-
-        snprintf(out_fn, 999, "%s.alt.bam", output_prefix);
-        samFile *alt_out = sam_open(out_fn, "wb"); // write bam
-        if (alt_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-        if (sam_hdr_write(alt_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
-
-        snprintf(out_fn, 999, "%s.mul.bam", output_prefix);
-        samFile *mul_out = sam_open(out_fn, "wb"); // write bam
-        if (mul_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-        if (sam_hdr_write(mul_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
-
-        snprintf(out_fn, 999, "%s.com.bam", output_prefix);
-        samFile *com_out = sam_open(out_fn, "wb"); // write bam
-        if (com_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-        if (sam_hdr_write(com_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
-
-        bam1_t *aln = bam_init1(); // initialize an alignment
-        while (sam_read1(sam_in, bam_header, aln) >= 0) {
-            /* Mapped & Primary alignments only */
-            int n;
-            int is_unmap = 0;
-            int is_secondary = 0;
-            char *flag = bam_flag2str(aln->core.flag);
-            char *s, token[strlen(flag) + 1];
-            for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-                if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
-                if (*(s + n) != ',') break;
-            }
-            free(flag); flag = NULL;
-            if (is_unmap || is_secondary) continue;
-
-            /* Write reads to appropriate file */
-            char *name = (char *)aln->data;
-            if (str_find(ref, name) >= 0) {
-                out = ref_out;
-            }
-            else if (str_find(alt, name) >= 0) {
-                out = alt_out;
-            }
-            else if (str_find(mul, name) >= 0) {
-                out = alt_out;
-            }
-            else {
-                out = com_out;
-            }
-
-            if (out != NULL) {
-                int r = sam_write1(out, bam_header, aln);
-                if (r < 0) { exit_err("Bad program call"); }
-            }
-        }
-        bam_destroy1(aln);
-        bam_hdr_destroy(bam_header);
-        sam_close(sam_in);
-
-        out = NULL;
-        sam_close(ref_out);
-        sam_close(alt_out);
-        sam_close(mul_out);
-        sam_close(com_out);
+        process_bam(bam_file, output_prefix, ref, alt, mul, unk);
     }
     vector_free(ref); free(ref); ref = NULL;
     vector_free(alt); free(alt); alt = NULL;
     vector_free(mul); free(mul); mul = NULL;
     vector_free(unk); free(unk); unk = NULL;
+}
+
+static void process_list(const char *filename, const char *bam_file, const char *output_prefix) {
+    FILE *file = fopen(filename, "r");
+    if (file == NULL) { exit_err("failed to open file %s\n", filename); }
+
+    Vector *ref = vector_create(64, VOID_T); // reference
+    Vector *alt = vector_create(64, VOID_T); // alternative
+    Vector *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
+    Vector *unk = vector_create(64, VOID_T); // unknown, ambiguous with equal likelihoods for reference and alternative
+
+    int nreads = 0;
+    char *line = NULL;
+    ssize_t read_file = 0;
+    size_t line_length = 0;
+    while ((read_file = getline(&line, &line_length, file)) != -1) {
+        if (line_length <= 0 || line[strspn(line, " \t\v\r\n")] == '\0') continue; // blank line
+        if (line[0] == '#') continue;
+
+        char type[line_length], name[line_length];
+        int t = sscanf(line, "%s %s %*[^\n]", type, name);
+        if (t < 2) { exit_err("bad fields in read classified list file\n"); }
+
+        char *r = strdup(name);
+        if (strcmp("REF=", type) == 0 || strcmp("RLA=", type) == 0) vector_add(ref, r);
+        else if (strcmp("ALT=", type) == 0) vector_add(alt, r);
+        else if (strcmp("MUL=", type) == 0) vector_add(mul, r);
+        else if (strcmp("UNK=", type) == 0) vector_add(unk, r);
+        else {
+            free(r); r = NULL;
+        }
+        ++nreads;
+    }
+    free(line); line = NULL;
+    fclose(file);
+    print_status("# Read classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
+
+    qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
+    qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
+    qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
+    qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
+
+    process_bam(bam_file, output_prefix, ref, alt, mul, unk);
+
+    vector_destroy(ref); free(ref); ref = NULL;
+    vector_destroy(alt); free(alt); alt = NULL;
+    vector_destroy(mul); free(mul); mul = NULL;
+    vector_destroy(unk); free(unk); unk = NULL;
 }
 
 static void print_usage() {
@@ -496,9 +550,9 @@ static void print_usage() {
     printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc -d -1 1> out.txt  2> readinfo.txt\n\n");
     printf("Options:\n");
     printf("  -o --out=     String   output prefix for sam files\n");
-    printf("  -a --bam=     FILE     alignment data BAM files corresponding to EAGLE output\n");
-    printf("     --listonly          print classified read list only (stdout) without writing to BAM files\n");
-    printf("     --readlist          read from classified read list file instead of EAGLE outputs\n");
+    printf("  -a --bam=     FILE     alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
+    printf("     --listonly          print classified read list only (stdout) without processing BAM file\n");
+    printf("     --readlist          read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
 }
 
 int main(int argc, char **argv) {
@@ -535,38 +589,44 @@ int main(int argc, char **argv) {
 
     if (!listonly && bam_file == NULL) { exit_usage("Missing BAM file!"); } 
 
-    var_file = argv[optind++];
-    if (var_file == NULL) { exit_usage("Missing EAGLE output file!"); } 
-
-    readinfo_file = argv[optind];
-    if (readinfo_file == NULL) { exit_usage("Missing EAGLE read info file!"); } 
-
     /* Start processing data */
     clock_t tic = clock();
 
-    var_hash = kh_init(vh);
-    int nvars = var_read(var_file);
-    print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, nvars, asctime(time_info));
+    if (!readlist) {
+        var_file = argv[optind++];
+        if (var_file == NULL) { exit_usage("Missing EAGLE output file!"); } 
 
-    read_hash = kh_init(rh);
-    int nreads = readinfo_read(readinfo_file);
-    print_status("# Read EAGLE: %s\t%i reads\t%s", readinfo_file, nreads, asctime(time_info));
+        readinfo_file = argv[optind];
+        if (readinfo_file == NULL) { exit_usage("Missing EAGLE read info file!"); } 
 
-    classify_reads(bam_file, output_prefix);
+        var_hash = kh_init(vh);
+        int nvars = var_read(var_file);
+        print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, nvars, asctime(time_info));
+
+        read_hash = kh_init(rh);
+        int nreads = readinfo_read(readinfo_file);
+        print_status("# Read EAGLE: %s\t%i reads\t%s", readinfo_file, nreads, asctime(time_info));
+
+        classify_reads(bam_file, output_prefix);
+
+        khiter_t k;
+        for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
+            if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
+        }
+        kh_destroy(rh, read_hash);
+
+        for (k = kh_begin(var_hash); k != kh_end(var_hash); ++k) {
+            if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
+        }
+        kh_destroy(vh, var_hash);
+    }
+    else {
+        process_list(argv[optind], bam_file, output_prefix);
+    }
 
     clock_t toc = clock();
     print_status("# Done:\t%s\t%s", readinfo_file, asctime(time_info));
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
-    khiter_t k;
-    for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
-        if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
-    }
-    kh_destroy(rh, read_hash);
-
-    for (k = kh_begin(var_hash); k != kh_end(var_hash); ++k) {
-        if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
-    }
-    kh_destroy(vh, var_hash);
     return 0;
 }

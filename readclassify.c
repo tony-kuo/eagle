@@ -17,9 +17,9 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/sam.h"
 #include "htslib/khash.h"
 
-/* Precalculated log values */
-#define M_1_LOG10E (1.0/M_LOG10E)
-#define M_1_LN10 (1.0/M_LN10)
+/* Command line arguments */
+static int listonly;
+static int readlist;
 
 /* Time info */
 static time_t now; 
@@ -27,7 +27,10 @@ static struct tm *time_info;
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
 KHASH_MAP_INIT_STR(rh, Vector) // hashmap: string key, vector value
-static khash_t(rh) *read_hash; // pointer to hashmap
+static khash_t(rh) *read_hash; // pointer to hashmap, read
+
+KHASH_MAP_INIT_STR(vh, Vector) // hashmap: string key, vector value
+static khash_t(vh) *var_hash;  // pointer to hashmap, variant
 
 static inline int has_numbers(const char *str) {
     while (*str != '\0') {
@@ -50,16 +53,6 @@ static inline double log_add_exp(double a, double b) {
 static int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
     char *str1, *str2;
     switch (var_type) {
-        case VARIANT_T: {
-            Variant *c1 = *(Variant **)a;
-            Variant *c2 = *(Variant **)b;
-            if (strcasecmp(c1->chr, c2->chr) == 0) return (c1->pos > c2->pos) - (c1->pos < c2->pos);
-            str1 = strdup(c1->chr);
-            str2 = strdup(c2->chr);
-            c1 = NULL;
-            c2 = NULL;
-            break;
-        }
         case STR_T: {
             str1 = strdup((char *)a);
             str2 = strdup((char *)b);
@@ -113,10 +106,6 @@ static int nat_sort_vector(const void *a, const void *b) {
     return nat_sort_cmp(a, b, VOID_T);
 }
 
-static int nat_sort_var(const void *a, const void *b) {
-    return nat_sort_cmp(a, b, VARIANT_T);
-}
-
 static inline int str_find(const Vector *a, const void *s) {
     int i = 0;
     int j = a->size - 1;
@@ -131,20 +120,13 @@ static inline int str_find(const Vector *a, const void *s) {
     return -1;
 }
 
-void variant_destroy(Variant *v) {
-    if (v == NULL) return;
-    v->pos = 0;
-    free(v->chr); v->chr = NULL;      
-    free(v->ref); v->ref = NULL;
-    free(v->alt); v->alt = NULL;
-}
-
 void read_destroy(Read *r) {
     if (r == NULL) return;
     r->pos = 0;
     r->prgu = r->prgv = r->pout = 0;
     free(r->name); r->name = NULL;
     free(r->chr); r->chr = NULL;
+    vector_destroy(r->var_list); free(r->var_list); r->var_list = NULL;
 }
 
 void vector_init(Vector *a, size_t initial_size, enum type var_type) {
@@ -201,9 +183,6 @@ void vector_destroy(Vector *a) {
     enum type var_type = a->type;
     for (i = 0; i < a->size; ++i) {
         switch (var_type) {
-            case VARIANT_T:
-                variant_destroy((Variant *)a->data[i]);
-                break;
             case READ_T:
                 read_destroy((Read *)a->data[i]);
                 break;
@@ -216,44 +195,32 @@ void vector_destroy(Vector *a) {
     free(a->data); a->data = NULL;
 }
 
-static inline int variant_find(const Vector *a, const Variant *v) {
-    int i = 0;
-    int j = a->size - 1;
-    int n = (i + j) / 2;
-    while (i <= j) {
-        Variant *curr = (Variant *)a->data[n];
-        if (strcmp(v->chr, curr->chr) == 0 && strcmp(v->ref, curr->ref) == 0 && strcmp(v->alt, curr->alt) == 0 && v->pos == curr->pos) return n;
-        if (v->pos > curr->pos) i = n + 1;
-        else j = n - 1;
-        n = (i + j) / 2;
-    }
-    return -1;
-}
-
-static void add_to_varlist(Vector *var_list, char *set) {
-    int pos;
-    int line_length = strlen(set);
-    char chr[line_length], ref[line_length], alt[line_length];
+static void add2var_list(Vector *var_list, char *set) {
+    char var[strlen(set)];
 
     int n;
     char *s;
-    for (s = set + 1; sscanf(s, "%[^,],%d,%[^,],%[^;];%n", chr, &pos, ref, alt, &n) == 4; s += n) { // scan variant set
-        Variant *v = malloc(sizeof (Variant));
-        v->chr = strdup(chr);
-        v->pos = pos;
-        v->ref = strdup(ref);
-        v->alt = strdup(alt);
-        vector_add(var_list, v);
+    size_t i;
+    for (s = set + 1; sscanf(s, "%[^;];%n", var, &n) == 1; s += n) { // scan variant set
+        char *v = strdup(var);
+        for (i = 0; i < var_list->size; ++i) {
+            if (strcmp(v, (char *)var_list->data[i]) == 0) break;
+        }
+        if (i != var_list->size) { // if already exists then skip
+            free(v); v = NULL;
+        }
+        else {
+            vector_add(var_list, v);
+        }
         if (*(s + n) == ']') break;
     }
 }
 
-static Vector *var_read(const char* filename) {
+static int var_read(const char* filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open file %s\n", filename); }
 
-    Vector *var_list = vector_create(64, VARIANT_T);
-
+    int nvar = 0;
     char *line = NULL;
     ssize_t read_file = 0;
     size_t line_length = 0;
@@ -261,27 +228,41 @@ static Vector *var_read(const char* filename) {
         if (line_length <= 0 || line[strspn(line, " \t\v\r\n")] == '\0') continue; // blank line
         if (line[0] == '#') continue;
 
-        int pos;
+        int pos, n;
         char chr[line_length], ref[line_length], alt[line_length], set[line_length];
+
         int t = sscanf(line, "%s %d %s %s %*[^\t] %*[^\t] %*[^\t] %*[^\t] %*[^\t] %s", chr, &pos, ref, alt, set);
         if (t < 4) { exit_err("bad fields in EAGLE output file\n"); }
 
         if (strcmp(set, "[]") == 0) {
-            Variant *v = malloc(sizeof (Variant));
-            v->chr = strdup(chr);
-            v->pos = pos;
-            v->ref = strdup(ref);
-            v->alt = strdup(alt);
-            vector_add(var_list, v);
+            snprintf(set, line_length, "[%s,%d,%s,%s;]", chr, pos, ref, alt);
         }
-        else {
-            add_to_varlist(var_list, set);
+
+        char *s;
+        for (s = set + 1; sscanf(s, "%[^;];%n", chr, &n) == 1; s += n) { // scan variant set and add to hash
+            char *v = strdup(chr);
+
+            Vector *node;
+            khiter_t k = kh_get(vh, var_hash, chr);
+            if (k != kh_end(var_hash)) {
+                node = &kh_val(var_hash, k);
+            }
+            else {
+                int absent;
+                k = kh_put(vh, var_hash, v, &absent);
+                node = &kh_val(var_hash, k);
+                if (absent) vector_init(node, 8, VOID_T);
+            }
+            vector_add(node, v);
+
+            ++nvar;
+            if (*(s + n) == ']') break;
         }
+
     }
     free(line); line = NULL;
     fclose(file);
-    qsort(var_list->data, var_list->size, sizeof (void *), nat_sort_var);
-    return var_list;
+    return(nvar);
 }
 
 static void readinfo_read(const char* filename) {
@@ -307,17 +288,15 @@ static void readinfo_read(const char* filename) {
         if (k != kh_end(read_hash)) {
             Vector *node = &kh_val(read_hash, k);
             Read **r = (Read **)node->data;                                                                                                                          
-            int found = 0;
             for (i = 0; i < node->size; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
                     r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
-                    add_to_varlist(r[i]->var_list, set);
-                    found = 1;
+                    add2var_list(r[i]->var_list, set);
                     break;
                 }
             }
-            if (!found) { exit_err("failed to find sequence %s in hash key %d\n", name, k); }
+            if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         else {
             Read *r = malloc(sizeof (Read));
@@ -327,13 +306,13 @@ static void readinfo_read(const char* filename) {
             r->prgu = prgu;
             r->prgv = prgv;
             r->pout = pout;
-            r->var_list = vector_create(8, VARIANT_T);
-            add_to_varlist(r->var_list, set);
+            r->var_list = vector_create(8, VOID_T);
+            add2var_list(r->var_list, set);
 
             int absent;
             k = kh_put(rh, read_hash, r->name, &absent);
             Vector *node = &kh_val(read_hash, k);
-            if(absent) vector_init(node, 8, READ_T);
+            if (absent) vector_init(node, 8, READ_T);
             vector_add(node, r);
         }
     }
@@ -341,142 +320,170 @@ static void readinfo_read(const char* filename) {
     fclose(file);
 }
 
-void classify_reads(Vector *var_list, const char* bam_file, const char *output_prefix) {
+void classify_reads(const char* bam_file, const char *output_prefix) {
     Vector *ref = vector_create(64, VOID_T); // reference
     Vector *alt = vector_create(64, VOID_T); // alternative
     Vector *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
     Vector *unk = vector_create(64, VOID_T); // unknown, ambiguous with equal likelihoods for reference and alternative
 
-    size_t readi, i;
+    size_t readi, i, j;
 	khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
 		if (kh_exist(read_hash, k)) {
             Vector *node = &kh_val(read_hash, k);
             Read **r = (Read **)node->data;
             for (readi = 0; readi < node->size; ++readi) {
-                Variant **v = (Variant **)r[readi]->var_list->data;
+                char **v = (char **)r[readi]->var_list->data;
                 size_t nvariants = r[readi]->var_list->size;
  
                 int multiallele;
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
                     multiallele = 1;
+                    int prev_pos = -1;
                     for (i = 1; i < nvariants; ++i) { 
-                        if (v[i]->pos != v[i - 1]->pos) multiallele = 0;
+                        int pos;
+                        int t = sscanf(v[i], "%*[^,],%d,%*[^,],%*[^,],", &pos);
+                        if (t < 1) { exit_err("bad fields in %s\n", v[i]); }
+                        if (prev_pos == -1) {
+                            prev_pos = pos;
+                            continue;
+                        }
+                        if (pos - prev_pos != 0) {
+                            multiallele = 0;
+                            break;
+                        }
                     }
                     if (multiallele) {
                         vector_add(mul, r[readi]->name);
                         fprintf(stdout, "MUL=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                        for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s,%d,%s,%s;", v[i]->chr, v[i]->pos, v[i]->ref, v[i]->alt); } fprintf(stdout, "\n");
+                        for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
                         continue;
                     }
                 }
                 multiallele = 0;
-                for (i = 0; i < nvariants; ++i) { // check if variants are not in the EAGLE output, suggesting variants in a different phase, 
-                    if (variant_find(var_list, v[i]) == -1) multiallele = 1;
+                for (i = 0; i < nvariants; ++i) { // if any variant in list is not in EAGLE output, it suggests variants are from a different phase, 
+                    khiter_t k = kh_get(vh, var_hash, v[i]);
+                    if (k != kh_end(var_hash)) {
+                        Vector *var_hash_node = &kh_val(var_hash, k);
+                        char **vv = (char **)var_hash_node->data;                                                                                                                          
+                        for (j = 0; j < var_hash_node->size; ++j) {
+                            if (strcmp(v[i], vv[j]) == 0) break;
+                        }
+                        if (j == var_hash_node->size) multiallele = 1;
+                    }
+                    else { 
+                        multiallele = 1; 
+                    }
                 }
                 if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
                     vector_add(ref, r[readi]->name);
                     fprintf(stdout, "RLA=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                    for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s,%d,%s,%s;", v[i]->chr, v[i]->pos, v[i]->ref, v[i]->alt); } fprintf(stdout, "\n");
+                    for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
                     continue;
                 }
+
                 if (r[readi]->prgu > r[readi]->prgv && r[readi]->prgu - r[readi]->prgv >= 0.69) { // ref wins
                     vector_add(ref, r[readi]->name);
                     fprintf(stdout, "REF=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                    for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s,%d,%s,%s;", v[i]->chr, v[i]->pos, v[i]->ref, v[i]->alt); } fprintf(stdout, "\n");
                 }
                 else if (r[readi]->prgv > r[readi]->prgu && r[readi]->prgv - r[readi]->prgu >= 0.69) { // alt wins
                     vector_add(alt, r[readi]->name);
                     fprintf(stdout, "ALT=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                    for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s,%d,%s,%s;", v[i]->chr, v[i]->pos, v[i]->ref, v[i]->alt); } fprintf(stdout, "\n");
                 }
                 else { // unknown
                     vector_add(unk, r[readi]->name);
                     fprintf(stdout, "UNK=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                    for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s,%d,%s,%s;", v[i]->chr, v[i]->pos, v[i]->ref, v[i]->alt); } fprintf(stdout, "\n");
                 }
+                for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
             }
         }
     }
-    qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
-    qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
-    qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
-    qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
 
-    //for (i = 0; i < ref->size; ++i) { fprintf(stdout, "%s\n", (char *)ref->data[i]); }
+    if (!listonly) {
+        qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
+        qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
+        qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
+        qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
 
-    samFile *sam_in = sam_open(bam_file, "r"); // open bam file
-    if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
-    bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
-    if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
+        samFile *sam_in = sam_open(bam_file, "r"); // open bam file
+        if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
+        bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
+        if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
 
-    /* Split input bam files into respectively categories' output bam files */
-    samFile *out;
-    char out_fn[999];
+        /* Split input bam files into respectively categories' output bam files */
+        samFile *out;
+        char out_fn[999];
 
-    snprintf(out_fn, 999, "%s.ref.bam", output_prefix);
-    samFile *ref_out = sam_open(out_fn, "wb"); // write bam
-    if (ref_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-    if (sam_hdr_write(ref_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+        snprintf(out_fn, 999, "%s.ref.bam", output_prefix);
+        samFile *ref_out = sam_open(out_fn, "wb"); // write bam
+        if (ref_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+        if (sam_hdr_write(ref_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.alt.bam", output_prefix);
-    samFile *alt_out = sam_open(out_fn, "wb"); // write bam
-    if (alt_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-    if (sam_hdr_write(alt_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+        snprintf(out_fn, 999, "%s.alt.bam", output_prefix);
+        samFile *alt_out = sam_open(out_fn, "wb"); // write bam
+        if (alt_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+        if (sam_hdr_write(alt_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.mul.bam", output_prefix);
-    samFile *mul_out = sam_open(out_fn, "wb"); // write bam
-    if (mul_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-    if (sam_hdr_write(mul_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+        snprintf(out_fn, 999, "%s.mul.bam", output_prefix);
+        samFile *mul_out = sam_open(out_fn, "wb"); // write bam
+        if (mul_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+        if (sam_hdr_write(mul_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.com.bam", output_prefix);
-    samFile *com_out = sam_open(out_fn, "wb"); // write bam
-    if (com_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-    if (sam_hdr_write(com_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+        snprintf(out_fn, 999, "%s.com.bam", output_prefix);
+        samFile *com_out = sam_open(out_fn, "wb"); // write bam
+        if (com_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+        if (sam_hdr_write(com_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    bam1_t *aln = bam_init1(); // initialize an alignment
-    while (sam_read1(sam_in, bam_header, aln) >= 0) {
-        /* Mapped & Primary alignments only */
-        int n;
-        int is_unmap = 0;
-        int is_secondary = 0;
-        char *s, token[strlen(bam_flag2str(aln->core.flag)) + 1];
-        for (s = bam_flag2str(aln->core.flag); sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-            if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-            else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
-            if (*(s + n) != ',') break;
+        bam1_t *aln = bam_init1(); // initialize an alignment
+        while (sam_read1(sam_in, bam_header, aln) >= 0) {
+            /* Mapped & Primary alignments only */
+            int n;
+            int is_unmap = 0;
+            int is_secondary = 0;
+            char *flag = bam_flag2str(aln->core.flag);
+            char *s, token[strlen(flag) + 1];
+            for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+                if (strcmp("UNMAP", token) == 0) is_unmap = 1;
+                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
+                if (*(s + n) != ',') break;
+            }
+            free(flag); flag = NULL;
+            if (is_unmap || is_secondary) continue;
+
+            /* Write reads to appropriate file */
+            char *name = (char *)aln->data;
+            if (str_find(ref, name) >= 0) {
+                out = ref_out;
+            }
+            else if (str_find(alt, name) >= 0) {
+                out = alt_out;
+            }
+            else if (str_find(mul, name) >= 0) {
+                out = alt_out;
+            }
+            else {
+                out = com_out;
+            }
+
+            if (out != NULL) {
+                int r = sam_write1(out, bam_header, aln);
+                if (r < 0) { exit_err("Bad program call"); }
+            }
         }
-        if (is_unmap || is_secondary) continue;
+        bam_destroy1(aln);
+        bam_hdr_destroy(bam_header);
+        sam_close(sam_in);
 
-        /* Write reads to appropriate file */
-        char *name = (char *)aln->data;
-        if (str_find(ref, name) >= 0) {
-            out = ref_out;
-        }
-        else if (str_find(alt, name) >= 0) {
-            out = alt_out;
-        }
-        else if (str_find(mul, name) >= 0) {
-            out = alt_out;
-        }
-        else {
-            out = com_out;
-        }
-
-        if (out != NULL) {
-            int r = sam_write1(out, bam_header, aln);
-            if (r < 0) { exit_err("Bad program call"); }
-        }
+        out = NULL;
+        sam_close(ref_out);
+        sam_close(alt_out);
+        sam_close(mul_out);
+        sam_close(com_out);
     }
-    bam_destroy1(aln);
-    bam_hdr_destroy(bam_header);
-    sam_close(sam_in);
-
-    out = NULL;
-    sam_close(ref_out);
-    sam_close(alt_out);
-    sam_close(mul_out);
-    sam_close(com_out);
+    vector_free(ref); free(ref); ref = NULL;
+    vector_free(alt); free(alt); alt = NULL;
+    vector_free(mul); free(mul); mul = NULL;
+    vector_free(unk); free(unk); unk = NULL;
 }
 
 static void print_usage() {
@@ -485,8 +492,10 @@ static void print_usage() {
     printf("*  EAGLE with runtime options --omega=1e-40 --mvh -d -1\n");
     printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc -d -1 1> out.txt  2> readinfo.txt\n\n");
     printf("Options:\n");
-    printf("  -o --out=    String   output prefix for sam files\n");
-    printf("  -a --bam=    FILE     alignment data bam files corresponding to EAGLE output\n");
+    printf("  -o --out=     String   output prefix for sam files\n");
+    printf("  -a --bam=     FILE     alignment data BAM files corresponding to EAGLE output\n");
+    printf("     --listonly          print classified read list only (stdout) without writing to BAM files\n");
+    printf("     --readlist          read from classified read list file instead of EAGLE outputs\n");
 }
 
 int main(int argc, char **argv) {
@@ -495,11 +504,15 @@ int main(int argc, char **argv) {
     char *var_file = NULL;
     char *bam_file = NULL;
     char *output_prefix = NULL;
+    listonly = 0;
+    readlist = 0;
 
     static struct option long_options[] = {
         {"var", required_argument, NULL, 'v'},
         {"bam", required_argument, NULL, 'a'},
         {"out", optional_argument, NULL, 'o'},
+        {"listonly", no_argument, &listonly, 1},
+        {"readlist", no_argument, &readlist, 1},
         {0, 0, 0, 0}
     };
 
@@ -517,6 +530,7 @@ int main(int argc, char **argv) {
     }
     if (optind > argc) { exit_usage("Bad program call"); }
 
+    if (!listonly && bam_file == NULL) { exit_usage("Missing BAM file!"); } 
 
     var_file = argv[optind++];
     if (var_file == NULL) { exit_usage("Missing EAGLE output file!"); } 
@@ -526,23 +540,29 @@ int main(int argc, char **argv) {
 
     /* Start processing data */
     clock_t tic = clock();
-    Vector *var_list = var_read(var_file);
-    print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, (int)var_list->size, asctime(time_info));
+
+    var_hash = kh_init(vh);
+    int nvar = var_read(var_file);
+    print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, nvar, asctime(time_info));
 
     read_hash = kh_init(rh);
     readinfo_read(readinfo_file);
 
-    classify_reads(var_list, bam_file, output_prefix);
+    classify_reads(bam_file, output_prefix);
 
     clock_t toc = clock();
     print_status("# Done:\t%s\t%s", readinfo_file, asctime(time_info));
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);
 
-	khiter_t k;
+    khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
-		if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
+        if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
     }
-	kh_destroy(rh, read_hash);
-    vector_destroy(var_list); free(var_list); var_list = NULL;
+    kh_destroy(rh, read_hash);
+
+    for (k = kh_begin(var_hash); k != kh_end(var_hash); ++k) {
+        if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
+    }
+    kh_destroy(vh, var_hash);
     return 0;
 }

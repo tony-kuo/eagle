@@ -1337,6 +1337,8 @@ int main(int argc, char **argv) {
 
     pthread_mutex_init(&refseq_lock, NULL);
     process(var_list, bam_file, fa_file, out_fh);
+    if (out_file != NULL) fclose(out_fh);
+    else fflush(stdout);
     pthread_mutex_destroy(&refseq_lock);
 
     khiter_t k;

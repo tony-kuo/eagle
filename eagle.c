@@ -482,7 +482,7 @@ void fasta_read(const char *fa_file) {
         char name[line_length];
         int t = sscanf(line, "%s%*[^ \t\v\r\n]", name);
         if (t < 1) { exit_err("bad fields in FA index file\n"); }
-        if (!faidx_has_seq(fai, name)) { exit_err("failed to find sequence %s in reference %s\n", name, fa_file); }
+        if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
         Fasta *f = malloc(sizeof (Fasta));
         f->name = strdup(name);
@@ -493,7 +493,7 @@ void fasta_read(const char *fa_file) {
         int absent;
         khiter_t k = kh_put(rsh, refseq_hash, f->name, &absent);
         Vector *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
-        if(absent) vector_init(node, 8, FASTA_T);
+        if (absent) vector_init(node, 8, FASTA_T);
         vector_add(node, f);
     }
     free(line); line = NULL;
@@ -619,7 +619,7 @@ static Fasta *refseq_fetch(const char *name, const char *fa_file) {
                 return f[i];
             }
         }
-        exit_err("failed to find sequence %s in hash key %d\n", name, k);
+        exit_err("failed to find %s in hash key %d\n", name, k);
     }
 
     faidx_t *fai = fai_load(fa_file);
@@ -632,7 +632,7 @@ static Fasta *refseq_fetch(const char *name, const char *fa_file) {
             exit_err("failed to build and open FA index %s\n", fa_file);
         }
     }
-    if (!faidx_has_seq(fai, name)) { exit_err("failed to find sequence %s in reference %s\n", name, fa_file); }
+    if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
     Fasta *f = malloc(sizeof (Fasta));
     f->name = strdup(name);
@@ -643,7 +643,7 @@ static Fasta *refseq_fetch(const char *name, const char *fa_file) {
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
     Vector *node = &kh_val(refseq_hash, k);
-    if(absent) vector_init(node, 8, FASTA_T);
+    if (absent) vector_init(node, 8, FASTA_T);
     vector_add(node, f);
     fai_destroy(fai);
     pthread_mutex_unlock(&refseq_lock);

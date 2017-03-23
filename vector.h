@@ -41,7 +41,7 @@ typedef struct {
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
     double *qual;
     double prgu, prgv, pout;
-    size_t maxseti;
+    size_t index;
     Vector *var_list;
 } Read;
 

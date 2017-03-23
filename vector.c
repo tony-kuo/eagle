@@ -111,7 +111,7 @@ Read *read_create(char *name, int tid, char *chr, int pos) {
     r->prgu = -10000;
     r->prgv = -10000;
     r->pout = -10000;
-    r->maxseti = 0;
+    r->index = 0;
     r->var_list = vector_create(8, VOID_T);
 
     r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
@@ -128,7 +128,7 @@ void read_destroy(Read *r) {
     if (r == NULL) return;
     r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
     r->prgu = r->prgv = r->pout = 0;
-    r->maxseti = 0;
+    r->index = 0;
     free(r->name); r->name = NULL;
     free(r->chr); r->chr = NULL;
     free(r->qseq); r->qseq = NULL;

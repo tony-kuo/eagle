@@ -679,12 +679,12 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                     read_data[readi]->prgu = prgu;
                     read_data[readi]->prgv = prgv;
                     read_data[readi]->pout = pout;
-                    read_data[readi]->maxseti = 0;
+                    read_data[readi]->index = 0;
                 }
                 else {
                     if (prgv > read_data[readi]->prgv) {
                         read_data[readi]->prgv = prgv;
-                        read_data[readi]->maxseti = seti;
+                        read_data[readi]->index = seti;
                     }
                 }
             }
@@ -727,7 +727,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
             fprintf(stderr, "[");
-            for (i = 0; i < var_combo[read_data[readi]->maxseti]->size; ++i) { Variant *curr = (Variant *)var_combo[read_data[readi]->maxseti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+            for (i = 0; i < var_combo[read_data[readi]->index]->size; ++i) { Variant *curr = (Variant *)var_combo[read_data[readi]->index]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
             fprintf(stderr, "]\n");
             funlockfile(stderr);
         }

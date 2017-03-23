@@ -29,20 +29,6 @@ static khash_t(rh) *read_hash; // pointer to hashmap, read
 KHASH_MAP_INIT_STR(vh, Vector) // hashmap: string key, vector value
 static khash_t(vh) *var_hash;  // pointer to hashmap, variant
 
-static inline int str_find(const Vector *a, const void *s) {
-    int i = 0;
-    int j = a->size - 1;
-    int n = (i + j) / 2;
-    while (i <= j) {
-        int v = nat_sort_cmp(s, a->data[n], STR_T);
-        if (v == 0) return n;
-        if (v > 0) i = n + 1;
-        else j = n - 1;
-        n = (i + j) / 2;
-    }
-    return -1;
-}
-
 static void add2var_list(Vector *var_list, char *set) {
     char var[strlen(set)];
 
@@ -162,12 +148,7 @@ static int readinfo_read(const char* filename) {
     return nreads;
 }
 
-static void process_bam(const char *bam_file, const char *output_prefix, const Vector *ref, const Vector *alt, const Vector *mul, const Vector *unk) {
-    qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
-    qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
-    qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
-    qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
-
+static void process_bam(const char *bam_file, const char *output_prefix) {
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
@@ -214,21 +195,28 @@ static void process_bam(const char *bam_file, const char *output_prefix, const V
         if (is_unmap || is_secondary) continue;
 
         /* Write reads to appropriate file */
+        out = NULL;
+        size_t i;
         char *name = (char *)aln->data;
-        if (str_find(ref, name) >= 0) {
-            out = ref_out;
-        }
-        else if (str_find(alt, name) >= 0) {
-            out = alt_out;
-        }
-        else if (str_find(mul, name) >= 0) {
-            out = alt_out;
-        }
-        else if (str_find(unk, name) == -1) {
-            out = com_out;
+
+        khiter_t k = kh_get(rh, read_hash, name);
+        if (k != kh_end(read_hash)) {
+            Vector *node = &kh_val(read_hash, k);
+            Read **r = (Read **)node->data;                                                                                                                          
+            for (i = 0; i < node->size; ++i) {
+                if (strcmp(r[i]->name, name) == 0) {
+                    if (r[i]->index == 0) out = ref_out;
+                    else if (r[i]->index == 1) out = alt_out;
+                    else if (r[i]->index == 2) out = ref_out;
+                    else if (r[i]->index == 3) out = mul_out;
+                    else if (r[i]->index == 4) out = NULL;
+                    break;
+                }
+            }
+            if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         else {
-            out = NULL;
+            out = com_out;
         }
 
         if (out != NULL) {
@@ -248,10 +236,13 @@ static void process_bam(const char *bam_file, const char *output_prefix, const V
 }
 
 static void classify_reads(const char *bam_file, const char *output_prefix) {
-    Vector *ref = vector_create(64, VOID_T); // reference
-    Vector *alt = vector_create(64, VOID_T); // alternative
-    Vector *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
-    Vector *unk = vector_create(64, VOID_T); // unknown, ambiguous with equal likelihoods for reference and alternative
+    /* read->index set to classification:
+    reference = 0
+    alternative = 1
+    reference-like-allele, multi-allelic, closer to the reference = 2;
+    multi-allelic that are undifferentiateable = 3
+    unknown, ambiguous with equal likelihoods for reference and alternative = 4
+    */
 
     size_t readi, i, j;
 	khiter_t k;
@@ -278,14 +269,16 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                         prev_pos = pos;
                     }
                     if (multiallele) {
-                        vector_add(mul, r[readi]->name);
+                        r[readi]->index = 3;
                         fprintf(stdout, "MUL=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                         for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
                         continue;
                     }
                 }
+
+                // if any variant in list is not in EAGLE output, it suggests variants are from a different phase if alt wins
                 multiallele = 0;
-                for (i = 0; i < nvariants; ++i) { // if any variant in list is not in EAGLE output, it suggests variants are from a different phase, 
+                for (i = 0; i < nvariants; ++i) { 
                     khiter_t k = kh_get(vh, var_hash, v[i]);
                     if (k != kh_end(var_hash)) {
                         Vector *var_hash_node = &kh_val(var_hash, k);
@@ -299,23 +292,23 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                         multiallele = 1; 
                     }
                 }
-                if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
-                    vector_add(ref, r[readi]->name);
-                    fprintf(stdout, "RLA=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                    for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
-                    continue;
-                }
 
                 if (r[readi]->prgu > r[readi]->prgv && r[readi]->prgu - r[readi]->prgv >= 0.69) { // ref wins
-                    vector_add(ref, r[readi]->name);
+                    r[readi]->index = 0;
                     fprintf(stdout, "REF=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                 }
                 else if (r[readi]->prgv > r[readi]->prgu && r[readi]->prgv - r[readi]->prgu >= 0.69) { // alt wins
-                    vector_add(alt, r[readi]->name);
-                    fprintf(stdout, "ALT=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                    if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
+                        r[readi]->index = 2;
+                        fprintf(stdout, "RLA=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                    }
+                    else {
+                        r[readi]->index = 1;
+                        fprintf(stdout, "ALT=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                    }
                 }
                 else { // unknown
-                    vector_add(unk, r[readi]->name);
+                    r[readi]->index = 4;
                     fprintf(stdout, "UNK=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                 }
                 for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
@@ -326,13 +319,9 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
     print_status("# Reads Classified:\t%s", asctime(time_info));
 
     if (!listonly) {
-        process_bam(bam_file, output_prefix, ref, alt, mul, unk);
+        process_bam(bam_file, output_prefix);
         print_status("# BAM Processed:\t%s", asctime(time_info));
     }
-    vector_free(ref); free(ref); ref = NULL;
-    vector_free(alt); free(alt); alt = NULL;
-    vector_free(mul); free(mul); mul = NULL;
-    vector_free(unk); free(unk); unk = NULL;
 }
 
 static void process_list(const char *filename, const char *bam_file, const char *output_prefix) {
@@ -356,19 +345,26 @@ static void process_list(const char *filename, const char *bam_file, const char 
         int t = sscanf(line, "%s %s %*[^\n]", type, name);
         if (t < 2) { exit_err("bad fields in read classified list file\n"); }
 
-        char *r = strdup(name);
-        if (strcmp("REF=", type) == 0 || strcmp("RLA=", type) == 0) vector_add(ref, r);
-        else if (strcmp("ALT=", type) == 0) vector_add(alt, r);
-        else if (strcmp("MUL=", type) == 0) vector_add(mul, r);
-        else if (strcmp("UNK=", type) == 0) vector_add(unk, r);
-        else { free(r); r = NULL; }
+        Read *r = read_create(name, 0, "", 0);
+
+        if (strcmp("REF=", type) == 0) r->index = 0;
+        else if (strcmp("ALT=", type) == 0) r->index = 1;
+        else if (strcmp("RLA=", type) == 0) r->index = 2;
+        else if (strcmp("MUL=", type) == 0) r->index = 3;
+        else if (strcmp("UNK=", type) == 0) r->index = 4;
+
+        int absent;
+        khiter_t k = kh_put(rh, read_hash, r->name, &absent);
+        Vector *node = &kh_val(read_hash, k);
+        if (absent) vector_init(node, 8, READ_T);
+        vector_add(node, r);
         ++nreads;
     }
     free(line); line = NULL;
     fclose(file);
     print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
 
-    process_bam(bam_file, output_prefix, ref, alt, mul, unk);
+    process_bam(bam_file, output_prefix);
     print_status("# BAM Processed:\t%s", asctime(time_info));
 
     vector_destroy(ref); free(ref); ref = NULL;
@@ -426,6 +422,9 @@ int main(int argc, char **argv) {
     /* Start processing data */
     clock_t tic = clock();
 
+    var_hash = kh_init(vh);
+    read_hash = kh_init(rh);
+
     if (!readlist) {
         var_file = argv[optind++];
         if (var_file == NULL) { exit_usage("Missing EAGLE output file!"); } 
@@ -433,30 +432,28 @@ int main(int argc, char **argv) {
         readinfo_file = argv[optind];
         if (readinfo_file == NULL) { exit_usage("Missing EAGLE read info file!"); } 
 
-        var_hash = kh_init(vh);
         int nvars = var_read(var_file);
         print_status("# Read EAGLE: %s\t%i entries\t%s", var_file, nvars, asctime(time_info));
 
-        read_hash = kh_init(rh);
         int nreads = readinfo_read(readinfo_file);
         print_status("# Read EAGLE: %s\t%i reads\t%s", readinfo_file, nreads, asctime(time_info));
 
         classify_reads(bam_file, output_prefix);
-
-        khiter_t k;
-        for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
-            if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
-        }
-        kh_destroy(rh, read_hash);
-
-        for (k = kh_begin(var_hash); k != kh_end(var_hash); ++k) {
-            if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
-        }
-        kh_destroy(vh, var_hash);
     }
     else {
         process_list(argv[optind], bam_file, output_prefix);
     }
+
+    khiter_t k;
+    for (k = kh_begin(var_hash); k != kh_end(var_hash); ++k) {
+        if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
+    }
+    kh_destroy(vh, var_hash);
+
+    for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
+        if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
+    }
+    kh_destroy(rh, read_hash);
 
     clock_t toc = clock();
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);

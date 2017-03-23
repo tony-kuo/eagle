@@ -1,12 +1,14 @@
 /*
-Utility program that classifies reads based on EAGLE calculated likelihoods
+EAGLE: explicit alternative genome likelihood evaluator
+Given the sequencing data and candidate variant, explicitly test 
+the alternative hypothesis against the reference hypothesis
 
 Copyright 2016 Tony Kuo
 This program is distributed under the terms of the GNU General Public License
 */
 
-#ifndef _readclassify_h_
-#define _readclassify_h_
+#ifndef _util_h_
+#define _util_h_
 
 #include <stdio.h>
 #include <errno.h>
@@ -23,30 +25,16 @@ This program is distributed under the terms of the GNU General Public License
 #define exit_err(M, ...) fprintf(stderr, "ERROR: (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__); exit(EXIT_FAILURE)
 #define exit_usage(M, ...) print_usage(); fprintf(stderr, "\n" M "\n"); exit(EXIT_FAILURE)
 
-enum type {VOID_T, STR_T, READ_T};
+void str_resize(char **str, size_t size);
 
-typedef struct {
-    size_t size, capacity;
-    enum type type;
-    void **data;
-} Vector;
+int has_numbers(const char *str);
+int parse_int(const char *str);
+float parse_float(const char *str);
 
-void vector_init(Vector *a, size_t initial_size, enum type var_type);
-void vector_add(Vector *a, void *entry);
-void vector_del(Vector *a, int i);
-void *vector_pop(Vector *a);
-Vector *vector_create(size_t initial_size, enum type var_type);
-Vector *vector_dup(Vector *a);
-void vector_free(Vector *a);
-void vector_destroy(Vector *a);
+double sum(const double *a, int size);
+double *reverse(double *a, int size);
 
-typedef struct {
-    int pos;
-    char *name, *chr;
-    double prgu, prgv, pout;
-    Vector *var_list;
-} Read;
-
-void freeRead(Read *r);
+double log_add_exp(double a, double b);
+double log_sum_exp(const double *a, int size);
 
 #endif

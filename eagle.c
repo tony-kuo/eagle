@@ -8,18 +8,18 @@ This program is distributed under the terms of the GNU General Public License
 */
 
 #include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
 #include <ctype.h>
 #include <math.h>
 #include <time.h>
 #include <getopt.h>
 #include <pthread.h>
-#include "eagle.h"
+
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
+#include "util.h"
+#include "vector.h"
+#include "eagle.h"
 
 /* Constants */
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
@@ -59,72 +59,6 @@ static int seqnt_map[26];
 KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 
-
-/*
-char *strdup(const char *src) {
-    size_t n = strlen(src) + 1;
-    char *des = malloc(n * sizeof *des);
-    return des ? memcpy(des, src, n) : NULL;
-}
-*/
-
-static inline int has_numbers(const char *str) {
-    while (*str != '\0') {
-        if (isdigit(*str++) == 1) return 1;
-    }
-    return 0;
-}
-
-static inline void str_resize(char **str, size_t size) {
-    char *p = realloc(*str, size * sizeof *str);
-    if (p == NULL) { exit_err("failed to realloc in str_resize\n"); }
-    else { *str = p; }
-}
-
-static inline int parse_int(const char *str) {
-    errno = 0;
-    char *end;
-    int num = strtol(str, &end, 0);
-    if (end != str && *end != '\0') { exit_err("failed to convert '%s' to int with leftover string '%s'\n", str, end); }
-    return num;
-}
-
-static inline float parse_float(const char *str) {
-    errno = 0;
-    char *end;
-    double num = strtof(str, &end);
-    if (end != str && *end != '\0') { exit_err("failed to convert '%s' to float with leftover string '%s'\n", str, end); }
-    return num;
-}
-
-static inline double sum(const double *a, int size) {
-    double s = 0;
-    while (--size >= 0) s += a[size];
-    return s;
-}
-
-static inline double log_add_exp(double a, double b) {
-    double max_exp = a > b ? a : b;
-    return log(exp(a - max_exp) + exp(b - max_exp)) + max_exp;
-}
-
-static inline double log_sum_exp(const double *a, int size) {
-    int i;
-    double max_exp = a[0]; 
-    for (i = 1; i < size; ++i) { 
-        if (a[i] > max_exp) max_exp = a[i]; 
-    }
-    double s = 0;
-    for (i = 0; i < size; ++i) s += exp(a[i] - max_exp);
-    return log(s) + max_exp;
-}
-
-static inline double *reverse(double *a, int size) {
-    int i = 0;
-    double *b = malloc(size * sizeof *b);
-    while (--size >= 0) b[i++] = a[size];
-    return b;
-}
 
 static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
     int i, b; // array[width * row + col] = value
@@ -190,7 +124,7 @@ static inline double calc_prob_distrib(const double *matrix, int read_length, co
     int n1 = pos - read_length;
     int n2 = pos + read_length;
     double probability = 0;
-    double baseline = calc_prob(matrix, read_length, seq, seq_length, pos, -1000); // first probability at given pos, likely the highest, for initial baseline
+    double baseline = calc_prob(matrix, read_length, seq, seq_length, pos, -10000); // first probability at given pos, likely the highest, for initial baseline
     for (i = n1; i < n2; ++i) {
         if (i + read_length < 0) continue;
         if (i - read_length >= seq_length) break;
@@ -249,173 +183,6 @@ static char *powerset(int n, size_t *ncombos) {
     return combo;
 }
 
-static int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
-    char *str1, *str2;
-    switch (var_type) {
-        case VARIANT_T: {
-            Variant *c1 = *(Variant **)a;
-            Variant *c2 = *(Variant **)b;
-            if (strcasecmp(c1->chr, c2->chr) == 0) return (c1->pos > c2->pos) - (c1->pos < c2->pos);
-            str1 = strdup(c1->chr);
-            str2 = strdup(c2->chr);
-            c1 = NULL;
-            c2 = NULL;
-            break;
-        }
-        default:
-            str1 = strdup(*(char **)a);
-            str2 = strdup(*(char **)b);
-            break;
-    }
-    char *s1 = str1;
-    char *s2 = str2;
-    int cmp = 0;
-    while (cmp == 0 && *s1 != '\0' && *s2 != '\0') {
-        if (isspace(*s1) && isspace(*s2)) { // ignore whitespace
-            s1 += 1;
-            s2 += 1;
-        }
-        else if ((isalpha(*s1) && isalpha(*s2)) || (ispunct(*s1) && ispunct(*s2))) { // compare alphabet and punctuation
-            *s1 = tolower(*s1);
-            *s2 = tolower(*s2);
-            cmp = (*s1 > *s2) - (*s1 < *s2);
-            s1 += 1;
-            s2 += 1;
-        }
-        else { // compare digits
-            int i1, i2, n1, n2, t1, t2;
-            t1 = sscanf(s1, "%d%n", &i1, &n1);
-            if (t1 == 0) t1 = sscanf(s1, "%*[^0123456789]%d%n", &i1, &n1);
-            t2 = sscanf(s2, "%d%n", &i2, &n2);
-            if (t2 == 0) t2 = sscanf(s2, "%*[^0123456789]%d%n", &i2, &n2);
-
-            if (t1 < 1 || t2 < 1) { // one string has no digits
-                cmp = strcmp(s1, s2);
-            }
-            else {
-                cmp = (i1 > i2) - (i1 < i2);
-                if (cmp == 0) { // first set of digits are equal, check further
-                    s1 += n1;
-                    s2 += n2;
-                }
-            }
-        }
-    }
-    free(str1); str1 = NULL;
-    free(str2); str2 = NULL;
-    return cmp;
-}
-
-static int nat_sort_vector(const void *a, const void *b) {
-    return nat_sort_cmp(a, b, VOID_T);
-}
-
-static int nat_sort_var(const void *a, const void *b) {
-    return nat_sort_cmp(a, b, VARIANT_T);
-}
-
-void variant_destroy(Variant *v) {
-    if (v == NULL) return;
-    v->pos = 0;
-    free(v->chr); v->chr = NULL;      
-    free(v->ref); v->ref = NULL;
-    free(v->alt); v->alt = NULL;
-}
-
-void read_destroy(Read *r) {
-    if (r == NULL) return;
-    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
-    r->prgu = r->prgv = r->pout = 0;
-    r->maxseti = 0;
-    free(r->name); r->name = NULL;
-    free(r->chr); r->chr = NULL;
-    free(r->qseq); r->qseq = NULL;
-    free(r->qual); r->qual = NULL;
-    free(r->flag); r->flag = NULL;
-    free(r->cigar_opchr); r->cigar_opchr = NULL;
-    free(r->cigar_oplen); r->cigar_oplen = NULL;
-    free(r->multimapXA); r->multimapXA = NULL;
-}
-
-void fasta_destroy(Fasta *f) {
-    if (f == NULL) return;
-    f->seq_length = 0;
-    free(f->seq); f->seq = NULL;      
-    free(f->name); f->name = NULL;
-}
-
-void vector_init(Vector *a, size_t initial_size, enum type var_type) {
-    a->size = 0;
-    a->type = var_type;
-    a->capacity = initial_size;
-    a->data = malloc(initial_size * sizeof (void *));
-}
-
-void vector_add(Vector *a, void *entry) {
-    if (a->size >= a->capacity) {
-        a->capacity *= 2;
-        void **p = realloc(a->data, a->capacity * sizeof (void *));
-        if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
-        else { a->data = p; }
-    }
-    a->data[a->size++] = entry;
-}
-
-void vector_del(Vector *a, int i) {
-    a->data[i] = NULL;
-    if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
-    a->data[a->size] = NULL;
-}
-
-void *vector_pop(Vector *a) {
-    if (a->size <= 0) return NULL;
-    void *entry = a->data[--a->size];
-    a->data[a->size] = NULL;
-    return entry;
-}
-
-Vector *vector_create(size_t initial_size, enum type var_type) {
-    Vector *a = malloc(sizeof (Vector));
-    vector_init(a, initial_size, var_type);
-    return a;
-}
-
-Vector *vector_dup(Vector *a) {
-    Vector *v = vector_create(a->capacity, a->type);
-    v->size = a->size;
-    memcpy(&(v->data[0]), &(a->data[0]), a->size * sizeof (void *));
-    return v;
-}
-
-void vector_free(Vector *a) {
-    a->size = 0;
-    free(a->data); a->data = NULL;
-}
-
-void vector_destroy(Vector *a) {
-    size_t i;
-    enum type var_type = a->type;
-    for (i = 0; i < a->size; ++i) {
-        switch (var_type) {
-            case VARIANT_T:
-                variant_destroy((Variant *)a->data[i]);
-                break;
-            case READ_T:
-                read_destroy((Read *)a->data[i]);
-                break;
-            case FASTA_T:
-                fasta_destroy((Fasta *)a->data[i]);
-                break;
-            default:
-                break;
-        }
-        free(a->data[i]); a->data[i] = NULL;
-    }
-    a->size = a->capacity = 0;
-    free(a->data); a->data = NULL;
-}
-
 Vector *vcf_read(FILE *file) {
     Vector *var_list = vector_create(64, VARIANT_T);
 
@@ -435,11 +202,7 @@ Vector *vcf_read(FILE *file) {
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];
         for (s1 = ref; sscanf(s1, "%[^, ]%n", ref_token, &n1) == 1 || sscanf(s1, "%[-]%n", ref_token, &n1) == 1; s1 += n1 + 1) { // heterogenenous non-reference (comma-delimited) as separate entries
             for (s2 = alt; sscanf(s2, "%[^, ]%n", alt_token, &n2) == 1 || sscanf(s2, "%[-]%n", alt_token, &n2) == 1; s2 += n2 + 1) {
-                Variant *v = malloc(sizeof (Variant));
-                v->chr = strdup(chr);
-                v->pos = pos;
-                v->ref = strdup(ref_token);
-                v->alt = strdup(alt_token);
+                Variant *v = variant_create(chr, pos, ref_token, alt_token);
                 vector_add(var_list, v);
                 if (*(s2 + n2) != ',') break;
             }
@@ -448,7 +211,7 @@ Vector *vcf_read(FILE *file) {
     }
     free(line); line = NULL;
     fclose(file);
-    qsort(var_list->data, var_list->size, sizeof (void *), nat_sort_var);
+    qsort(var_list->data, var_list->size, sizeof (void *), nat_sort_variant);
     return var_list;
 }
 
@@ -545,17 +308,9 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
             size_t i;
-            Read *read = malloc(sizeof (Read));
-            read->name = strdup((char *)aln->data);
-            read->tid = aln->core.tid;
-            read->chr = strdup(bam_header->target_name[read->tid]);
-            read->pos = aln->core.pos;
-            read->prgu = -1000;
-            read->prgv = -1000;
-            read->pout = -1000;
-            read->maxseti = 0;
+            Read *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
-            int seen_M = 0;
+            int saw_M = 0;
             size_t s_offset = 0; // offset for softclip at start
             size_t e_offset = 0; // offset for softclip at end
             uint32_t *cigar = bam_get_cigar(aln);
@@ -566,9 +321,9 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
 
-                if (isc && read->cigar_opchr[i] == 'M') seen_M = 1;
-                else if (isc && seen_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
-                else if (isc && seen_M == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
+                if (isc && read->cigar_opchr[i] == 'M') saw_M = 1;
+                else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
+                else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
             }
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
@@ -606,7 +361,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
     return read_list;
 }
 
-static Fasta *refseq_fetch(const char *name, const char *fa_file) {
+static Fasta *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
     size_t i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
@@ -634,8 +389,7 @@ static Fasta *refseq_fetch(const char *name, const char *fa_file) {
     }
     if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
-    Fasta *f = malloc(sizeof (Fasta));
-    f->name = strdup(name);
+    Fasta *f = fasta_create(name);
     f->seq = fai_fetch(fai, name, &f->seq_length);
     char *s;
     for (s = f->seq; *s != '\0'; ++s) *s = toupper(*s);
@@ -1063,7 +817,7 @@ static void *pool(void *work) {
     return NULL;
 }
 
-void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh) {
+static void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh) {
     size_t i, j, n;
 
     Variant **var_data = (Variant **)var_list->data;

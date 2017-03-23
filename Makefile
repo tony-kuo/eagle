@@ -7,15 +7,21 @@ LFLAGS = -L$(HTSDIR)
 LIBS = $(HTSDIR)/libhts.a -lm -lz -lpthread
 
 MAIN = eagle
+AUX = util.o vector.o
 
-all: HTSLIB
-	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(LIBS)
-	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) readclassify.c -o readclassify $(LIBS)
+all: UTIL HTSLIB READCLASSIFY
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(LIBS) $(AUX)
 
 HTSLIB:
 	$(MAKE) -C $(HTSDIR)/
 
+UTIL:
+	$(CC) $(CFLAGS) $(LDLAGS) -c util.c vector.c
+
+READCLASSIFY:
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) readclassify.c -o readclassify $(LIBS) $(AUX)
+
 clean:
-	rm -f eagle
+	rm -f eagle readclassify *.o
 
 # DO NOT DELETE THIS LINE -- make depend needs it

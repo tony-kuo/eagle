@@ -6,16 +6,13 @@ This program is distributed under the terms of the GNU General Public License
 */
 
 #include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <errno.h>
-#include <ctype.h>
-#include <math.h>
 #include <time.h>
 #include <getopt.h>
-#include "readclassify.h"
+
 #include "htslib/sam.h"
 #include "htslib/khash.h"
+#include "util.h"
+#include "vector.h"
 
 /* Command line arguments */
 static int listonly;
@@ -32,80 +29,6 @@ static khash_t(rh) *read_hash; // pointer to hashmap, read
 KHASH_MAP_INIT_STR(vh, Vector) // hashmap: string key, vector value
 static khash_t(vh) *var_hash;  // pointer to hashmap, variant
 
-static inline int has_numbers(const char *str) {
-    while (*str != '\0') {
-        if (isdigit(*str++) == 1) return 1;
-    }
-    return 0;
-}
-
-static inline void str_resize(char **str, size_t size) {
-    char *p = realloc(*str, size * sizeof *str);
-    if (p == NULL) { exit_err("failed to realloc in str_resize\n"); }
-    else { *str = p; }
-}
-
-static inline double log_add_exp(double a, double b) {
-    double max_exp = a > b ? a : b;
-    return log(exp(a - max_exp) + exp(b - max_exp)) + max_exp;
-}
-
-static int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
-    char *str1, *str2;
-    switch (var_type) {
-        case STR_T: {
-            str1 = strdup((char *)a);
-            str2 = strdup((char *)b);
-            break;
-        }
-        default: // vector i.e. VOID_T
-            str1 = strdup(*(char **)a);
-            str2 = strdup(*(char **)b);
-            break;
-    }
-    char *s1 = str1;
-    char *s2 = str2;
-    int cmp = 0;
-    while (cmp == 0 && *s1 != '\0' && *s2 != '\0') {
-        if (isspace(*s1) && isspace(*s2)) { // ignore whitespace
-            s1 += 1;
-            s2 += 1;
-        }
-        else if ((isalpha(*s1) && isalpha(*s2)) || (ispunct(*s1) && ispunct(*s2))) { // compare alphabet and punctuation
-            *s1 = tolower(*s1);
-            *s2 = tolower(*s2);
-            cmp = (*s1 > *s2) - (*s1 < *s2);
-            s1 += 1;
-            s2 += 1;
-        }
-        else { // compare digits
-            int i1, i2, n1, n2, t1, t2;
-            t1 = sscanf(s1, "%d%n", &i1, &n1);
-            if (t1 == 0) t1 = sscanf(s1, "%*[^0123456789]%d%n", &i1, &n1);
-            t2 = sscanf(s2, "%d%n", &i2, &n2);
-            if (t2 == 0) t2 = sscanf(s2, "%*[^0123456789]%d%n", &i2, &n2);
-
-            if (t1 < 1 || t2 < 1) { // one string has no digits
-                cmp = strcmp(s1, s2);
-            }
-            else {
-                cmp = (i1 > i2) - (i1 < i2);
-                if (cmp == 0) { // first set of digits are equal, check further
-                    s1 += n1;
-                    s2 += n2;
-                }
-            }
-        }
-    }
-    free(str1); str1 = NULL;
-    free(str2); str2 = NULL;
-    return cmp;
-}
-
-static int nat_sort_vector(const void *a, const void *b) {
-    return nat_sort_cmp(a, b, VOID_T);
-}
-
 static inline int str_find(const Vector *a, const void *s) {
     int i = 0;
     int j = a->size - 1;
@@ -120,81 +43,6 @@ static inline int str_find(const Vector *a, const void *s) {
     return -1;
 }
 
-void read_destroy(Read *r) {
-    if (r == NULL) return;
-    r->pos = 0;
-    r->prgu = r->prgv = r->pout = 0;
-    free(r->name); r->name = NULL;
-    free(r->chr); r->chr = NULL;
-    vector_destroy(r->var_list); free(r->var_list); r->var_list = NULL;
-}
-
-void vector_init(Vector *a, size_t initial_size, enum type var_type) {
-    a->size = 0;
-    a->type = var_type;
-    a->capacity = initial_size;
-    a->data = malloc(initial_size * sizeof (void *));
-}
-
-void vector_add(Vector *a, void *entry) {
-    if (a->size >= a->capacity) {
-        a->capacity *= 2;
-        void **p = realloc(a->data, a->capacity * sizeof (void *));
-        if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
-        else { a->data = p; }
-    }
-    a->data[a->size++] = entry;
-}
-
-void vector_del(Vector *a, int i) {
-    a->data[i] = NULL;
-    if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
-    a->data[a->size] = NULL;
-}
-
-void *vector_pop(Vector *a) {
-    if (a->size <= 0) return NULL;
-    void *entry = a->data[--a->size];
-    a->data[a->size] = NULL;
-    return entry;
-}
-
-Vector *vector_create(size_t initial_size, enum type var_type) {
-    Vector *a = malloc(sizeof (Vector));
-    vector_init(a, initial_size, var_type);
-    return a;
-}
-
-Vector *vector_dup(Vector *a) {
-    Vector *v = vector_create(a->capacity, a->type);
-    v->size = a->size;
-    memcpy(&(v->data[0]), &(a->data[0]), a->size * sizeof (void *));
-    return v;
-}
-
-void vector_free(Vector *a) {
-    a->size = 0;
-    free(a->data); a->data = NULL;
-}
-
-void vector_destroy(Vector *a) {
-    size_t i;
-    enum type var_type = a->type;
-    for (i = 0; i < a->size; ++i) {
-        switch (var_type) {
-            case READ_T:
-                read_destroy((Read *)a->data[i]);
-                break;
-            default:
-                break;
-        }
-        free(a->data[i]); a->data[i] = NULL;
-    }
-    a->size = a->capacity = 0;
-    free(a->data); a->data = NULL;
-}
-
 static void add2var_list(Vector *var_list, char *set) {
     char var[strlen(set)];
 
@@ -206,12 +54,8 @@ static void add2var_list(Vector *var_list, char *set) {
         for (i = 0; i < var_list->size; ++i) {
             if (strcmp(v, (char *)var_list->data[i]) == 0) break;
         }
-        if (i != var_list->size) { // if already exists then skip
-            free(v); v = NULL;
-        }
-        else {
-            vector_add(var_list, v);
-        }
+        if (i == var_list->size) { vector_add(var_list, v); }
+        else { free(v); v = NULL; } // if already exists then skip
         if (*(s + n) == ']') break;
     }
 }
@@ -299,14 +143,10 @@ static int readinfo_read(const char* filename) {
             if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         else {
-            Read *r = malloc(sizeof (Read));
-            r->name = strdup(name);
-            r->chr = strdup(chr);
-            r->pos = pos;
+            Read *r = read_create(name, 0, chr, pos);
             r->prgu = prgu;
             r->prgv = prgv;
             r->pout = pout;
-            r->var_list = vector_create(8, VOID_T);
             add2var_list(r->var_list, set);
 
             int absent;
@@ -323,12 +163,17 @@ static int readinfo_read(const char* filename) {
 }
 
 static void process_bam(const char *bam_file, const char *output_prefix, const Vector *ref, const Vector *alt, const Vector *mul, const Vector *unk) {
+    qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
+    qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
+    qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
+    qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
+
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
     if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
 
-    /* Split input bam files into respectively categories' output bam files */
+    /* Split input bam files into respective categories' output bam files */
     samFile *out;
     char out_fn[999];
 
@@ -481,11 +326,6 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
     print_status("# Reads Classified:\t%s", asctime(time_info));
 
     if (!listonly) {
-        qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
-        qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
-        qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
-        qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
-
         process_bam(bam_file, output_prefix, ref, alt, mul, unk);
         print_status("# BAM Processed:\t%s", asctime(time_info));
     }
@@ -521,19 +361,12 @@ static void process_list(const char *filename, const char *bam_file, const char 
         else if (strcmp("ALT=", type) == 0) vector_add(alt, r);
         else if (strcmp("MUL=", type) == 0) vector_add(mul, r);
         else if (strcmp("UNK=", type) == 0) vector_add(unk, r);
-        else {
-            free(r); r = NULL;
-        }
+        else { free(r); r = NULL; }
         ++nreads;
     }
     free(line); line = NULL;
     fclose(file);
     print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
-
-    qsort(ref->data, ref->size, sizeof (void *), nat_sort_vector);
-    qsort(alt->data, alt->size, sizeof (void *), nat_sort_vector);
-    qsort(mul->data, mul->size, sizeof (void *), nat_sort_vector);
-    qsort(unk->data, unk->size, sizeof (void *), nat_sort_vector);
 
     process_bam(bam_file, output_prefix, ref, alt, mul, unk);
     print_status("# BAM Processed:\t%s", asctime(time_info));

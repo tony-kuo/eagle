@@ -684,7 +684,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 else {
                     if (prgv > read_data[readi]->prgv) {
                         read_data[readi]->prgv = prgv;
-                        read_data[readi]->index = seti;
+                        read_data[readi]->index = (int)seti;
                     }
                 }
             }

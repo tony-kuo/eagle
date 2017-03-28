@@ -270,7 +270,7 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                     }
                     if (multiallele) {
                         r[readi]->index = 3;
-                        fprintf(stdout, "MUL=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                        fprintf(stdout, "%s\tMUL\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                         for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
                         continue;
                     }
@@ -295,21 +295,21 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
 
                 if (r[readi]->prgu > r[readi]->prgv && r[readi]->prgu - r[readi]->prgv >= 0.69) { // ref wins
                     r[readi]->index = 0;
-                    fprintf(stdout, "REF=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                    fprintf(stdout, "%s\tREF\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                 }
                 else if (r[readi]->prgv > r[readi]->prgu && r[readi]->prgv - r[readi]->prgu >= 0.69) { // alt wins
                     if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
                         r[readi]->index = 2;
-                        fprintf(stdout, "RLA=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                        fprintf(stdout, "%s\tRLA\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                     }
                     else {
                         r[readi]->index = 1;
-                        fprintf(stdout, "ALT=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                        fprintf(stdout, "%s\tALT\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                     }
                 }
                 else { // unknown
                     r[readi]->index = 4;
-                    fprintf(stdout, "UNK=\t%s\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
+                    fprintf(stdout, "%s\tUNK\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                 }
                 for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
             }
@@ -322,6 +322,15 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
         process_bam(bam_file, output_prefix);
         print_status("# BAM Processed:\t%s", asctime(time_info));
     }
+}
+
+static int type2ind(char *type) {
+    if (strcmp("REF", type) == 0) return 0;
+    else if (strcmp("ALT", type) == 0) return 1;
+    else if (strcmp("RLA", type) == 0) return 2;
+    else if (strcmp("MUL", type) == 0) return 3;
+    else if (strcmp("UNK", type) == 0) return 4;
+    return -1;
 }
 
 static void process_list(const char *filename, const char *bam_file, const char *output_prefix) {
@@ -341,24 +350,41 @@ static void process_list(const char *filename, const char *bam_file, const char 
         if (line_length <= 0 || line[strspn(line, " \t\v\r\n")] == '\0') continue; // blank line
         if (line[0] == '#') continue;
 
+        double prgu, prgv;
         char type[line_length], name[line_length];
-        int t = sscanf(line, "%s %s %*[^\n]", type, name);
-        if (t < 2) { exit_err("bad fields in read classified list file\n"); }
+        int t = sscanf(line, "%s %s %*[^\t] %*[^\t] %lf %lf %*[^\n]", name, type, &prgu, &prgv);
+        if (t < 4) { exit_err("bad fields in read classified list file\n"); }
 
-        Read *r = read_create(name, 0, "", 0);
+        khiter_t k = kh_get(rh, read_hash, name);
+        if (k != kh_end(read_hash)) {
+            size_t i;
+            Vector *node = &kh_val(read_hash, k);
+            Read **r = (Read **)node->data;                                                                                                                          
+            for (i = 0; i < node->size; ++i) {
+                if (strcmp(r[i]->name, name) == 0) {
+                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
+                        r[i]->prgu = prgu;
+                        r[i]->prgv = prgv;
+                        r[i]->index = type2ind(type);
+                        break;
+                    }
+                }
+            }
+            if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
+        }
+        else {
+            Read *r = read_create(name, 0, "", 0);
+            r->prgu = prgu;
+            r->prgv = prgv;
+            r->index = type2ind(type);
 
-        if (strcmp("REF=", type) == 0) r->index = 0;
-        else if (strcmp("ALT=", type) == 0) r->index = 1;
-        else if (strcmp("RLA=", type) == 0) r->index = 2;
-        else if (strcmp("MUL=", type) == 0) r->index = 3;
-        else if (strcmp("UNK=", type) == 0) r->index = 4;
-
-        int absent;
-        khiter_t k = kh_put(rh, read_hash, r->name, &absent);
-        Vector *node = &kh_val(read_hash, k);
-        if (absent) vector_init(node, 8, READ_T);
-        vector_add(node, r);
-        ++nreads;
+            int absent;
+            khiter_t k = kh_put(rh, read_hash, r->name, &absent);
+            Vector *node = &kh_val(read_hash, k);
+            if (absent) vector_init(node, 8, READ_T);
+            vector_add(node, r);
+            ++nreads;
+        }
     }
     free(line); line = NULL;
     fclose(file);

@@ -969,7 +969,7 @@ static void print_usage() {
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
     printf("     --pao            consider primary alignments only\n");
     printf("     --isc            ignore soft-clipped bases\n");
-    printf("     --verbose        verbose mode, output likelihoods for each read seen for each variant to stderr\n");
+    printf("     --verbose        verbose mode, output likelihoods for each read seen for each hypothesis (to stderr)\n");
     printf("     --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
     printf("     --omega=  FLOAT  prior probability of originating from outside paralogous source (value between [0,1], default: 1e-5)\n");
 }

@@ -408,7 +408,7 @@ static void print_usage() {
     printf("*  EAGLE with runtime options --omega=1e-40 --mvh --verbose\n");
     printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc --verbose 1> out.txt  2> readinfo.txt\n\n");
     printf("Options:\n");
-    printf("  -o --out=     String   output prefix for sam files\n");
+    printf("  -o --out=     String   prefix for output BAM files\n");
     printf("  -a --bam=     FILE     alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
     printf("     --listonly          print classified read list only (stdout) without processing BAM file\n");
     printf("     --readlist          read from classified read list file instead of EAGLE outputs and proccess BAM file\n");

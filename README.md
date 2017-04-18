@@ -1,10 +1,12 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-**Requires**: htslib (http://www.htslib.org/)
-Set HTSDIR in the make file to the htslib folder and make.
+**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.
 
-Usage: `eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
+Usage: 
 
+`eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
+
+### For EAGLE read classification, see EAGLE-RC below
 
 **Inputs**
 
@@ -57,6 +59,8 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 --isc  Ignore soft-clipped bases in reads when calculating the probabilities.
 
+--verbose  Verbose mode. Output the likelihoods for every read seen for each hypothesis. Outputs to stderr.
+
 --hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
 
 **Usage Notes**
@@ -69,6 +73,26 @@ If one expects that most mutations are not homozygous (i.e. in heterogenous tumo
 
 Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are output as separate entries. Furthermore, if they are near other variants, it will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will naively retain the one with the maximum probability, for entries with identical coordinates.
 
+## EAGLE-RC
+
+For read classification.  Use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these inputs and classify the reads and optionally read in a bam file and split the reads into bam files for each class.  We also lower probability omega to be more tolerant to sequence differences outside the tested hypotheses.
+
+Usage: 
+
+`eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --omega=1e-40 --mvh --pao --isc --verbose 1> output.tab 2>readinfo.txt`
+
+`readclassify -a alignment.bam -o out_prefix output.tab readinfo.txt > classified_reads.list`
+
+**Program Parameters**
+
+-o  prefix for output BAM files.
+
+--listonly  print classified read list only (stdout) without processing BAM files
+
+--readlist  read from classified read list instead of EAGLE outputs, perhaps from a previous run or a merged file, and process BAM files.
+
+
+*old Python version*
 
 I recommend using the C implementation as it is much faster, but the legacy Python implementation has been left in the repository [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI. I can't promise this will be kept updated.
 

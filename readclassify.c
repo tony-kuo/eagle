@@ -1,5 +1,8 @@
 /*
-Utility program that classifies reads based on EAGLE calculated likelihoods
+Utility program that classifies reads based on EAGLE calculated likelihoods (from verbose output)
+
+Run EAGLE with options --omega=1e-40 --mvh --verbose
+ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc --verbose 1> out.txt  2> readinfo.txt
 
 Copyright 2016 Tony Kuo
 This program is distributed under the terms of the GNU General Public License
@@ -402,8 +405,8 @@ static void process_list(const char *filename, const char *bam_file, const char 
 static void print_usage() {
     printf("\n");
     printf("Usage: readclassify [options] eagle.out.txt eagle.readinfo.txt > classified_reads.list\n\n");
-    printf("*  EAGLE with runtime options --omega=1e-40 --mvh -d -1\n");
-    printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc -d -1 1> out.txt  2> readinfo.txt\n\n");
+    printf("*  EAGLE with runtime options --omega=1e-40 --mvh --verbose\n");
+    printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc --verbose 1> out.txt  2> readinfo.txt\n\n");
     printf("Options:\n");
     printf("  -o --out=     String   output prefix for sam files\n");
     printf("  -a --bam=     FILE     alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");

@@ -44,6 +44,7 @@ static int maxh;
 static int mvh;
 static int pao;
 static int isc;
+static int verbose;
 static int debug;
 static double hetbias;
 static double omega, lgomega;
@@ -674,7 +675,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (prgv > prgu && prgv - prgu > 0.69) alt_count[seti] += 1;
             else if (prgu > prgv && prgu - prgv > 0.69) ref_count[seti] += 1;
 
-            if (debug <= -1) {
+            if (verbose) {
                 if (seti == 0) {
                     read_data[readi]->prgu = prgu;
                     read_data[readi]->prgv = prgv;
@@ -713,7 +714,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
         }
     }
 
-    if (debug <= -1) {
+    if (verbose) {
         for (readi = 0; readi < nreads; ++readi) {
             if (read_data[readi]->prgu == 0 && read_data[readi]->prgv == 0 && read_data[readi]->pout == 0) continue; // unprocessed read
             flockfile(stderr);
@@ -968,6 +969,7 @@ static void print_usage() {
     printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
     printf("     --pao            consider primary alignments only\n");
     printf("     --isc            ignore soft-clipped bases\n");
+    printf("     --verbose        verbose mode, output likelihoods for each read seen for each variant to stderr\n");
     printf("     --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
     printf("     --omega=  FLOAT  prior probability of originating from outside paralogous source (value between [0,1], default: 1e-5)\n");
 }
@@ -986,6 +988,7 @@ int main(int argc, char **argv) {
     mvh = 0;
     pao = 0;
     isc = 0;
+    verbose = 0;
     debug = 0;
     hetbias = 0.5;
     omega = 1.0e-5;
@@ -1003,6 +1006,7 @@ int main(int argc, char **argv) {
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
         {"isc", no_argument, &isc, 1},
+        {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},
         {"hetbias", optional_argument, NULL, 990},
         {"omega", optional_argument, NULL, 991},

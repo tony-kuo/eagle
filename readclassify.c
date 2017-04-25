@@ -2,7 +2,7 @@
 Utility program that classifies reads based on EAGLE calculated likelihoods (from verbose output)
 
 Run EAGLE with options --omega=1e-40 --mvh --verbose
-ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc --verbose 1> out.txt  2> readinfo.txt
+ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --verbose 1> out.txt  2> readinfo.txt
 
 Copyright 2016 Tony Kuo
 This program is distributed under the terms of the GNU General Public License

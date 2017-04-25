@@ -518,8 +518,8 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     memset(b_gap_prev, -1e6, sizeof(b_gap_prev));
 
     prev[0] = 0;
-    prev[1] = 0 + gap_op;
-    for (j = 2; j < read_length + 1; ++j) { prev[j] = prev[j - 1] + gap_ex; }
+    prev[1] = 0 - gap_op;
+    for (j = 2; j < read_length + 1; ++j) { prev[j] = prev[j - 1] - gap_ex; }
 
     double max_score = 0;
     for (i = pos; i < seq_length; ++i) {
@@ -530,12 +530,12 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
         for (j = 1; j < read_length + 1; ++j) {
             double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[seq[i] - 'A']];
 
-            double open = curr[j - 1] + gap_op;
-            double extend = a_gap_curr[j - 1] + gap_ex;
+            double open = curr[j - 1] - gap_op;
+            double extend = a_gap_curr[j - 1] - gap_ex;
             a_gap_curr[j] = open >= extend ? open : extend;
 
-            open = prev[j] + gap_op;
-            extend = b_gap_prev[j] + gap_ex;
+            open = prev[j] - gap_op;
+            extend = b_gap_prev[j] - gap_ex;
             b_gap_curr[j] = open >= extend ? open : extend;
 
             curr[j] = upleft;
@@ -643,8 +643,8 @@ static char *evaluate(const Vector *var_set) {
                 is_match[i] = log(1 - exp(a)); // log(1-err)
                 no_match[i] = a - LG3; // log(err/3)
                 if (dp) {
-                    is_match[i] = match + is_match[i];
-                    no_match[i] = mismatch + is_match[i];
+                    is_match[i] = is_match[i] + match;
+                    no_match[i] = is_match[i] - mismatch;
                 }
             }
             double readprobmatrix[read_data[readi]->length * NT_CODES];
@@ -1012,27 +1012,27 @@ static void process(const Vector *var_list, FILE *out_fh) {
 static void print_usage() {
     printf("\nUsage: eagle [options] -v variants.vcf -a alignment.bam -r reference.fasta\n\n");
     printf("Required:\n");
-    printf("  -v --vcf      FILE   variants VCF file (default: stdin)\n");
-    printf("  -a --bam      FILE   alignment data bam files, ref-coord sorted with bai index file\n");
-    printf("  -r --ref      FILE   reference sequence, fasta file with fai index file\n");
+    printf("  -v --vcf      FILE   Variants VCF file. [stdin]\n");
+    printf("  -a --bam      FILE   Alignment data bam files, ref-coord sorted with bai index file.\n");
+    printf("  -r --ref      FILE   Reference sequence, fasta file with fai index file.\n");
     printf("Options:\n");
-    printf("  -o --out      FILE   output file (default: stdout)\n");
-    printf("  -t --nthread  INT    number of threads to use (default: 1)\n");
-    printf("  -s --sharedr  INT    group nearby variants that share a read (default distance based/off: 0, shared with first: 1, shared with any: 2\n");
-    printf("  -n --distlim  INT    group nearby variants within n bases (off: 0, default: 10)\n");
-    printf("  -w --maxdist  INT    maximum number of bases between any two variants in a set of hypotheses (off: 0, default: 0)\n");
-    printf("  -m --maxh     INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
-    printf("     --mvh             instead of marginal probabilities, output only the maximum likelihood hypothesis in the set of hypotheses\n");
-    printf("     --pao             consider primary alignments only\n");
-    printf("     --isc             ignore soft-clipped bases\n");
-    printf("     --dp              use dynamic programming to calculate likelihood instead of the basic model, glocal align\n");
-    printf("     --match    INT    match score for --dp (int > 0, default: 1)\n");
-    printf("     --mismatch INT    mismatch penalty for --dp (int < 0, default: -4)\n");
-    printf("     --gap_op   INT    gap open penalty for --dp (int < 0, default: -6)\n");
-    printf("     --gap_ex   INT    gap extend penalty for --dp (int < 0, default: -1)\n");
-    printf("     --verbose         verbose mode, output likelihoods for each read seen for each hypothesis (to stderr)\n");
-    printf("     --hetbias  FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
-    printf("     --omega    FLOAT  prior probability of originating from outside paralogous source (value between [0,1], default: 1e-5)\n");
+    printf("  -o --out      FILE   Output file. [stdout]\n");
+    printf("  -t --nthread  INT    Number of threads. [1]\n");
+    printf("  -s --sharedr  INT    Group nearby variants that share a read, 0:distance based/off, 1:shared with first, 2:shared with any. [0]\n");
+    printf("  -n --distlim  INT    Group nearby variants within n bases, 0:off. [10]\n");
+    printf("  -w --maxdist  INT    Maximum number of bases between any two variants in a set of hypotheses, 0:off. [0]\n");
+    printf("  -m --maxh     INT    Maximum number of combinations in the set of hypotheses, instead of all 2^n. [1024]\n");
+    printf("     --mvh             Output the maximum likelihood hypothesis in the set instead of marginal probabilities.\n");
+    printf("     --pao             Primary alignments only.\n");
+    printf("     --isc             Ignore soft-clipped bases.\n");
+    printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
+    printf("     --match    INT    DP matching score. [1]\n");
+    printf("     --mismatch INT    DP mismatch penalty. [4]\n");
+    printf("     --gap_op   INT    DP gap open penalty. [6]\n");
+    printf("     --gap_ex   INT    DP gap extend penalty. [1]\n");
+    printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
+    printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
+    printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
 }
 
 int main(int argc, char **argv) {
@@ -1056,9 +1056,9 @@ int main(int argc, char **argv) {
     omega = 1.0e-5;
 
     match = 1;
-    mismatch = -4;
-    gap_op = -6;
-    gap_ex = -1;
+    mismatch = 4;
+    gap_op = 6;
+    gap_ex = 1;
 
     static struct option long_options[] = {
         {"vcf", required_argument, NULL, 'v'},
@@ -1128,9 +1128,9 @@ int main(int argc, char **argv) {
     if (maxdist < 0) maxdist = 0;
     if (maxh < 0) maxh = 1024;
     if (match <= 0) match = 1;
-    if (mismatch >= 0) mismatch = -4;
-    if (gap_op >= 0) gap_op = -6;
-    if (gap_ex >= 0) gap_ex = -1;
+    if (mismatch <= 0) mismatch = 4;
+    if (gap_op <= 0) gap_op = 6;
+    if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (omega < 0 || omega > 1) omega = 1e-5;
     lgomega = (log(omega) - log(1.0-omega));

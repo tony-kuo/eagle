@@ -1,11 +1,12 @@
 CC=gcc
 CFLAGS=-g -Wall -O2 -pthread
 
-HTSDIR=htslib-1.3.2
+HTSDIR=htslib
 INCLUDES=-I$(HTSDIR)
 LFLAGS=-L$(HTSDIR)
 LIBS=$(HTSDIR)/libhts.a
-LDLIBS=-lm -lz -lpthread
+#LDLIBS=-lm -lz -lpthread # older version of htslib
+LDLIBS=-lm -lz -llzma -lbz2 -lpthread
 
 MAIN = eagle
 AUX = util.o vector.o

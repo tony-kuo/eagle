@@ -36,6 +36,10 @@ This program is distributed under the terms of the GNU General Public License
 #define LGALPHA (log(ALPHA))
 
 /* Command line arguments */
+static char *vcf_file;
+static char *bam_file;
+static char *fa_file;
+static char *out_file;
 static int nthread;
 static int sharedr;
 static int distlim;
@@ -44,10 +48,12 @@ static int maxh;
 static int mvh;
 static int pao;
 static int isc;
+static int dp;
 static int verbose;
 static int debug;
 static double hetbias;
 static double omega, lgomega;
+static int match, mismatch, gap_open, gap_extend;
 
 /* Time info */
 static time_t now; 
@@ -60,80 +66,6 @@ static int seqnt_map[26];
 KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 
-
-static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
-    int i, b; // array[width * row + col] = value
-    for (b = 0; b < read_length; ++b) {
-        for (i = 0; i < NT_CODES; ++i) matrix[NT_CODES * b + i] = no_match[b];
-        matrix[NT_CODES * b + seqnt_map[seq[b] - 'A']] = is_match[b];
-        switch (seq[b]) {
-        case 'A':
-            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 9] = is_match[b]; // also W
-            break;
-        case 'T':
-            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 9] = is_match[b]; // also W
-            break;
-        case 'C':
-            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 10] = is_match[b]; // also S
-            break;
-        case 'G':
-            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 10] = is_match[b]; // also S
-            break;
-        }
-    }
-}
-
-static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
-    int b; // array[width * row + col] = value
-    int n = pos + read_length;
-    double probability = 0;
-    for (b = pos;  b < n; ++b) {
-        if (b < 0) continue;
-        if (b >= seq_length) break;
-        probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[b] - 'A']]; 
-        if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
-    }
-    return probability;
-}
-
-static inline double calc_prob_distrib(const double *matrix, int read_length, const char *seq, int seq_length, int pos) {
-    int i;
-    int n1 = pos - read_length;
-    int n2 = pos + read_length;
-    double probability = 0;
-    double baseline = calc_prob(matrix, read_length, seq, seq_length, pos, -10000); // first probability at given pos, likely the highest, for initial baseline
-    for (i = n1; i < n2; ++i) {
-        if (i + read_length < 0) continue;
-        if (i - read_length >= seq_length) break;
-        probability = probability == 0 ? calc_prob(matrix, read_length, seq, seq_length, i, baseline) : log_add_exp(probability, calc_prob(matrix, read_length, seq, seq_length, i, baseline));
-        if (probability > baseline) baseline = probability;
-    }
-    return probability;
-}
 
 static void combinations(char **output, int k, int n, size_t *ncombos) {
     int i, c[k];
@@ -501,7 +433,128 @@ static inline void variant_print(char **output, const Vector *var_set, size_t i,
     strcat(*output, "]\n");
 }
 
-static char *evaluate(const Vector *var_set, const char *bam_file, const char *fa_file) {
+static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
+    int i, b; // array[width * row + col] = value
+    for (b = 0; b < read_length; ++b) {
+        for (i = 0; i < NT_CODES; ++i) matrix[NT_CODES * b + i] = no_match[b];
+        matrix[NT_CODES * b + seqnt_map[seq[b] - 'A']] = is_match[b];
+        switch (seq[b]) {
+        case 'A':
+            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 9] = is_match[b]; // also W
+            break;
+        case 'T':
+            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 9] = is_match[b]; // also W
+            break;
+        case 'C':
+            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 10] = is_match[b]; // also S
+            break;
+        case 'G':
+            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
+            matrix[NT_CODES * b + 10] = is_match[b]; // also S
+            break;
+        }
+    }
+}
+
+static inline double calc_prob1(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
+    int b; // array[width * row + col] = value
+    int n = pos + read_length;
+    double probability = 0;
+    for (b = pos;  b < n; ++b) {
+        if (b < 0) continue;
+        if (b >= seq_length) break;
+        probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[b] - 'A']]; 
+        if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
+    }
+    return probability;
+}
+
+static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos) {
+    int i;
+    int n1 = pos - read_length;
+    int n2 = pos + read_length;
+    double probability = 0;
+    double baseline = calc_prob1(matrix, read_length, seq, seq_length, pos, -1e6); // first probability at given pos, likely the highest, for initial baseline
+    for (i = n1; i < n2; ++i) {
+        if (i + read_length < 0) continue;
+        if (i - read_length >= seq_length) break;
+        probability = probability == 0 ? calc_prob1(matrix, read_length, seq, seq_length, i, baseline) : log_add_exp(probability, calc_prob1(matrix, read_length, seq, seq_length, i, baseline));
+        if (probability > baseline) baseline = probability;
+    }
+    return probability;
+}
+
+static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int pos) { /* glocal version */
+    size_t i, j;
+
+    double prev[read_length + 1], curr[read_length + 1];
+    double a_gap_prev[read_length + 1], a_gap_curr[read_length + 1];
+    double b_gap_prev[read_length + 1], b_gap_curr[read_length + 1];
+
+    memset(a_gap_prev, -1e6, sizeof(a_gap_prev));
+    memset(b_gap_prev, -1e6, sizeof(b_gap_prev));
+
+    prev[0] = 0;
+    prev[1] = 0 - gap_open;
+    for (j = 2; j < read_length + 1; ++j) { prev[j] = prev[j - 1] - gap_extend; }
+
+    double max_score = 0;
+    for (i = pos; i < seq_length; ++i) {
+        curr[0] = 0;
+        a_gap_curr[0] = 0;
+        b_gap_curr[0] = 0;
+        double row_max = 0;
+        for (j = 1; j < read_length + 1; ++j) {
+            double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[seq[i] - 'A']];
+
+            double open = curr[j - 1] - gap_open;
+            double extend = a_gap_curr[j - 1] - gap_extend;
+            a_gap_curr[j] = open >= extend ? open : extend;
+
+            open = prev[j] - gap_open;
+            extend = b_gap_prev[j] - gap_extend;
+            b_gap_curr[j] = open >= extend ? open : extend;
+
+            curr[j] = upleft;
+            if (a_gap_curr[j] >= curr[j]) curr[j] = a_gap_curr[j];
+            if (b_gap_curr[j] >= curr[j]) curr[j] = b_gap_curr[j];
+
+            if (curr[j] > row_max) row_max = curr[j];
+        }
+        if (row_max > max_score) max_score = row_max;
+        if (row_max / max_score < 0.05) break;
+
+        memcpy(prev, curr, sizeof(prev));
+        memcpy(a_gap_prev, a_gap_curr, sizeof(a_gap_prev));
+        memcpy(b_gap_prev, b_gap_curr, sizeof(b_gap_prev));
+    }
+    return max_score;
+}
+
+static char *evaluate(const Vector *var_set) {
     size_t i, seti, readi;
 
     Variant **var_data = (Variant **)var_set->data;
@@ -567,7 +620,7 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             Variant *last = (Variant *)var_combo[seti]->data[var_combo[seti]->size - 1];
             if (read_data[readi]->pos > first->pos || read_data[readi]->pos + read_data[readi]->length < last->pos) continue;
             */
-
+            size_t i;
             int is_unmap = 0;
             int is_reverse = 0;
             int is_secondary = 0;
@@ -582,17 +635,21 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             if (is_unmap) continue;
             if (pao && is_secondary) continue;
 
-            /* Read probability matrix */
+             /* Read probability matrix */
             double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
             for (i = 0; i < read_data[readi]->length; ++i) {
                 if (read_data[readi]->qual[i] == 0) read_data[readi]->qual[i] = -0.01;
                 double a = read_data[readi]->qual[i] * M_1_LOG10E; //convert to ln
                 is_match[i] = log(1 - exp(a)); // log(1-err)
                 no_match[i] = a - LG3; // log(err/3)
+                if (dp) {
+                    is_match[i] = match + is_match[i];
+                    no_match[i] = mismatch + is_match[i];
+                }
             }
             double readprobmatrix[read_data[readi]->length * NT_CODES];
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
-
+           
             /* 
             Exact Formuation:
             Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
@@ -608,18 +665,16 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
             /* Constant outside paralog term, testing, seems to perform near identically to the exact formulation above for fixed read length sequences */
             //double elsewhere = -2.4; // < 10%
-            
+
+            double prgu, prgv;
             double pout = elsewhere;
-            /* Calculate the probability given reference genome */
-            double prgu = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
-            /* Calculate the probability given alternative genome */
-            double prgv = calc_prob_distrib(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
-            if (debug >= 3) {
-                fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu, prgv, pout);
-                fprintf(stderr, "%s\t%s\t%d\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->inferred_length);
-                fprintf(stderr, "%s\t", read_data[readi]->qseq);
-                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
-                fprintf(stderr, "\n");
+            if (dp) { /* Calculate the alignment score given genome using dynamic programming */
+                prgu = smith_waterman_gotoh(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
+                prgv = smith_waterman_gotoh(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
+            }
+            else { /* Calculate the probability given genome */
+                prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
+                prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
             }
 
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
@@ -641,10 +696,15 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 
                     xa_pos = abs(xa_pos);
                     pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                    double readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
+                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
                     prgu = log_add_exp(prgu, readprobability);
-                    if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary, check if it is near the variant position, otherwise is the same as probability given reference
-                        if (abs(xa_pos - ((Variant *)var_combo[seti]->data[0])->pos) < read_data[readi]->length) readprobability = calc_prob_distrib(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
+                    if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary
+                        if (dp) {
+                            readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
+                        }
+                        else {
+                            readprobability = smith_waterman_gotoh(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
+                        }
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     free(newreadprobmatrix); newreadprobmatrix = NULL;
@@ -653,11 +713,13 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             }
             else if (read_data[readi]->multimapNH > 1) { // scale by the number of multimap positions
                 double n = log(read_data[readi]->multimapNH - 1);
-                double readprobability = calc_prob_distrib(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos) + n;
-                pout += log_add_exp(pout, elsewhere + n);
-                prgu += log_add_exp(prgu, readprobability);
-                prgv += log_add_exp(prgu, readprobability);
+                double readprobability = prgu + n;
+                pout = log_add_exp(pout, elsewhere + n);
+                prgu = log_add_exp(prgu, readprobability);
+                prgv = log_add_exp(prgv, readprobability);
             }
+
+            if (debug >= 3) { fprintf(stderr, "%d:\t%f\t%f\t%f\t", (int)seti, prgu, prgv, pout); }
 
             /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
             pout += lgomega;
@@ -694,8 +756,9 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
             ref[seti] += prgu + ref_prior;
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
+
             if (debug >= 2) {
-                fprintf(stderr, "++%d\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
+                fprintf(stderr, ":%d:\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, ref_count[seti], alt_count[seti]);
                 fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
                 for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
                 fprintf(stderr, "\t");
@@ -704,12 +767,14 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
                 if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
                 if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
+                fprintf(stderr, "%s\t", read_data[readi]->qseq);
+                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
                 fprintf(stderr, "\n");
             }
         }
         free(altseq); altseq = NULL;
         if (debug >= 1) {
-            fprintf(stderr, "==%d\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref[seti], het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
+            fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref[seti], het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
             for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
         }
     }
@@ -785,11 +850,6 @@ static char *evaluate(const Vector *var_set, const char *bam_file, const char *f
 }
 
 typedef struct {
-    Vector *var_set;
-    char *bam_file, *fa_file;
-} FuncArg;
-
-typedef struct {
     Vector *queue, *results;
     pthread_mutex_t q_lock;
     pthread_mutex_t r_lock;
@@ -802,23 +862,22 @@ static void *pool(void *work) {
 
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
         pthread_mutex_lock(&w->q_lock);
-        FuncArg *arg = (FuncArg *)vector_pop(queue);
+        Vector *var_set = (Vector *)vector_pop(queue);
         pthread_mutex_unlock(&w->q_lock);
-        if (arg == NULL) break;
+        if (var_set == NULL) break;
         
-        char *outstr = evaluate(arg->var_set, arg->bam_file, arg->fa_file);
+        char *outstr = evaluate(var_set);
         if (outstr == NULL) continue;
 
         pthread_mutex_lock(&w->r_lock);
         vector_add(results, outstr);
-        vector_free(arg->var_set); free(arg->var_set); arg->var_set = NULL;
-        free(arg); arg = NULL;
+        vector_free(var_set); free(var_set); var_set = NULL;
         pthread_mutex_unlock(&w->r_lock);
     }
     return NULL;
 }
 
-static void process(const Vector *var_list, char *bam_file, char *fa_file, FILE *out_fh) {
+static void process(const Vector *var_list, FILE *out_fh) {
     size_t i, j, n;
 
     Variant **var_data = (Variant **)var_list->data;
@@ -919,14 +978,11 @@ static void process(const Vector *var_list, char *bam_file, char *fa_file, FILE 
 
     print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d omega=%g\n", maxh, mvh, pao, isc, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
+
     Vector *queue = vector_create(nsets, VOID_T);
     Vector *results = vector_create(nsets, VOID_T);
     for (i = 0; i < nsets; ++i) {
-        FuncArg *arg = malloc(sizeof (FuncArg));
-        arg->var_set = var_set[i];
-        arg->bam_file = bam_file;
-        arg->fa_file = fa_file;
-        vector_add(queue, arg);
+        vector_add(queue, var_set[i]);
     }
     Work *w = malloc(sizeof (Work));
     w->queue = queue;
@@ -966,9 +1022,10 @@ static void print_usage() {
     printf("  -n --distlim=INT    group nearby variants within n bases (off: 0, default: 10)\n");
     printf("  -w --maxdist=INT    maximum number of bases between any two variants in a set of hypotheses (off: 0, default: 0)\n");
     printf("  -m --maxh=   INT    the maximum number of combinations in the set of hypotheses, instead of all 2^n (default: 2^10 = 1024)\n");
-    printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood variant hypothesis in the set of hypotheses\n");
+    printf("     --mvh            instead of marginal probabilities, output only the maximum likelihood hypothesis in the set of hypotheses\n");
     printf("     --pao            consider primary alignments only\n");
     printf("     --isc            ignore soft-clipped bases\n");
+    printf("     --dp             use dynamic programming to calculate likelihood instead of the basic model, glocal align \n");
     printf("     --verbose        verbose mode, output likelihoods for each read seen for each hypothesis (to stderr)\n");
     printf("     --hetbias=FLOAT  prior probability bias towards non-homozygous mutations (value between [0,1], default: 0.5 unbiased)\n");
     printf("     --omega=  FLOAT  prior probability of originating from outside paralogous source (value between [0,1], default: 1e-5)\n");
@@ -976,10 +1033,10 @@ static void print_usage() {
 
 int main(int argc, char **argv) {
     /* Command line parameters defaults */
-    char *vcf_file = NULL;
-    char *bam_file = NULL;
-    char *fa_file = NULL;
-    char *out_file = NULL;
+    vcf_file = NULL;
+    bam_file = NULL;
+    fa_file = NULL;
+    out_file = NULL;
     nthread = 1;
     sharedr = 0;
     distlim = 10;
@@ -988,10 +1045,16 @@ int main(int argc, char **argv) {
     mvh = 0;
     pao = 0;
     isc = 0;
+    dp = 0;
     verbose = 0;
     debug = 0;
     hetbias = 0.5;
     omega = 1.0e-5;
+
+    match = 1;
+    mismatch = -4;
+    gap_open = 6;
+    gap_extend = 1;
 
     static struct option long_options[] = {
         {"vcf", required_argument, NULL, 'v'},
@@ -1006,6 +1069,7 @@ int main(int argc, char **argv) {
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
         {"isc", no_argument, &isc, 1},
+        {"dp", no_argument, &dp, 1},
         {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},
         {"hetbias", optional_argument, NULL, 990},
@@ -1094,7 +1158,7 @@ int main(int argc, char **argv) {
     //fasta_read(fa_file);
 
     pthread_mutex_init(&refseq_lock, NULL);
-    process(var_list, bam_file, fa_file, out_fh);
+    process(var_list, out_fh);
     if (out_file != NULL) fclose(out_fh);
     else fflush(stdout);
     pthread_mutex_destroy(&refseq_lock);

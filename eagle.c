@@ -1023,9 +1023,9 @@ static void print_usage() {
     printf("     --pao             Primary alignments only.\n");
     printf("     --isc             Ignore soft-clipped bases.\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
-    printf("     --match    INT    DP matching score. [1]\n");
-    printf("     --mismatch INT    DP mismatch penalty. [4]\n");
-    printf("     --gap_op   INT    DP gap open penalty. [6]\n");
+    printf("     --match    INT    DP matching score. [2]\n");
+    printf("     --mismatch INT    DP mismatch penalty. [5]\n");
+    printf("     --gap_op   INT    DP gap open penalty. [2]\n");
     printf("     --gap_ex   INT    DP gap extend penalty. [1]\n");
     printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
@@ -1052,9 +1052,9 @@ int main(int argc, char **argv) {
     hetbias = 0.5;
     omega = 1.0e-5;
 
-    match = 1;
-    mismatch = 4;
-    gap_op = 6;
+    match = 2;
+    mismatch = 5;
+    gap_op = 2;
     gap_ex = 1;
 
     static struct option long_options[] = {
@@ -1124,9 +1124,9 @@ int main(int argc, char **argv) {
     if (distlim < 0) distlim = 10;
     if (maxdist < 0) maxdist = 0;
     if (maxh < 0) maxh = 1024;
-    if (match <= 0) match = 1;
-    if (mismatch <= 0) mismatch = 4;
-    if (gap_op <= 0) gap_op = 6;
+    if (match <= 0) match = 2;
+    if (mismatch <= 0) mismatch = 5;
+    if (gap_op <= 0) gap_op = 2;
     if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (omega < 0 || omega > 1) omega = 1e-5;

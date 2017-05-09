@@ -59,6 +59,16 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 --isc  Ignore soft-clipped bases in reads when calculating the probabilities.
 
+--dp  Instead of the short read model which assumes no indel errors, use dynamic programming (glocal) to calculate the likelihood.  This allows for handling of long reads which have higher rates of sequencing errors and indel errors.
+
+--match  Matching score for use with *dp*.  Default is 2.
+
+--mismatch  Mismatch penalty for use with *dp*.  Default is 5.
+
+--gap\_op  Gap open penalty for use with *dp*.  Default is 2.
+
+--gap\_ex  Gap extend penalty for use with *dp*.  Default is 1.
+
 --verbose  Verbose mode. Output the likelihoods for every read seen for each hypothesis. Outputs to stderr.
 
 --hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
@@ -75,11 +85,11 @@ Heterozygous non-reference variants (VCF: comma separated multiple alternative s
 
 ## EAGLE-RC
 
-For read classification.  Use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these inputs and classify the reads and optionally read in a bam file and split the reads into bam files for each class.  We also lower probability omega to be more tolerant to sequence differences outside the tested hypotheses.
+For read classification.  Use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these inputs and classify the reads and optionally read in a bam file and split the reads into bam files for each class.  We also lower probability omega to be more tolerant to sequence differences outside the tested hypotheses.  Other options (such as --dp for long reads) may or may not be applicable depending on the use case.
 
 Usage: 
 
-`eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --omega=1e-40 --mvh --pao --isc --verbose 1> output.tab 2>readinfo.txt`
+`eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --omega=1e-40 --mvh --verbose 1> output.tab 2>readinfo.txt`
 
 `readclassify -a alignment.bam -o out_prefix output.tab readinfo.txt > classified_reads.list`
 

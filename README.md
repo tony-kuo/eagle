@@ -1,6 +1,6 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.
+**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.  Note that we merely call make on htslib, as such, its dependencies and system requirements need to be fufilled.
 
 Usage: 
 

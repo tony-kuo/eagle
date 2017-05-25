@@ -48,6 +48,7 @@ static int maxh;
 static int mvh;
 static int pao;
 static int isc;
+static int nodup;
 static int dp;
 static int verbose;
 static int debug;
@@ -630,17 +631,20 @@ static char *evaluate(const Vector *var_set) {
             */
             size_t i;
             int is_unmap = 0;
+            int is_dup = 0;
             int is_reverse = 0;
             int is_secondary = 0;
             int n;
             char *s, token[strlen(read_data[readi]->flag) + 1];
             for (s = read_data[readi]->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
                 if (strcmp("UNMAP", token) == 0) is_unmap = 1;
+                else if (strcmp("DUP", token) == 0) is_dup = 1;
                 else if (strcmp("REVERSE", token) == 0) is_reverse = 1;
                 else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
                 if (*(s + n) != ',') break;
             }
             if (is_unmap) continue;
+            if (nodup && is_dup) continue;
             if (pao && is_secondary) continue;
 
              /* Read probability matrix */
@@ -1022,6 +1026,7 @@ static void print_usage() {
     printf("     --mvh             Output the maximum likelihood hypothesis in the set instead of marginal probabilities.\n");
     printf("     --pao             Primary alignments only.\n");
     printf("     --isc             Ignore soft-clipped bases.\n");
+    printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
     printf("     --match    INT    DP matching score. [2]\n");
     printf("     --mismatch INT    DP mismatch penalty. [5]\n");
@@ -1046,6 +1051,7 @@ int main(int argc, char **argv) {
     mvh = 0;
     pao = 0;
     isc = 0;
+    nodup = 0;
     dp = 0;
     verbose = 0;
     debug = 0;
@@ -1070,6 +1076,7 @@ int main(int argc, char **argv) {
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
         {"isc", no_argument, &isc, 1},
+        {"nodup", no_argument, &nodup, 1},
         {"dp", no_argument, &dp, 1},
         {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},

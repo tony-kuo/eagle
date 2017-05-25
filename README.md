@@ -1,6 +1,6 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.
+**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.  Note that we merely call make on htslib, as such, its dependencies and system requirements need to be fufilled.
 
 Usage: 
 
@@ -59,7 +59,7 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 --isc  Ignore soft-clipped bases in reads when calculating the probabilities.
 
---dp  Instead of the short read model which assumes no indel errors, use dynamic programming (glocal) to calculate the likelihood.  This allows for handling of long reads which have higher rates of sequencing errors and indel errors.
+--dp  Instead of the short read model which assumes no indel errors, use dynamic programming (short in long) to calculate the likelihood.  This allows for handling of long reads which have higher rates of sequencing errors and indel errors.
 
 --match  Matching score for use with *dp*.  Default is 2.
 

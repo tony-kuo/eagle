@@ -33,8 +33,8 @@ def readFiles(files):
                 for i in ref:
                     for j in alt:
                         key = t[0]+'\t'+t[1]+'\t'+i+'\t'+j;
-                        depth = int(t[4]);
-                        #depth = int(t[5]) + int(t[6]);
+                        #depth = int(t[4]);
+                        depth = int(t[5]) + int(t[6]);
                         if depth > 0:
                             af = float(t[6])/depth;
                             prob = float(t[7]);

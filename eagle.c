@@ -821,8 +821,8 @@ static char *evaluate(const Vector *var_set) {
         for (i = 0; i < nvariants; ++i) {
             double has_alt = 0;
             double not_alt = 0;
-            int acount = 0;
-            int rcount = 0;
+            int acount = -1;
+            int rcount = -1;
             for (seti = 0; seti < ncombos; ++seti) {
                 not_alt = not_alt == 0 ? ref[seti] : log_add_exp(not_alt, ref[seti]);
                 if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination

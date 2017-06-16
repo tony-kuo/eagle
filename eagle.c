@@ -544,6 +544,7 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
     for (b = pos;  b < n; ++b) {
         if (b < 0) continue;
         if (b >= seq_length) break;
+        if (splice_length > 0 && b + splice_length >= seq_length) break;
 
         int c;
         if (splice_length > 0 && b - pos > splice_pos) c = b + splice_length;
@@ -564,7 +565,9 @@ static inline double calc_prob(const double *matrix, int read_length, const char
 
     double probability = 0;
     if (dp) {
-        probability = smith_waterman_gotoh(matrix, read_length, seq, n2 + splice_length - n1 + 1, n1);
+        if (n2 + splice_length >= seq_length) n2 = seq_length - 1;
+        else n2 += splice_length;
+        probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
     }
     else {
         int i;

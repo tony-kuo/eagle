@@ -268,6 +268,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
                 else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
                 else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
             }
+            read->splice_pos -= s_offset;
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
 

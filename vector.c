@@ -114,19 +114,21 @@ Read *read_create(char *name, int tid, char *chr, int pos) {
     r->index = 0;
     r->var_list = vector_create(8, VOID_T);
 
-    r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->splice_pos = r->splice_length = 0;
+    r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
     r->qseq = NULL;
     r->qual = NULL;
     r->flag = NULL;
     r->cigar_opchr = NULL;
     r->cigar_oplen = NULL;
+    r->splice_pos = NULL;
+    r->splice_offset = NULL;
     r->multimapXA = NULL;
     return r;
 }
 
 void read_destroy(Read *r) {
     if (r == NULL) return;
-    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->splice_pos = r->splice_length = 0;
+    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
     r->prgu = r->prgv = r->pout = 0;
     r->index = 0;
     free(r->name); r->name = NULL;
@@ -136,6 +138,8 @@ void read_destroy(Read *r) {
     free(r->flag); r->flag = NULL;
     free(r->cigar_opchr); r->cigar_opchr = NULL;
     free(r->cigar_oplen); r->cigar_oplen = NULL;
+    free(r->splice_pos); r->splice_pos = NULL;
+    free(r->splice_offset); r->splice_offset = NULL;
     free(r->multimapXA); r->multimapXA = NULL;
     vector_destroy(r->var_list); free(r->var_list); r->var_list = NULL;
 }

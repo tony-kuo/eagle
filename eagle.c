@@ -49,6 +49,7 @@ static int mvh;
 static int pao;
 static int isc;
 static int nodup;
+static int splice;
 static int dp;
 static int verbose;
 static int debug;
@@ -241,36 +242,48 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
-            size_t i;
+            size_t i, j;
             Read *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
             int saw_M = 0;
-            int cigarlen = 0;
             size_t s_offset = 0; // offset for softclip at start
             size_t e_offset = 0; // offset for softclip at end
+
             uint32_t *cigar = bam_get_cigar(aln);
             read->n_cigar = aln->core.n_cigar;
             read->cigar_oplen = malloc(read->n_cigar * sizeof read->cigar_oplen);
             read->cigar_opchr = malloc((read->n_cigar + 1) * sizeof read->cigar_opchr);
+            read->splice_pos = malloc(read->n_cigar * sizeof read->splice_pos);
+            read->splice_offset = malloc(read->n_cigar * sizeof read->splice_offset);
+
             for (i = 0; i < read->n_cigar; ++i) {
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
-
-                if (read->cigar_opchr[i] == 'N') {
-                    read->splice_pos = cigarlen;
-                    read->splice_length = read->cigar_oplen[i];
-                }
-                else {
-                    cigarlen += read->cigar_oplen[i];
-                }
+                read->splice_pos[i] = 0;
+                read->splice_offset[i] = 0;
 
                 if (isc && read->cigar_opchr[i] == 'M') saw_M = 1;
                 else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
                 else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
             }
-            read->splice_pos -= s_offset;
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
+
+            if (splice) {
+                j = 0;
+                int cigarlen = 0;
+                for (i = 0; i < read->n_cigar; ++i) {
+                    if (read->cigar_opchr[i] == 'N') {
+                        read->splice_pos[j] = cigarlen;
+                        read->splice_offset[j] = (j == 0) ? read->cigar_oplen[i] - s_offset : read->cigar_oplen[i];
+                        ++j;
+                    }
+                    else {
+                        cigarlen += read->cigar_oplen[i];
+                    }
+                }
+                read->n_splice = j;
+            }
 
             read->length = aln->core.l_qseq - (s_offset + e_offset);
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
@@ -516,11 +529,11 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
 
             double open = curr[j - 1] - gap_op;
             double extend = a_gap_curr[j - 1] - gap_ex;
-            a_gap_curr[j] = open >= extend ? open : extend;
+            a_gap_curr[j] = (open >= extend) ? open : extend;
 
             open = prev[j] - gap_op;
             extend = b_gap_prev[j] - gap_ex;
-            b_gap_curr[j] = open >= extend ? open : extend;
+            b_gap_curr[j] = (open >= extend) ? open : extend;
 
             curr[j] = upleft;
             if (a_gap_curr[j] >= curr[j]) curr[j] = a_gap_curr[j];
@@ -537,18 +550,22 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int splice_pos, int splice_length, double baseline) {
+static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
+    size_t i;
     int b; // array[width * row + col] = value
     int n = pos + read_length;
     double probability = 0;
     for (b = pos;  b < n; ++b) {
         if (b < 0) continue;
-        if (b >= seq_length) break;
-        if (splice_length > 0 && b + splice_length >= seq_length) break;
 
-        int c;
-        if (splice_length > 0 && b - pos > splice_pos) c = b + splice_length;
-        else c = b;
+        int c = b;
+        for (i = 0; i < n_splice; ++i) {
+            if (b - pos > splice_pos[i]) {
+                c += splice_offset[i];
+            }
+        }
+
+        if (c >= seq_length) break;
         probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[c] - 'A']]; 
 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
@@ -556,7 +573,7 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
     return probability;
 }
 
-static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int splice_pos, int splice_length) {
+static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int n1 = pos - (read_length / 2);
     int n2 = pos + read_length + (read_length / 2);
@@ -565,16 +582,18 @@ static inline double calc_prob(const double *matrix, int read_length, const char
 
     double probability = 0;
     if (dp) {
-        if (n2 + splice_length >= seq_length) n2 = seq_length - 1;
-        else n2 += splice_length;
+        if (n_splice > 0) {
+            if (n2 + splice_offset[n_splice - 1] >= seq_length) n2 = seq_length - 1;
+            else n2 += splice_offset[n_splice - 1];
+        }
         probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
     }
     else {
         int i;
-        probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_length, -1e6);
+        probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i + read_length < n2; ++i) {
-            probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_length, baseline));
+            probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
             if (probability > baseline) baseline = probability;
         }
     }
@@ -617,7 +636,7 @@ static char *evaluate(const Vector *var_set) {
         if (*(s1 + n1) != '\t') break;
     }
     free(combo); combo = NULL;
-    //for (seti = 0; seti < ncombos; ++seti) { printf("%d\t", (int)seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; printf("%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } printf("\n"); }
+    //for (seti = 0; seti < ncombos; ++seti) { fprintf(stderr, "%d\t", (int)seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); }
 
     /* Prior probabilities based on variant combinations */
     double ref_prior = log(0.5 / ncombos);
@@ -698,8 +717,8 @@ static char *evaluate(const Vector *var_set) {
 
             double prgu, prgv;
             double pout = elsewhere;
-            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
-            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
+            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
 
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
             if (read_data[readi]->multimapXA != NULL) {
@@ -720,10 +739,10 @@ static char *evaluate(const Vector *var_set) {
 
                     xa_pos = abs(xa_pos);
                     pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
+                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
                     prgu = log_add_exp(prgu, readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary
-                        readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
+                        readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     free(newreadprobmatrix); newreadprobmatrix = NULL;
@@ -842,9 +861,9 @@ static char *evaluate(const Vector *var_set) {
             int acount = -1;
             int rcount = -1;
             for (seti = 0; seti < ncombos; ++seti) {
-                not_alt = not_alt == 0 ? ref[seti] : log_add_exp(not_alt, ref[seti]);
+                not_alt = (not_alt == 0) ? ref[seti] : log_add_exp(not_alt, ref[seti]);
                 if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
-                    has_alt = has_alt == 0 ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
+                    has_alt = (has_alt == 0) ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
                     if (alt_count[seti] > acount) {
                         acount = alt_count[seti];
                         rcount = ref_count[seti];
@@ -1045,6 +1064,7 @@ static void print_usage() {
     printf("     --pao             Primary alignments only.\n");
     printf("     --isc             Ignore soft-clipped bases.\n");
     printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
+    printf("     --splice          Allow spliced reads.\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
     printf("     --match    INT    DP matching score. [2]\n");
     printf("     --mismatch INT    DP mismatch penalty. [5]\n");
@@ -1095,6 +1115,7 @@ int main(int argc, char **argv) {
         {"pao", no_argument, &pao, 1},
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
+        {"splice", no_argument, &splice, 1},
         {"dp", no_argument, &dp, 1},
         {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},

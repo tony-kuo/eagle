@@ -580,16 +580,14 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     if (n1 < 0) n1 = 0;
     if (n2 >= seq_length) n2 = seq_length - 1;
 
+    int i;
     double probability = 0;
     if (dp) {
-        if (n_splice > 0) {
-            if (n2 + splice_offset[n_splice - 1] >= seq_length) n2 = seq_length - 1;
-            else n2 += splice_offset[n_splice - 1];
-        }
+        for (i = 0; i < n_splice; ++i) n2 += splice_offset[i];
+        if (n2 >= seq_length) n2 = seq_length - 1;
         probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
     }
     else {
-        int i;
         probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i + read_length < n2; ++i) {

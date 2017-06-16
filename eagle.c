@@ -245,6 +245,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
             Read *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
             int saw_M = 0;
+            int cigarlen = 0;
             size_t s_offset = 0; // offset for softclip at start
             size_t e_offset = 0; // offset for softclip at end
             uint32_t *cigar = bam_get_cigar(aln);
@@ -254,6 +255,14 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
             for (i = 0; i < read->n_cigar; ++i) {
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
+
+                if (read->cigar_opchr[i] == 'N') {
+                    read->splice_pos = cigarlen;
+                    read->splice_length = read->cigar_oplen[i];
+                }
+                else {
+                    cigarlen += read->cigar_oplen[i];
+                }
 
                 if (isc && read->cigar_opchr[i] == 'M') saw_M = 1;
                 else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
@@ -480,20 +489,7 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
     }
 }
 
-static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
-    int b; // array[width * row + col] = value
-    int n = pos + read_length;
-    double probability = 0;
-    for (b = pos;  b < n; ++b) {
-        if (b < 0) continue;
-        if (b >= seq_length) break;
-        probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[b] - 'A']]; 
-        if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
-    }
-    return probability;
-}
-
-static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int pos) { /* glocal version */
+static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int pos) { /* short in long version */
     size_t i, j;
 
     double prev[read_length + 1], curr[read_length + 1];
@@ -540,7 +536,25 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos) {
+static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int splice_pos, int splice_length, double baseline) {
+    int b; // array[width * row + col] = value
+    int n = pos + read_length;
+    double probability = 0;
+    for (b = pos;  b < n; ++b) {
+        if (b < 0) continue;
+        if (b >= seq_length) break;
+
+        int c;
+        if (splice_length > 0 && b - pos > splice_pos) c = b + splice_length;
+        else c = b;
+        probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[c] - 'A']]; 
+
+        if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
+    }
+    return probability;
+}
+
+static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int splice_pos, int splice_length) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int n1 = pos - (read_length / 2);
     int n2 = pos + read_length + (read_length / 2);
@@ -549,14 +563,14 @@ static inline double calc_prob(const double *matrix, int read_length, const char
 
     double probability = 0;
     if (dp) {
-        probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
+        probability = smith_waterman_gotoh(matrix, read_length, seq, n2 + splice_length - n1 + 1, n1);
     }
     else {
         int i;
-        probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, -1e6);
+        probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_length, -1e6);
         double baseline = probability;
         for (i = n1; i + read_length < n2; ++i) {
-            probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, baseline));
+            probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_length, baseline));
             if (probability > baseline) baseline = probability;
         }
     }
@@ -680,8 +694,8 @@ static char *evaluate(const Vector *var_set) {
 
             double prgu, prgv;
             double pout = elsewhere;
-            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos);
-            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos);
+            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
+            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
 
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
             if (read_data[readi]->multimapXA != NULL) {
@@ -702,10 +716,10 @@ static char *evaluate(const Vector *var_set) {
 
                     xa_pos = abs(xa_pos);
                     pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos);
+                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
                     prgu = log_add_exp(prgu, readprobability);
                     if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary
-                        readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos);
+                        readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_length);
                     }
                     prgv = log_add_exp(prgv, readprobability);
                     free(newreadprobmatrix); newreadprobmatrix = NULL;

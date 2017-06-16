@@ -114,7 +114,7 @@ Read *read_create(char *name, int tid, char *chr, int pos) {
     r->index = 0;
     r->var_list = vector_create(8, VOID_T);
 
-    r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
+    r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->splice_pos = r->splice_length = 0;
     r->qseq = NULL;
     r->qual = NULL;
     r->flag = NULL;
@@ -126,7 +126,7 @@ Read *read_create(char *name, int tid, char *chr, int pos) {
 
 void read_destroy(Read *r) {
     if (r == NULL) return;
-    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = 0;
+    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->splice_pos = r->splice_length = 0;
     r->prgu = r->prgv = r->pout = 0;
     r->index = 0;
     free(r->name); r->name = NULL;

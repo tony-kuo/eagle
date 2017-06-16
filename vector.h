@@ -37,7 +37,7 @@ void variant_destroy(Variant *v);
 
 typedef struct {
     int *cigar_oplen;
-    int tid, pos, length, inferred_length, n_cigar, multimapNH;
+    int tid, pos, length, inferred_length, n_cigar, multimapNH, splice_pos, splice_length;
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
     double *qual;
     double prgu, prgv, pout;

@@ -800,8 +800,8 @@ static char *evaluate(const Vector *var_set) {
                 fprintf(stderr, "\t");
                 for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
                 fprintf(stderr, "\t");
-                if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+                else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
                 fprintf(stderr, "%s\t", read_data[readi]->qseq);
                 for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
@@ -823,9 +823,8 @@ static char *evaluate(const Vector *var_set) {
             fprintf(stderr, "%f\t%f\t%f\t", read_data[readi]->prgu, read_data[readi]->prgv, read_data[readi]->pout);
             for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
-            if (read_data[readi]->multimapNH > 1) fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
-            else if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
-            else fprintf(stderr, "0\t");
+            if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+            else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
             fprintf(stderr, "[");

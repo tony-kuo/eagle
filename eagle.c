@@ -246,8 +246,8 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
             Read *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
             int saw_M = 0;
-            size_t s_offset = 0; // offset for softclip at start
-            size_t e_offset = 0; // offset for softclip at end
+            int s_offset = 0; // offset for softclip at start
+            int e_offset = 0; // offset for softclip at end
 
             uint32_t *cigar = bam_get_cigar(aln);
             read->n_cigar = aln->core.n_cigar;
@@ -256,34 +256,35 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
             read->splice_pos = malloc(read->n_cigar * sizeof read->splice_pos);
             read->splice_offset = malloc(read->n_cigar * sizeof read->splice_offset);
 
+            j = 0;
+            int splice_pos = 0; // track splice position in reads
             for (i = 0; i < read->n_cigar; ++i) {
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
                 read->splice_pos[i] = 0;
                 read->splice_offset[i] = 0;
 
-                if (isc && read->cigar_opchr[i] == 'M') saw_M = 1;
-                else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
-                else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
+                if (isc && read->cigar_opchr[i] == 'M') { 
+                    saw_M = 1; 
+                }
+                else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') { 
+                    s_offset = read->cigar_oplen[i]; 
+                }
+                else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') { 
+                    e_offset = read->cigar_oplen[i]; 
+                }
+                else if (splice && read->cigar_opchr[i] == 'N') {
+                    read->splice_pos[j] = splice_pos - s_offset;
+                    read->splice_offset[j] = read->cigar_oplen[i];
+                    ++j;
+                }
+                else if (splice && (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == 'I')) {
+                    splice_pos += read->cigar_oplen[i];
+                }
             }
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
-
-            if (splice) {
-                j = 0;
-                int cigarlen = 0;
-                for (i = 0; i < read->n_cigar; ++i) {
-                    if (read->cigar_opchr[i] == 'N') {
-                        read->splice_pos[j] = cigarlen;
-                        read->splice_offset[j] = (j == 0) ? read->cigar_oplen[i] - s_offset : read->cigar_oplen[i];
-                        ++j;
-                    }
-                    else {
-                        cigarlen += read->cigar_oplen[i];
-                    }
-                }
-                read->n_splice = j;
-            }
+            read->n_splice = j;
 
             read->length = aln->core.l_qseq - (s_offset + e_offset);
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
@@ -560,9 +561,7 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
 
         int c = b;
         for (i = 0; i < n_splice; ++i) {
-            if (b - pos > splice_pos[i]) {
-                c += splice_offset[i];
-            }
+            if (b - pos > splice_pos[i]) c += splice_offset[i];
         }
 
         if (c >= seq_length) break;

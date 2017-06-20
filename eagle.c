@@ -278,7 +278,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
                     read->splice_offset[j] = read->cigar_oplen[i];
                     ++j;
                 }
-                else if (splice && (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == 'I')) {
+                else if (splice && (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == 'I' || read->cigar_opchr[i] == 'S')) {
                     splice_pos += read->cigar_oplen[i];
                 }
             }

@@ -43,35 +43,41 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **Program Parameters**
 
--t INT  The number of processes to use. Default is 1.
+-t INT  The number of processes to use.  Default is 1.
 
--s INT  Group/chain nearby variants based on shared reads.  Default is 0 which is off and uses the distance based method instead.  Option 1 will group variants if any read that crosses the first variant also cross the variant under consideration.  Option 2 will group variants if any read that crosses any variant in the set also cross the variant under consideration.  Option 2 will chain together a greater number of variants, such that a full test of all combinations will exceed maxh. Option 1 is typically more computationally efficient and sufficient as a more aggressive chaining than the distance based method.  Alternatively, setting the distance limit to a bigger value (i.e. a third the read length, read length window limit) will yield similar results.
+-s INT  Group/chain nearby variants based on shared reads.  Default is 0/off, which uses the distance based method.  Option 1 will group variants if any read that crosses the first variant also cross the variant under consideration.  Option 2 will group variants if any read that crosses any variant in the set also cross the variant under consideration.
 
--n INT  Group/chain nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations. Default is 10 bp (0 for off).
+-n INT  Group/chain nearby variants within *n* bp of each other to be considered in the set of hypotheses for marginal probability calculations.  Default is 10 bp (0 is off).
 
--w INT  Maximum number of bases between any two variants in the set of hypotheses. This sets a window size that allows for larger values of -n without chaining an excessive number of variants. Default is 0 bp (off).
+-w INT  Maximum number of bases between any two variants in the set of hypotheses. This sets a window size that allows for larger values of -n without chaining an excessive number of variants.  Default is 0 bp (off).
 
---maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is finished and the number tested exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum. Default is 1024 (2^10).
+--maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is considered and the number of tested hypthotheses exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum.  Default is 1024 (2^10).
 
---mvh  Instead of the marginal probabilities over the hypotheses set, output only the maximum variant hypothesis (highest probability) among variant combinations in the set of hypotheses.  Keep in mind that *maxh* will limit the possible combinations tested.
+--mvh  Instead of the marginal probabilities over the hypotheses set, output only the maximum variant hypothesis (highest probability of phased variants) in the set of hypotheses.  Note that *maxh* will limit the possible combinations tested.
 
---pao  Use primary alignments only, as defined by the SAM flag. This will also ignore multi-mapping considerations.
+--pao  Use primary alignments only, based on SAM flag.
 
---isc  Ignore soft-clipped bases in reads when calculating the probabilities.
+--isc  Ignore soft-clipped bases in reads when calculating the probabilities, based on cigar string.
 
---dp  Instead of the short read model which assumes no indel errors, use dynamic programming (short in long) to calculate the likelihood.  This allows for handling of long reads which have higher rates of sequencing errors and indel errors.
+--nodup  Ignore marked duplicate reads, based on SAM flag.
 
---match  Matching score for use with *dp*.  Default is 2.
+--splice  Allow spliced reads, based on cigar string.
 
---mismatch  Mismatch penalty for use with *dp*.  Default is 5.
+--dp  Instead of the short read model, which assumes no indel errors, use dynamic programming (short in long) to calculate the likelihood.  This allows handling of long reads which have higher rates of sequencing errors and indel errors.
 
---gap\_op  Gap open penalty for use with *dp*.  Default is 2.
+--match INT  Matching score for use with *dp*.  Default is 2.
 
---gap\_ex  Gap extend penalty for use with *dp*.  Default is 1.
+--mismatch INT  Mismatch penalty for use with *dp*.  Default is 5.
 
---verbose  Verbose mode. Output the likelihoods for every read seen for each hypothesis. Outputs to stderr.
+--gap\_op INT  Gap open penalty for use with *dp*.  Default is 2.
 
---hetbias FLOAT  Bias the prior probability towards heterozygous or homozygous mutations. Value between [0,1] where 1 is towards heterozygosity. Default is 0.5 (unbiased).
+--gap\_ex INT  Gap extend penalty for use with *dp*.  Default is 1.
+
+--verbose  Verbose mode.  Output the likelihoods for every read seen for every hypothesis to *stderr*.
+
+--hetbias FLOAT  Prior probability bias towards heterozygous or homozygous mutations.  Value between [0,1] where 1 is towards heterozygosity.  Default is 0.5 (unbiased).
+
+--omega FLOAT  Prior probability of originating from outside paralogous source.  Value between [0,1].  Default is 1e-5.
 
 **Usage Notes**
 
@@ -79,13 +85,11 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 *compileLikelihoods.py* post-processes the probabilities calculated by EAGLE and can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to filter mutations.
 
-If one expects that most mutations are not homozygous (i.e. in heterogenous tumor samples), then one can choose to skew the prior probability towards heterozygous/heterogeneous mutations. Otherwise, very low allele frequency mutations (~0.05) will have low probability. However, unless one has a good estimate of the cell mixture ratio in hetergenous samples and tune the bias appropriately, this will likely increase type I errors, depending on the threshold chosen.
-
 Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are output as separate entries. Furthermore, if they are near other variants, it will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will naively retain the one with the maximum probability, for entries with identical coordinates.
 
 ## EAGLE-RC
 
-For read classification.  Use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these inputs and classify the reads and optionally read in a bam file and split the reads into bam files for each class.  We also lower probability omega to be more tolerant to sequence differences outside the tested hypotheses.  Other options (such as --dp for long reads) may or may not be applicable depending on the use case.
+For read classification.  Use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these inputs and classify the reads and optionally read in a bam file and split the reads into bam files for each class.  We also a lower omega to be more tolerant to sequence differences outside the tested hypotheses.  Other options (such as --dp for long reads, etc.) may or may not be applicable depending on the use case.
 
 Usage: 
 

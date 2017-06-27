@@ -527,6 +527,8 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
         b_gap_curr[0] = 0;
         double row_max = 0;
         for (j = 1; j < read_length + 1; ++j) {
+            int q = seq[i] - 'A';
+            if (q < 0 || q >= 26) { exit_err("Character %c not in valid alphabet\n", seq[i]); }
             double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[seq[i] - 'A']];
 
             double open = curr[j - 1] - gap_op;
@@ -553,7 +555,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
 }
 
 static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
-    size_t i;
+    int i;
     int b; // array[width * row + col] = value
     int n = pos + read_length;
     double probability = 0;
@@ -564,10 +566,12 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
         for (i = 0; i < n_splice; ++i) {
             if (b - pos > splice_pos[i]) c += splice_offset[i];
         }
-
         if (c >= seq_length) break;
-        probability += matrix[NT_CODES * (b - pos) + seqnt_map[seq[c] - 'A']]; 
 
+        i = seq[c] - 'A';
+        if (i < 0 || i >= 26) { exit_err("Character %c not in valid alphabet\n", seq[c]); }
+
+        probability += matrix[NT_CODES * (b - pos) + seqnt_map[i]]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
     }
     return probability;

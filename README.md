@@ -89,7 +89,9 @@ Heterozygous non-reference variants (VCF: comma separated multiple alternative s
 
 ## EAGLE-RC
 
-For read classification.  Use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these inputs and classify the reads and optionally read in a bam file and split the reads into bam files for each class.  We also a lower omega to be more tolerant to sequence differences outside the tested hypotheses.  Other options (such as --dp for long reads, etc.) may or may not be applicable depending on the use case.
+EAGLE-RC is a method for classifying whether a read belongs to one genomic hypothesis or another, given a set of genomic differences between them.  This can be applicable for determining if reads originate from a specific allele or from a specific homeolog in allopolyploids.
+
+First, use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants (--mvh) as output.  Then the program readclassify can take these two inputs to classify reads and optionally split reads into bam files for each class.  We also use a lower omega to be more tolerant to sequence differences outside the tested hypotheses.  Other options (such as --dp for long reads, --splice for RNA-seq, etc.) may or may not be applicable depending on the use case.
 
 Usage: 
 
@@ -104,13 +106,3 @@ Usage:
 --listonly  print classified read list only (stdout) without processing BAM files
 
 --readlist  read from classified read list instead of EAGLE outputs, perhaps from a previous run or a merged file, and process BAM files.
-
-
-*old Python version*
-
-I recommend using the C implementation as it is much faster, but the legacy Python implementation has been left in the repository [compatible with 2\.7\.\*, 3\.\*] with ABI level C functions via CFFI. I can't promise this will be kept updated.
-
-**Requires**: pysam, cffi, numpy
-
-Usage: `python eagle.py -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
-

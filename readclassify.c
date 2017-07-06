@@ -123,8 +123,8 @@ static int readinfo_read(const char* filename) {
             Read **r = (Read **)node->data;                                                                                                                          
             for (i = 0; i < node->size; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
-                    r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
-                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
+                    r[i]->prgu += prgu;
+                    r[i]->prgv += prgv;
                     add2var_list(r[i]->var_list, set);
                     break;
                 }
@@ -365,7 +365,7 @@ static void process_list(const char *filename, const char *bam_file, const char 
             Read **r = (Read **)node->data;                                                                                                                          
             for (i = 0; i < node->size; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
-                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
+                    if ((prgu + prgv) > (r[i]->prgu + r[i]->prgv)) {
                         r[i]->prgu = prgu;
                         r[i]->prgv = prgv;
                         r[i]->index = type2ind(type);

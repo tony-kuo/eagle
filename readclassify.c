@@ -20,6 +20,7 @@ This program is distributed under the terms of the GNU General Public License
 /* Command line arguments */
 static int listonly;
 static int readlist;
+static int refonly;
 
 /* Time info */
 static time_t now; 
@@ -209,16 +210,16 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
             for (i = 0; i < node->size; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
                     if (r[i]->index == 0) out = ref_out;
-                    else if (r[i]->index == 1) out = alt_out;
-                    else if (r[i]->index == 2) out = ref_out;
-                    else if (r[i]->index == 3) out = mul_out;
+                    else if (!refonly && r[i]->index == 1) out = alt_out;
+                    else if (!refonly && r[i]->index == 2) out = ref_out;
+                    else if (!refonly && r[i]->index == 3) out = mul_out;
                     else if (r[i]->index == 4) out = NULL;
                     break;
                 }
             }
             if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
-        else {
+        else if (!refonly) {
             out = com_out;
         }
 
@@ -412,6 +413,7 @@ static void print_usage() {
     printf("  -a --bam=     FILE     alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
     printf("     --listonly          print classified read list only (stdout) without processing BAM file\n");
     printf("     --readlist          read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
+    printf("     --refonly           write REF classified reads only when processing BAM file\n");
 }
 
 int main(int argc, char **argv) {
@@ -422,6 +424,7 @@ int main(int argc, char **argv) {
     char *output_prefix = NULL;
     listonly = 0;
     readlist = 0;
+    refonly = 0;
 
     static struct option long_options[] = {
         {"var", required_argument, NULL, 'v'},
@@ -429,6 +432,7 @@ int main(int argc, char **argv) {
         {"out", optional_argument, NULL, 'o'},
         {"listonly", no_argument, &listonly, 1},
         {"readlist", no_argument, &readlist, 1},
+        {"refonly", no_argument, &refonly, 1},
         {0, 0, 0, 0}
     };
 

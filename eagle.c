@@ -527,9 +527,9 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
         b_gap_curr[0] = 0;
         double row_max = 0;
         for (j = 1; j < read_length + 1; ++j) {
-            int q = seq[i] - 'A';
-            if (q < 0 || q >= 26) { exit_err("Character %c not in valid alphabet\n", seq[i]); }
-            double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[seq[i] - 'A']];
+            int t = seq[i] - 'A';
+            if (t < 0 || t >= 26) { exit_err("Character %c not in valid alphabet\n", seq[i]); }
+            double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[t]];
 
             double open = curr[j - 1] - gap_op;
             double extend = a_gap_curr[j - 1] - gap_ex;

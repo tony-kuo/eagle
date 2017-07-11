@@ -595,7 +595,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i + read_length < n2; ++i) {
-            probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
+            if (i != pos) probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
             if (probability > baseline) baseline = probability;
         }
     }

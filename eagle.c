@@ -364,13 +364,15 @@ static Fasta *refseq_fetch(char *name, const char *fa_file) {
 }
 
 static char *construct_altseq(const char *refseq, int refseq_length, const Vector *var_combo, int *altseq_length) {
-    size_t i, j;
+    size_t i;
     int offset = 0;
     char *altseq = strdup(refseq);
     *altseq_length = refseq_length;
     for (i = 0; i < var_combo->size; ++i) {
         Variant *curr = (Variant *)var_combo->data[i];
         size_t pos = curr->pos - 1 + offset;
+        if (pos < 0 || pos > *altseq_length) break;
+
         char *var_ref, *var_alt;
         if (curr->ref[0] == '-') { // account for "-" variant representations
             ++pos;
@@ -397,7 +399,7 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
         int delta = var_alt_length - var_ref_length;
         offset += delta;
         if (delta == 0) { // snps, equal length haplotypes
-            for (j = 0; j < var_alt_length; ++j) altseq[j+pos] = var_alt[j];
+            memcpy(altseq + pos, var_alt, var_alt_length * sizeof *var_alt);
         }
         else { // indels
             char *newalt = malloc((*altseq_length + delta + 1) * sizeof *newalt);
@@ -580,21 +582,21 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
 static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int n1 = pos - (read_length / 2);
-    int n2 = pos + read_length + (read_length / 2);
+    int n2 = pos + (read_length / 2);
     if (n1 < 0) n1 = 0;
 
     int i;
     double probability = 0;
     if (dp) {
+        n2 += read_length;
         for (i = 0; i < n_splice; ++i) n2 += splice_offset[i];
         if (n2 >= seq_length) n2 = seq_length - 1;
         probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
     }
     else {
-        if (n2 >= seq_length) n2 = seq_length - 1;
         probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
-        for (i = n1; i + read_length < n2; ++i) {
+        for (i = n1; i < n2; ++i) {
             if (i != pos) probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
             if (probability > baseline) baseline = probability;
         }

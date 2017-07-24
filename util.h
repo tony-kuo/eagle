@@ -25,6 +25,7 @@ This program is distributed under the terms of the GNU General Public License
 #define exit_err(M, ...) fprintf(stderr, "ERROR: (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__); exit(EXIT_FAILURE)
 #define exit_usage(M, ...) print_usage(); fprintf(stderr, "\n" M "\n"); exit(EXIT_FAILURE)
 
+char *strdup1(const char *src);
 void str_resize(char **str, size_t size);
 
 int has_numbers(const char *str);

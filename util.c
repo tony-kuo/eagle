@@ -12,13 +12,12 @@ This program is distributed under the terms of the GNU General Public License
 #include <math.h>
 #include "util.h"
 
-/*
-char *strdup(const char *src) {
+char *strdup1(const char *src) {
     size_t n = strlen(src) + 1;
     char *des = malloc(n * sizeof *des);
+    des[n] = '\0';
     return des ? memcpy(des, src, n) : NULL;
 }
-*/
 
 void str_resize(char **str, size_t size) {
     char *p = realloc(*str, size * sizeof *str);

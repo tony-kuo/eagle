@@ -143,6 +143,7 @@ def main():
     parser.add_argument('-maxlr', type=float, default=-6, help='threshold for maximum log likelihood ratio for negative samples (default: -6)');
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
     parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
+    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
     parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth (instead of: ref + alt)');
     args = parser.parse_args();
 

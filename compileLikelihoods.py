@@ -20,7 +20,7 @@ def naturalSort(l):
     alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
     return sorted(l, key=alphanum_key)
 
-def readFiles(files):
+def readFiles(files, reads_seen):
     entry = {};
     for fn in files: 
         with open(fn, 'r') as fh:
@@ -33,8 +33,11 @@ def readFiles(files):
                 for i in ref:
                     for j in alt:
                         key = t[0]+'\t'+t[1]+'\t'+i+'\t'+j;
-                        #depth = int(t[4]);
-                        depth = int(t[5]) + int(t[6]);
+                        if reads_seen:
+                            depth = int(t[4]);
+                        else:
+                            depth = int(t[5]) + int(t[6]);
+
                         if depth > 0:
                             af = float(t[6])/depth;
                             prob = float(t[7]);
@@ -140,16 +143,17 @@ def main():
     parser.add_argument('-maxlr', type=float, default=-6, help='threshold for maximum log likelihood ratio for negative samples (default: -6)');
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
     parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
-    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
+    parser.add_argument('-maxaf', type=float, default=0.02, help='maximum allele frequency for negative samples (default: 0.02)');
+    parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth (instead of: ref + alt)');
     args = parser.parse_args();
 
-    pos = readFiles(args.p); 
+    pos = readFiles(args.p, args.seen); 
     pos_entry = compileEntries(pos, args.minlr, args.minaf, args.mindepth, False);
     neg_entry = {};
     pos_loh_entry = {};
     neg_loh_entry = {};
     if args.n:
-        neg = readFiles(args.n);
+        neg = readFiles(args.n, args.seen);
         neg_entry = compileEntries(neg, args.maxlr, args.maxaf, args.mindepth, True);
         (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth);
 

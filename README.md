@@ -82,13 +82,13 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 --hetbias FLOAT  Prior probability bias towards heterozygous or homozygous mutations.  Value between [0,1] where 1 is towards heterozygosity.  Default is 0.5 (unbiased).
 
---omega FLOAT  Prior probability of originating from outside paralogous source (i.e. not from reference genome and also not in the candidate variant genomes).  Value between [0,1].  Default is 1e-5.
+--omega FLOAT  Prior probability of originating from outside paralogous source (i.e. not from reference genome and also not from the candidate variant genome).  Value between [0,1].  Default is 1e-5.
 
 **Usage Notes**
 
 *compare2TruthData.py* is a simple script to separate false positives and true positives based on truth data given as a VCF. 
 
-*compileLikelihoods.py* post-processes the probabilities calculated by EAGLE and can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to filter mutations.
+*compileLikelihoods.py* post-processes the probabilities calculated by EAGLE and compile the results into tab-delimited table format.  It can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to filter mutations.
 
 Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are output as separate entries. Furthermore, if they are near other variants, it will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will naively retain the one with the maximum probability, for entries with identical coordinates.
 

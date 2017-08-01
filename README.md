@@ -82,7 +82,7 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 --hetbias FLOAT  Prior probability bias towards heterozygous or homozygous mutations.  Value between [0,1] where 1 is towards heterozygosity.  Default is 0.5 (unbiased).
 
---omega FLOAT  Prior probability of originating from outside paralogous source.  Value between [0,1].  Default is 1e-5.
+--omega FLOAT  Prior probability of originating from outside paralogous source (i.e. not from reference genome and also not in the candidate variant genomes).  Value between [0,1].  Default is 1e-5.
 
 **Usage Notes**
 

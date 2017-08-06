@@ -371,7 +371,7 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
     for (i = 0; i < var_combo->size; ++i) {
         Variant *curr = (Variant *)var_combo->data[i];
         size_t pos = curr->pos - 1 + offset;
-        if (pos < 0 || pos > *altseq_length) break;
+        if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", curr->chr, curr->pos); }
 
         char *var_ref, *var_alt;
         if (curr->ref[0] == '-') { // account for "-" variant representations

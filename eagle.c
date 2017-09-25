@@ -987,7 +987,8 @@ static void process(const Vector *var_list, FILE *out_fh) {
             for (j = 0; j < var_set[i]->size - 1; ++j) { // check if all entries have the same position
                 Variant *curr = (Variant *)var_set[i]->data[j];
                 Variant *next = (Variant *)var_set[i]->data[j + 1];
-                if (curr->pos != next->pos) flag_nonset = 0;
+                if (curr->pos == next->pos && strcmp(curr->chr, next->chr) == 0 && strcmp(curr->ref, next->ref) == 0 && strcmp(curr->alt, next->alt) == 0) vector_del(var_set[i], j + 1); // delete duplicate entries
+                else if (curr->pos != next->pos) flag_nonset = 0;
             }
             if (flag_nonset) { // only 1 entry, with multiple heterozygous non-reference variants
                 while (var_set[i]->size > 1) {

@@ -919,14 +919,13 @@ static void *pool(void *work) {
 }
 
 static void process(const Vector *var_list, FILE *out_fh) {
-    size_t i, j, n;
+    size_t i, j;
 
     Variant **var_data = (Variant **)var_list->data;
     size_t nvariants = var_list->size;
 
     i = 0;
-    size_t nsets = 0;
-    Vector **var_set = malloc((nvariants * 2)  * sizeof (Vector *));
+    Vector *var_set = vector_create(nvariants, VOID_T);
     if (sharedr == 1) { /* Variants that share a read: shared with a given first variant */
         while (i < nvariants) {
             Vector *curr = vector_create(8, VARIANT_T);
@@ -941,7 +940,7 @@ static void process(const Vector *var_list, FILE *out_fh) {
                 vector_add(curr, var_data[j++]);
             }
             i = j;
-            var_set[nsets++] = curr;
+            vector_add(var_set, curr);
         }
     }
     else if (sharedr == 2) { /* Variants that share a read: shared with any neighboring variant */
@@ -959,7 +958,7 @@ static void process(const Vector *var_list, FILE *out_fh) {
                 ++j;
             }
             i = j;
-            var_set[nsets++] = curr;
+            vector_add(var_set, curr);
         }
     }
     else { /* Variants that are close together as sets */
@@ -972,59 +971,59 @@ static void process(const Vector *var_list, FILE *out_fh) {
                 vector_add(curr, var_data[j++]);
             }
             i = j;
-            var_set[nsets++] = curr;
+            vector_add(var_set, curr);
         }
     }
     /* Heterozygous non-reference variants as separate entries */
     int flag_add = 1;
     while (flag_add) {
         flag_add = 0;
-        n = 0;
+        size_t nsets = var_set->size;
         for (i = 0; i < nsets; ++i) {
-            if (var_set[i]->size == 1) continue;
+            Vector *curr_set = (Vector *)var_set->data[i];
+            if (curr_set->size == 1) continue;
 
             int flag_nonset = 1;
-            for (j = 0; j < var_set[i]->size - 1; ++j) { // check if all entries have the same position
-                Variant *curr = (Variant *)var_set[i]->data[j];
-                Variant *next = (Variant *)var_set[i]->data[j + 1];
-                if (curr->pos == next->pos && strcmp(curr->chr, next->chr) == 0 && strcmp(curr->ref, next->ref) == 0 && strcmp(curr->alt, next->alt) == 0) vector_del(var_set[i], j + 1); // delete duplicate entries
+            for (j = 0; j < curr_set->size - 1; ++j) { // check if all entries have the same position
+                Variant *curr = (Variant *)curr_set->data[j];
+                Variant *next = (Variant *)curr_set->data[j + 1];
+                if (curr->pos == next->pos && strcmp(curr->chr, next->chr) == 0 && strcmp(curr->ref, next->ref) == 0 && strcmp(curr->alt, next->alt) == 0) vector_del(curr_set, j + 1); // delete duplicate entries
                 else if (curr->pos != next->pos) flag_nonset = 0;
             }
             if (flag_nonset) { // only 1 entry, with multiple heterozygous non-reference variants
-                while (var_set[i]->size > 1) {
-                    Variant *curr = (Variant *)vector_pop(var_set[i]);
+                while (curr_set->size > 1) {
+                    Variant *curr = (Variant *)vector_pop(curr_set);
                     Vector *dup = vector_create(8, VARIANT_T);
                     vector_add(dup, curr);
-                    var_set[nsets + n++] = dup;
+                    vector_add(var_set, dup);
                 }
             }
             else { // multiple entries comprising a set
-                for (j = 0; j < var_set[i]->size - 1; ++j) {
-                    Variant *curr = (Variant *)var_set[i]->data[j];
-                    Variant *next = (Variant *)var_set[i]->data[j + 1];
+                for (j = 0; j < curr_set->size - 1; ++j) {
+                    Variant *curr = (Variant *)curr_set->data[j];
+                    Variant *next = (Variant *)curr_set->data[j + 1];
                     if (curr->pos == next->pos) {
                         flag_add = 1;
-                        Vector *dup = vector_dup(var_set[i]);
-                        vector_del(var_set[i], j);
+                        Vector *dup = vector_dup(curr_set);
+                        vector_del(curr_set, j);
                         vector_del(dup, j + 1);
-                        var_set[nsets + n++] = dup;
+                        vector_add(var_set, dup);
                     }
                 }
             }
         }
-        nsets += n;
     } 
-    if (sharedr == 1) { print_status("# Variants with shared reads to first in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
-    else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)nsets, asctime(time_info)); }
-    else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)nsets, asctime(time_info)); }
+    if (sharedr == 1) { print_status("# Variants with shared reads to first in set: %i entries\t%s", (int)var_set->size, asctime(time_info)); }
+    else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->size, asctime(time_info)); }
+    else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->size, asctime(time_info)); }
 
     print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d omega=%g\n", maxh, mvh, pao, isc, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
-    Vector *queue = vector_create(nsets, VOID_T);
-    Vector *results = vector_create(nsets, VOID_T);
-    for (i = 0; i < nsets; ++i) {
-        vector_add(queue, var_set[i]);
+    Vector *queue = vector_create(var_set->size, VOID_T);
+    Vector *results = vector_create(var_set->size, VOID_T);
+    for (i = 0; i < var_set->size; ++i) {
+        vector_add(queue, var_set->data[i]);
     }
     Work *w = malloc(sizeof (Work));
     w->queue = queue;
@@ -1041,7 +1040,7 @@ static void process(const Vector *var_list, FILE *out_fh) {
     pthread_mutex_destroy(&w->r_lock);
 
     free(w); w = NULL;
-    free(var_set); var_set = NULL;
+    vector_free(var_set); var_set = NULL;
 
     qsort(results->data, results->size, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");

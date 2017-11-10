@@ -56,6 +56,7 @@ static int debug;
 static double hetbias;
 static double omega, lgomega;
 static int match, mismatch, gap_op, gap_ex;
+static double ref_prior, alt_prior, het_prior;
 
 /* Time info */
 static time_t now; 
@@ -571,7 +572,7 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
         if (c >= seq_length) break;
 
         i = seq[c] - 'A';
-        if (i < 0 || i >= 26) { exit_err("Character %c not in valid alphabet\n", seq[c]); }
+        if (i < 0 || i >= 26) { exit_err("Character %c at pos %d not in valid alphabet\n", seq[c], c); }
 
         probability += matrix[NT_CODES * (b - pos) + seqnt_map[i]]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
@@ -630,8 +631,8 @@ static char *evaluate(const Vector *var_set) {
     char *combo = powerset(nvariants, &ncombos);
 
     Vector **var_combo = malloc(ncombos * sizeof (Vector *)); 
-    int n1;
     seti = 0;
+    int n1;
     char *s1, *s2, token[strlen(combo)];
     for (s1 = combo; sscanf(s1, "%[^\t]%n", token, &n1) == 1 && seti < ncombos; s1 += n1 + 1) {
         var_combo[seti] = vector_create(nvariants, VARIANT_T);
@@ -642,18 +643,12 @@ static char *evaluate(const Vector *var_set) {
     free(combo); combo = NULL;
     //for (seti = 0; seti < ncombos; ++seti) { fprintf(stderr, "%d\t", (int)seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); }
 
-    /* Prior probabilities based on variant combinations */
-    double ref_prior = log(0.5 / ncombos);
-    double alt_prior = log(0.5 * (1 - hetbias) / ncombos);
-    double het_prior = log(0.5 * hetbias / ncombos);
-
-    double *ref = malloc(ncombos * sizeof *ref);
+    double ref = 0;
     double *alt = malloc(ncombos * sizeof *alt);
     double *het = malloc(ncombos * sizeof *het);
     int *ref_count = malloc(ncombos * sizeof *ref_count);
     int *alt_count = malloc(ncombos * sizeof *alt_count);
     for (seti = 0; seti < ncombos; ++seti) {
-        ref[seti] = 0;
         alt[seti] = 0;
         het[seti] = 0;
         ref_count[seti] = 0;
@@ -795,7 +790,7 @@ static char *evaluate(const Vector *var_set) {
             }
 
             /* Priors */
-            ref[seti] += prgu + ref_prior;
+            if (seti == 0) ref += prgu + ref_prior;
             alt[seti] += prgv + alt_prior;
             het[seti] += phet + het_prior;
 
@@ -816,7 +811,7 @@ static char *evaluate(const Vector *var_set) {
         }
         free(altseq); altseq = NULL;
         if (debug >= 1) {
-            fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref[seti], het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
+            fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, ref, het[seti], alt[seti], ref_count[seti], alt_count[seti], (int)nreads);
             for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
         }
     }
@@ -840,8 +835,8 @@ static char *evaluate(const Vector *var_set) {
         }
     }
 
-    double total = log_add_exp(ref[0], log_add_exp(alt[0], het[0]));
-    for (seti = 1; seti < ncombos; ++seti) { total = log_add_exp(total, log_add_exp(ref[seti], log_add_exp(alt[seti], het[seti]))); }
+    double total = log_add_exp(ref, log_add_exp(alt[0], het[0]));
+    for (seti = 1; seti < ncombos; ++seti) { total = log_add_exp(total, log_add_exp(ref, log_add_exp(alt[seti], het[seti]))); }
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
@@ -855,7 +850,7 @@ static char *evaluate(const Vector *var_set) {
                 max_seti = seti;
             }
         }
-        variant_print(&output, var_combo[max_seti], 0, (int)nreads, ref_count[max_seti], alt_count[max_seti], total, has_alt, ref[max_seti]);
+        variant_print(&output, var_combo[max_seti], 0, (int)nreads, ref_count[max_seti], alt_count[max_seti], total, has_alt, ref);
     }
     else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < nvariants; ++i) {
@@ -864,7 +859,7 @@ static char *evaluate(const Vector *var_set) {
             int acount = -1;
             int rcount = -1;
             for (seti = 0; seti < ncombos; ++seti) {
-                not_alt = (not_alt == 0) ? ref[seti] : log_add_exp(not_alt, ref[seti]);
+                not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
                 if (variant_find(var_combo[seti], var_data[i]) != -1) { // if variant is in this combination
                     has_alt = (has_alt == 0) ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
                     if (alt_count[seti] > acount) {
@@ -879,7 +874,6 @@ static char *evaluate(const Vector *var_set) {
             variant_print(&output, var_set, i, (int)nreads, rcount, acount, total, has_alt, not_alt);
         }
     }
-    free(ref); ref = NULL;
     free(alt); alt = NULL;
     free(het); het = NULL;
     free(ref_count); ref_count = NULL;
@@ -1180,6 +1174,10 @@ int main(int argc, char **argv) {
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (omega < 0 || omega > 1) omega = 1e-5;
     lgomega = (log(omega) - log(1.0-omega));
+
+    ref_prior = log(0.5);
+    alt_prior = log(0.5 * (1 - hetbias));
+    het_prior = log(0.5 * hetbias);
 
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used

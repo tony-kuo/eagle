@@ -111,9 +111,8 @@ static char *powerset(int n, size_t *ncombos) {
         combinations(&combo, 1, n, ncombos);
         combinations(&combo, n, n, ncombos);
         int k;
-        for (k = 2; k <= n - 1; ++k) {
+        for (k = 2; k <= n - 1 && (int)*ncombos - n - 1 < maxh; ++k) {
             combinations(&combo, k, n, ncombos);
-            if (*ncombos - n - 1 >= maxh) break;
         }
     }
     return combo;
@@ -1166,7 +1165,7 @@ int main(int argc, char **argv) {
     if (sharedr < 0 || sharedr > 2) sharedr = 0;
     if (distlim < 0) distlim = 10;
     if (maxdist < 0) maxdist = 0;
-    if (maxh < 0) maxh = 1024;
+    if (maxh < 0) maxh = 0;
     if (match <= 0) match = 2;
     if (mismatch <= 0) mismatch = 5;
     if (gap_op <= 0) gap_op = 2;

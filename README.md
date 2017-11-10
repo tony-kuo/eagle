@@ -57,7 +57,7 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 -w INT  Maximum number of bases between any two variants in the set of hypotheses. This sets a window size that allows for larger values of -n without chaining an excessive number of variants.  Default is 0 bp (off).
 
---maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is considered and the number of tested hypthotheses exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum.  Default is 1024 (2^10).
+--maxh INT  The maximum number of hypotheses to be tested.  Instead of looking at all 2^n combinations for a set of variants, if after the current *k* for *n choose k* combinations is considered and the number of tested hypthotheses exceeds the maximum, then do not consider more combinations.  The solo variants and the "all variants" hypothesis are always tested first and do not count towards the maximum, thus any value greater than 0 ensures all doubles are tested.  Default is 1024 (2^10).
 
 --mvh  Instead of the marginal probabilities over the hypotheses set, output only the maximum variant hypothesis (highest probability of phased variants) in the set of hypotheses.  Note that *maxh* will limit the possible combinations tested.
 

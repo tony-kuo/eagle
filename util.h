@@ -38,4 +38,6 @@ double *reverse(double *a, int size);
 double log_add_exp(double a, double b);
 double log_sum_exp(const double *a, int size);
 
+void init_seqnt_map(int *seqnt_map);
+
 #endif

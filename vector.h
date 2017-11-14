@@ -10,7 +10,7 @@ This program is distributed under the terms of the GNU General Public License
 #ifndef _vector_h_
 #define _vector_h_
 
-enum type {VOID_T, STR_T, VARIANT_T, READ_T, FASTA_T};
+enum type {VOID_T, STR_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
 
 typedef struct {
     size_t size, capacity;
@@ -56,8 +56,17 @@ typedef struct {
 Fasta *fasta_create(char *name);
 void fasta_destroy(Fasta *f);
 
+typedef struct {
+    int pos1, pos2;
+    char *chr;
+} Region;
+
+Region *region_create(char *chr, int pos1, int pos2);
+void region_destroy(Region *g);
+
 int nat_sort_cmp(const void *a, const void *b, enum type var_type);
 int nat_sort_vector(const void *a, const void *b);
 int nat_sort_variant(const void *a, const void *b);
+int nat_sort_region(const void *a, const void *b);
 
 #endif

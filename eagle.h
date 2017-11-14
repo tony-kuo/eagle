@@ -10,7 +10,6 @@ This program is distributed under the terms of the GNU General Public License
 #ifndef _eagle_h_
 #define _eagle_h_
 
-Vector *vcf_read(FILE *file);
 void fasta_read(const char *fa_file);
 
 #endif

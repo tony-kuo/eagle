@@ -157,6 +157,20 @@ void fasta_destroy(Fasta *f) {
     free(f->name); f->name = NULL;
 }
 
+Region *region_create(char *chr, int pos1, int pos2) {
+    Region *g = malloc(sizeof (Region));
+    g->chr = strdup(chr);
+    g->pos1 = pos1;
+    g->pos2 = pos2;
+    return g;
+}
+
+void region_destroy(Region *g) {
+    if (g == NULL) return;
+    g->pos1 = g->pos2 = 0;
+    free(g->chr); g->chr = NULL;      
+}
+
 int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
     char *str1, *str2;
     switch (var_type) {
@@ -173,6 +187,16 @@ int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
         case STR_T: {
             str1 = strdup((char *)a);
             str2 = strdup((char *)b);
+            break;
+        }
+        case REGION_T: {
+            Region *c1 = *(Region **)a;
+            Region *c2 = *(Region **)b;
+            if (strcasecmp(c1->chr, c2->chr) == 0) return (c1->pos1 > c2->pos1) - (c1->pos1 < c2->pos1);
+            str1 = strdup(c1->chr);
+            str2 = strdup(c2->chr);
+            c1 = NULL;
+            c2 = NULL;
             break;
         }
         default:
@@ -225,4 +249,8 @@ int nat_sort_vector(const void *a, const void *b) {
 
 int nat_sort_variant(const void *a, const void *b) {
     return nat_sort_cmp(a, b, VARIANT_T);
+}
+
+int nat_sort_region(const void *a, const void *b) {
+    return nat_sort_cmp(a, b, REGION_T);
 }

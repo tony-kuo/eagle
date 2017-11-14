@@ -76,3 +76,32 @@ double log_sum_exp(const double *a, int size) {
     for (i = 0; i < size; ++i) s += exp(a[i] - max_exp);
     return log(s) + max_exp;
 }
+
+void init_seqnt_map(int *seqnt_map) {
+    /* Mapping table, symmetrical according to complement */
+    memset(seqnt_map, 0, sizeof(int) * 26);
+
+    seqnt_map['A'-'A'] = 0;
+    seqnt_map['C'-'A'] = 1;
+
+    /* Ambiguous codes */
+    seqnt_map['H'-'A'] = 2; // A, C, T
+    seqnt_map['B'-'A'] = 3; // C, G, T
+    seqnt_map['R'-'A'] = 4; // A, G
+    seqnt_map['K'-'A'] = 5; // G, T
+    seqnt_map['S'-'A'] = 6; // G, C
+    seqnt_map['W'-'A'] = 7; // A, T
+
+    seqnt_map['N'-'A'] = 8;
+    seqnt_map['X'-'A'] = 8;
+
+    // W also in 9, S also in 10
+    seqnt_map['M'-'A'] = 11; // A, C
+    seqnt_map['Y'-'A'] = 12; // C, T
+    seqnt_map['V'-'A'] = 13; // A, C, G
+    seqnt_map['D'-'A'] = 14; // A, G, T
+
+    seqnt_map['G'-'A'] = 15;
+    seqnt_map['T'-'A'] = 16;
+    seqnt_map['U'-'A'] = 16;
+}

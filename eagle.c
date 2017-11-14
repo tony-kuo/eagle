@@ -13,17 +13,14 @@ This program is distributed under the terms of the GNU General Public License
 #include <time.h>
 #include <getopt.h>
 #include <pthread.h>
-
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
 #include "util.h"
 #include "vector.h"
-#include "eagle.h"
 
 /* Constants */
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-
 #define NT_CODES 17   // Size of nucleotide code table
 
 /* Precalculated log values */
@@ -118,7 +115,7 @@ static char *powerset(int n, size_t *ncombos) {
     return combo;
 }
 
-Vector *vcf_read(FILE *file) {
+static Vector *vcf_read(FILE *file) {
     Vector *var_list = vector_create(64, VARIANT_T);
 
     char *line = NULL;
@@ -530,7 +527,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
         double row_max = 0;
         for (j = 1; j < read_length + 1; ++j) {
             int t = seq[i] - 'A';
-            if (t < 0 || t >= 26) { exit_err("Character %c not in valid alphabet\n", seq[i]); }
+            if (t < 0 || t >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], (int)i, seq_length); }
             double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[t]];
 
             double open = curr[j - 1] - gap_op;
@@ -571,7 +568,7 @@ static inline double calc_readmodel(const double *matrix, int read_length, const
         if (c >= seq_length) break;
 
         i = seq[c] - 'A';
-        if (i < 0 || i >= 26) { exit_err("Character %c at pos %d not in valid alphabet\n", seq[c], c); }
+        if (i < 0 || i >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[c], c, seq_length); }
 
         probability += matrix[NT_CODES * (b - pos) + seqnt_map[i]]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
@@ -713,10 +710,9 @@ static char *evaluate(const Vector *var_set) {
             /* Constant outside paralog term, testing, seems to perform near identically to the exact formulation above for fixed read length sequences */
             //double elsewhere = -2.4; // < 10%
 
-            double prgu, prgv;
             double pout = elsewhere;
-            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
-            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            double prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            double prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
 
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
             if (read_data[readi]->multimapXA != NULL) {
@@ -1181,32 +1177,7 @@ int main(int argc, char **argv) {
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
-    /* Mapping table, symmetrical according to complement */
-    memset(seqnt_map, 0, sizeof(int) * 26);
-
-    seqnt_map['A'-'A'] = 0;
-    seqnt_map['C'-'A'] = 1;
-
-    /* Ambiguous codes */
-    seqnt_map['H'-'A'] = 2; // A, C, T
-    seqnt_map['B'-'A'] = 3; // C, G, T
-    seqnt_map['R'-'A'] = 4; // A, G
-    seqnt_map['K'-'A'] = 5; // G, T
-    seqnt_map['S'-'A'] = 6; // G, C
-    seqnt_map['W'-'A'] = 7; // A, T
-
-    seqnt_map['N'-'A'] = 8;
-    seqnt_map['X'-'A'] = 8;
-
-    // W also in 9, S also in 10
-    seqnt_map['M'-'A'] = 11; // A, C
-    seqnt_map['Y'-'A'] = 12; // C, T
-    seqnt_map['V'-'A'] = 13; // A, C, G
-    seqnt_map['D'-'A'] = 14; // A, G, T
-
-    seqnt_map['G'-'A'] = 15;
-    seqnt_map['T'-'A'] = 16;
-    seqnt_map['U'-'A'] = 16;
+    init_seqnt_map(seqnt_map);
 
     /* Start processing data */
     clock_t tic = clock();

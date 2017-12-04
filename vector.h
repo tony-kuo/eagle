@@ -36,10 +36,9 @@ Variant *variant_create(char *chr, int pos, char *ref, char *alt);
 void variant_destroy(Variant *v);
 
 typedef struct {
-    int *cigar_oplen, *splice_pos, *splice_offset;
+    int *qual, *cigar_oplen, *splice_pos, *splice_offset;
     int tid, pos, length, inferred_length, n_cigar, n_splice, multimapNH;
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
-    double *qual;
     double prgu, prgv, pout;
     int index;
     Vector *var_list;

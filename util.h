@@ -36,8 +36,10 @@ double sum(const double *a, int size);
 double *reverse(double *a, int size);
 
 double log_add_exp(double a, double b);
-double log_sum_exp(const double *a, int size);
+double log_sum_exp(const double *a, size_t size);
 
 void init_seqnt_map(int *seqnt_map);
+void init_q2p_table(double *p_match, double *p_mismatch, size_t size);
+void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int match, int mismatch);
 
 #endif

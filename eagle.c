@@ -26,7 +26,6 @@ This program is distributed under the terms of the GNU General Public License
 /* Precalculated log values */
 #define M_1_LOG10E (1.0/M_LOG10E)
 #define M_1_LN10 (1.0/M_LN10)
-#define LG3 (log(3.0))
 #define LG50 (log(0.5))
 #define LG10 (log(0.1))
 #define LG90 (log(0.9))
@@ -62,6 +61,9 @@ static struct tm *time_info;
 
 /* Mapping table */
 static int seqnt_map[26];
+
+/* Fastq quality to probability table */
+static double p_match[50], p_mismatch[50];
 
 KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
@@ -284,13 +286,14 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
             read->n_splice = j;
 
+            read->pos += s_offset;
             read->length = aln->core.l_qseq - (s_offset + e_offset);
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
             for (i = 0; i < read->length; ++i) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = (double)qual[i + s_offset] / -10;
+                read->qual[i] = qual[i + s_offset];
             }
             read->qseq[read->length] = '\0';
 
@@ -504,7 +507,7 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
     }
 }
 
-static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int pos) { /* short in long version */
+static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start) { /* short in long version */
     size_t i, j;
 
     double prev[read_length + 1], curr[read_length + 1];
@@ -518,9 +521,9 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     prev[1] = 0 - gap_op;
     for (j = 2; j < read_length + 1; ++j) { prev[j] = prev[j - 1] - gap_ex; }
 
-    int n = pos + seq_length;
+    int n = start + seq_length;
     double max_score = 0;
-    for (i = pos; i < n; ++i) {
+    for (i = start; i < n; ++i) {
         curr[0] = 0;
         a_gap_curr[0] = 0;
         b_gap_curr[0] = 0;
@@ -528,6 +531,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
         for (j = 1; j < read_length + 1; ++j) {
             int t = seq[i] - 'A';
             if (t < 0 || t >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], (int)i, seq_length); }
+
             double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[t]];
 
             double open = curr[j - 1] - gap_op;
@@ -541,7 +545,6 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
             curr[j] = upleft;
             if (a_gap_curr[j] >= curr[j]) curr[j] = a_gap_curr[j];
             if (b_gap_curr[j] >= curr[j]) curr[j] = b_gap_curr[j];
-
             if (curr[j] > row_max) row_max = curr[j];
         }
         if (row_max > max_score) max_score = row_max;
@@ -594,8 +597,10 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i < n2; ++i) {
-            if (i != pos) probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
-            if (probability > baseline) baseline = probability;
+            if (i != pos) {
+                probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
+                if (probability > baseline) baseline = probability;
+            }
         }
     }
     return probability;
@@ -682,14 +687,8 @@ static char *evaluate(const Vector *var_set) {
              /* Read probability matrix */
             double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
             for (i = 0; i < read_data[readi]->length; ++i) {
-                if (read_data[readi]->qual[i] == 0) read_data[readi]->qual[i] = -0.01;
-                double a = read_data[readi]->qual[i] * M_1_LOG10E; //convert to ln
-                is_match[i] = log(1 - exp(a)); // log(1-err)
-                no_match[i] = a - LG3; // log(err/3)
-                if (dp) {
-                    is_match[i] = is_match[i] + match;
-                    no_match[i] = is_match[i] - mismatch;
-                }
+                is_match[i] = p_match[read_data[readi]->qual[i]];
+                no_match[i] = p_mismatch[read_data[readi]->qual[i]];
             }
             double readprobmatrix[read_data[readi]->length * NT_CODES];
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
@@ -704,8 +703,8 @@ static char *evaluate(const Vector *var_set) {
             P(r|f) = (perfect + hamming_1) / lengthfactor 
             */
             double delta[read_data[readi]->length];
-            double a = sum(is_match, read_data[readi]->length);
             for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
+            double a = sum(is_match, read_data[readi]->length);
             double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
             /* Constant outside paralog term, testing, seems to perform near identically to the exact formulation above for fixed read length sequences */
             //double elsewhere = -2.4; // < 10%
@@ -800,7 +799,7 @@ static char *evaluate(const Vector *var_set) {
                 else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
                 if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
                 fprintf(stderr, "%s\t", read_data[readi]->qseq);
-                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%.2f ", read_data[readi]->qual[i]);
+                for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%d ", read_data[readi]->qual[i]);
                 fprintf(stderr, "\n");
             }
         }
@@ -1058,10 +1057,10 @@ static void print_usage() {
     printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice          Allow spliced reads.\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
-    printf("     --match    INT    DP matching score. [2]\n");
-    printf("     --mismatch INT    DP mismatch penalty. [5]\n");
-    printf("     --gap_op   INT    DP gap open penalty. [2]\n");
-    printf("     --gap_ex   INT    DP gap extend penalty. [1]\n");
+    printf("     --match    INT    DP matching score. [1]. Recommend 2 for long reads with indel errors.\n");
+    printf("     --mismatch INT    DP mismatch penalty. [4]. Recommend 5 for long reads with indel errors.\n");
+    printf("     --gap_op   INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
+    printf("     --gap_ex   INT    DP gap extend penalty. [1]. Recommend 1 for long reads with indel errors.\n");
     printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
@@ -1088,9 +1087,9 @@ int main(int argc, char **argv) {
     hetbias = 0.5;
     omega = 1.0e-5;
 
-    match = 2;
-    mismatch = 5;
-    gap_op = 2;
+    match = 1;
+    mismatch = 4;
+    gap_op = 6;
     gap_ex = 1;
 
     static struct option long_options[] = {
@@ -1162,9 +1161,9 @@ int main(int argc, char **argv) {
     if (distlim < 0) distlim = 10;
     if (maxdist < 0) maxdist = 0;
     if (maxh < 0) maxh = 0;
-    if (match <= 0) match = 2;
-    if (mismatch <= 0) mismatch = 5;
-    if (gap_op <= 0) gap_op = 2;
+    if (match <= 0) match = 1;
+    if (mismatch <= 0) mismatch = 4;
+    if (gap_op <= 0) gap_op = 6;
     if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (omega < 0 || omega > 1) omega = 1e-5;
@@ -1178,6 +1177,8 @@ int main(int argc, char **argv) {
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
     init_seqnt_map(seqnt_map);
+    if (dp) init_dp_q2p_table(p_match, p_mismatch, 50, match, mismatch);
+    else init_q2p_table(p_match, p_mismatch, 50);
 
     /* Start processing data */
     clock_t tic = clock();

@@ -12,6 +12,9 @@ This program is distributed under the terms of the GNU General Public License
 #include <math.h>
 #include "util.h"
 
+#define M_1_LOG10E (1.0/M_LOG10E)
+#define LG3 (log(3.0))
+
 char *strdup1(const char *src) {
     size_t n = strlen(src) + 1;
     char *des = malloc(n * sizeof *des);
@@ -66,7 +69,7 @@ double log_add_exp(double a, double b) {
     return log(exp(a - max_exp) + exp(b - max_exp)) + max_exp;
 }
 
-double log_sum_exp(const double *a, int size) {
+double log_sum_exp(const double *a, size_t size) {
     int i;
     double max_exp = a[0]; 
     for (i = 1; i < size; ++i) { 
@@ -105,3 +108,28 @@ void init_seqnt_map(int *seqnt_map) {
     seqnt_map['T'-'A'] = 16;
     seqnt_map['U'-'A'] = 16;
 }
+
+void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
+    /* FastQ quality score to ln probability lookup table */
+    int i;
+    double a;
+    for (i = 0; i < size; ++i) { 
+        if (i == 0) a = -0.01;
+        else a = (double)i / -10 * M_1_LOG10E; //convert to ln
+        p_match[i] = log(1 - exp(a)); // log(1-err)
+        p_mismatch[i] = a - LG3; // log(err/3)
+     }
+}
+
+void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int match, int mismatch) {
+    /* FastQ quality score to ln probability lookup table modified by match and mismatch costs for dp*/
+    int i;
+    double a;
+    for (i = 0; i < size; ++i) { 
+        if (i == 0) a = -0.01;
+        else a = (double)i / -10 * M_1_LOG10E; //convert to ln
+        p_match[i] = log_add_exp(log(1 - exp(a)) + match, a - LG3 - mismatch);
+        p_mismatch[i] = log_add_exp(a - LG3 + match, log(1 - exp(a)) - mismatch);
+     }
+}
+

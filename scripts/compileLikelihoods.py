@@ -77,20 +77,19 @@ def compileLOH(pos_entry, neg_entry, minlr, maxlr, depth):
     for key in pos_entry:
         if key not in neg_entry: continue;
 
-        current = sorted(neg_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
-        if current[2] < minlr: continue;
-        if current[1] < 0.3 or current[1] > 0.7: continue; # neg should be heterozygous variant
-        current = sorted(neg_entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
-        if depth > 0 and current[0] < depth: continue;
-
         current = sorted(pos_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
-        if maxlr < current[2] < minlr: continue; # if pos is in uncertainty "deadzone"
-        if 0.1 < current[1] < 0.9: continue; # pos should be homozygous
+        if current[2] < minlr: continue;
+        if current[1] < 0.3 or current[1] > 0.7: continue; # pos should be heterozygous variant
         current = sorted(pos_entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
         if depth > 0 and current[0] < depth: continue;
 
-        new_neg_entry[key] = neg_entry[key];
+        current = sorted(neg_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0]; # Max LR across files
+        if maxlr < current[2] < minlr: continue; # neg should be homozygous mutation or reference, thus should be < maxlr or > minlr
+        current = sorted(neg_entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files
+        if depth > 0 and current[0] < depth: continue;
+
         new_pos_entry[key] = pos_entry[key];
+        new_neg_entry[key] = neg_entry[key];
     return(new_pos_entry, new_neg_entry);
 
 def outputResults(pos_entry, neg_entry, pos_files, neg_files):
@@ -145,6 +144,7 @@ def main():
     parser.add_argument('-maxaf', type=float, default=0.04, help='maximum allele frequency for negative samples (default: 0.04)');
     parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
     parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth (instead of: ref + alt)');
+    parser.add_argument('-loh', action='store_true', help='include mutations with loss of heterozygosity, labeled with LOH');
     args = parser.parse_args();
 
     pos = readFiles(args.p, args.seen); 
@@ -155,10 +155,12 @@ def main():
     if args.n:
         neg = readFiles(args.n, args.seen);
         neg_entry = compileEntries(neg, args.maxlr, args.maxaf, args.mindepth, True);
-        (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth);
+        if args.loh:
+            (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth);
 
     outputResults(pos_entry, neg_entry, args.p, args.n);
-    outputLOH(pos_loh_entry, neg_loh_entry, args.p, args.n);
+    if args.loh:
+        outputLOH(pos_loh_entry, neg_loh_entry, args.p, args.n);
 
 if __name__ == '__main__':
     try:

@@ -128,8 +128,9 @@ void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int mat
     for (i = 0; i < size; ++i) { 
         if (i == 0) a = -0.01;
         else a = (double)i / -10 * M_1_LOG10E; //convert to ln
-        p_match[i] = log_add_exp(log(1 - exp(a)) + match, a - LG3 - mismatch);
-        p_mismatch[i] = log_add_exp(a - LG3 + match, log(1 - exp(a)) - mismatch);
+        a = log(1 - exp(a));
+        p_match[i] = a + match;
+        p_mismatch[i] = -(a + mismatch);
      }
 }
 

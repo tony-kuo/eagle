@@ -8,16 +8,16 @@
 # Classification is determined by the log likelihood sum over all variants that a read crosses.
 # ex)
 #   eagle -t 8 -a refsort.bam -r A.fa -v AB.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> A.vs.B.txt 2> A.vs.B.readinfo.txt
-#   readclassify -a refsort.bam --listonly -o A.vs.B A.vs.B.txt A.vs.B.readinfo.txt > A.vs.B.list
+#   eagle-rc -a refsort.bam --listonly -o A.vs.B A.vs.B.txt A.vs.B.readinfo.txt > A.vs.B.list
 #
 #   eagle -t 8 -a refsort.bam -r B.fa -v BA.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> B.vs.A.txt 2> B.vs.A.readinfo.txt
-#   readclassify -a refsort.bam --listonly -o B.vs.A B.vs.A.txt B.vs.A.readinfo.txt > B.vs.A.list
+#   eagle-rc -a refsort.bam --listonly -o B.vs.A B.vs.A.txt B.vs.A.readinfo.txt > B.vs.A.list
 #
 #   python mirror_consensus.py A.vs.B.list B.vs.A.list > consensus.A.vs.B.list
-#   readclassify -a refsort.bam -o consensus_A --readlist consensus.A.list
+#   eagle-rc -a refsort.bam -o consensus_A --readlist consensus.A.list
 #
 #   python mirror_consensus.py B.vs.A.list A.vs.B.list > consensus.B.vs.A.list
-#   readclassify -a refsort.bam -o consensus_A --readlist consensus.B.list
+#   eagle-rc -a refsort.bam -o consensus_A --readlist consensus.B.list
 
 from __future__ import print_function
 import argparse

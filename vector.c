@@ -60,6 +60,7 @@ Vector *vector_dup(Vector *a) {
 void vector_free(Vector *a) {
     a->size = 0;
     free(a->data); a->data = NULL;
+    free(a); a = NULL;
 }
 
 void vector_destroy(Vector *a) {

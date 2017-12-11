@@ -69,16 +69,14 @@ KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 
 
-static void combinations(char **output, int k, int n, size_t *ncombos) {
+static void combinations(Vector *var_combo, int k, int n, size_t *ncombos, Variant **var_data) {
     int i, c[k];
     for (i = 0; i < k; ++i) c[i] = i; // first combination
     while (1) { // while (next_comb(c, k, n)) {
-        char token[k + 2];
-        for (i = 0; i < k; ++i) token[i] = c[i] + '\t' + 1; // record the combination as ('\t'+1)-indexed
-        token[k] = '\t';
-        token[k + 1] = '\0';
-        str_resize(output, strlen(*output) + strlen(token) + 1);
-        strcat(*output, token);
+        // record the combination
+        Vector *v = vector_create(k, VARIANT_T);
+        for (i = 0; i < k; ++i) vector_add(v, var_data[c[i]]);
+        vector_add(var_combo, v);
         ++(*ncombos);
 
         i = k - 1;
@@ -95,26 +93,20 @@ static void combinations(char **output, int k, int n, size_t *ncombos) {
     }
 }
 
-static char *powerset(int n, size_t *ncombos) {
-    char *combo = malloc(sizeof *combo);
-    combo[0] = '\0';
-
+static Vector *powerset(int n, size_t *ncombos, Variant **var_data) {
+    Vector *var_combo = vector_create(n + 1, VOID_T);
     if (n == 1) {
-        str_resize(&combo, 3);
-        combo[0] = '\t' + 1;
-        combo[1] = '\t';
-        combo[2] = '\0';
-        *ncombos = 1;
+        combinations(var_combo, 1, n, ncombos, var_data);
     }
     else if (n > 1) {
-        combinations(&combo, 1, n, ncombos);
-        combinations(&combo, n, n, ncombos);
+        combinations(var_combo, 1, n, ncombos, var_data);
+        combinations(var_combo, n, n, ncombos, var_data);
         int k;
         for (k = 2; k <= n - 1 && (int)*ncombos - n - 1 < maxh; ++k) {
-            combinations(&combo, k, n, ncombos);
+            combinations(var_combo, k, n, ncombos, var_data);
         }
     }
-    return combo;
+    return var_combo;
 }
 
 static Vector *vcf_read(FILE *file) {
@@ -629,19 +621,8 @@ static char *evaluate(const Vector *var_set) {
 
     /* Variant combinations as a tab delimited string, encoding array indices ('\t'+1)-indexed, then parsed into a an array of Vectors */
     size_t ncombos = 0;
-    char *combo = powerset(nvariants, &ncombos);
-
-    Vector **var_combo = malloc(ncombos * sizeof (Vector *)); 
-    seti = 0;
-    int n1;
-    char *s1, *s2, token[strlen(combo)];
-    for (s1 = combo; sscanf(s1, "%[^\t]%n", token, &n1) == 1 && seti < ncombos; s1 += n1 + 1) {
-        var_combo[seti] = vector_create(nvariants, VARIANT_T);
-        for (s2 = token; *s2 != '\0'; ++s2)  vector_add(var_combo[seti], var_data[*s2 - '\t' - 1]);
-        ++seti;
-        if (*(s1 + n1) != '\t') break;
-    }
-    free(combo); combo = NULL;
+    Vector *combo_list = powerset(nvariants, &ncombos, var_data);
+    Vector **var_combo = (Vector **)combo_list->data;
     //for (seti = 0; seti < ncombos; ++seti) { fprintf(stderr, "%d\t", (int)seti); for (i = 0; i < var_combo[seti]->size; ++i) { Variant *curr = (Variant *)var_combo[seti]->data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); }
 
     double ref = 0;
@@ -873,8 +854,8 @@ static char *evaluate(const Vector *var_set) {
     free(ref_count); ref_count = NULL;
     free(alt_count); alt_count = NULL;
     vector_destroy(read_list); free(read_list); read_list = NULL;
-    for (seti = 0; seti < ncombos; ++seti) { vector_free(var_combo[seti]); free(var_combo[seti]); var_combo[seti] = NULL; }
-    free(var_combo); var_combo = NULL;
+    for (seti = 0; seti < ncombos; ++seti) vector_free(var_combo[seti]);
+    vector_free(combo_list);
     return output;
 }
 
@@ -900,7 +881,7 @@ static void *pool(void *work) {
 
         pthread_mutex_lock(&w->r_lock);
         vector_add(results, outstr);
-        vector_free(var_set); free(var_set); var_set = NULL;
+        vector_free(var_set);
         pthread_mutex_unlock(&w->r_lock);
     }
     return NULL;
@@ -1028,7 +1009,7 @@ static void process(const Vector *var_list, FILE *out_fh) {
     pthread_mutex_destroy(&w->r_lock);
 
     free(w); w = NULL;
-    vector_free(var_set); var_set = NULL;
+    vector_free(var_set);
 
     qsort(results->data, results->size, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");

@@ -103,7 +103,7 @@ Usage:
 
 `eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --omega=1e-40 --mvh --verbose 1> output.tab 2>readinfo.txt`
 
-`readclassify -a alignment.bam -o out_prefix output.tab readinfo.txt > classified_reads.list`
+`eagle-rc -a alignment.bam -o out_prefix output.tab readinfo.txt > classified_reads.list`
 
 **Program Parameters**
 
@@ -111,4 +111,7 @@ Usage:
 
 --listonly  print classified read list only (stdout) without processing BAM files
 
---readlist  read from classified read list instead of EAGLE outputs, perhaps from a previous run or a merged file, and process BAM files.
+--readlist  read from classified read list instead of EAGLE outputs and process BAM files.  This is useful if you previously outputed with *listonly* and then performed post-processing on list files to obtain, for example, a consensus list.  This will allow the post-processed list to be used instead.
+
+--refonly  write REF classified reads only when processing BAM file.
+

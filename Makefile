@@ -24,6 +24,6 @@ READCLASSIFY:
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)
 
 clean:
-	rm -f eagle readclassify *.o
+	rm -f eagle eagle-rc *.o
 
 # DO NOT DELETE THIS LINE -- make depend needs it

@@ -21,7 +21,7 @@ UTIL:
 	$(CC) $(CFLAGS) -c util.c vector.c $(LDLIBS)
 
 READCLASSIFY:
-	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) readclassify.c -o readclassify $(AUX) $(LIBS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)
 
 clean:
 	rm -f eagle readclassify *.o

@@ -12,7 +12,9 @@ Usage:
 
 `eagle -v variants.vcf -a alignment.bam -r reference.fasta > output.tab`
 
-### For EAGLE read classification, see EAGLE-RC below
+### scripts/example.sh describe some EAGLE workflows as a bash script
+
+### For EAGLE read classification options, see EAGLE-RC below
 
 **Inputs**
 

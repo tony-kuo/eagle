@@ -11,7 +11,7 @@ LDLIBS=-lm -lz -llzma -lbz2 -lpthread
 MAIN = eagle
 AUX = util.o vector.o
 
-all: UTIL HTSLIB READCLASSIFY
+all: UTIL HTSLIB READCLASSIFY NOMUTATION
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(AUX) $(LIBS) $(LDLIBS)
 
 HTSLIB:
@@ -22,6 +22,9 @@ UTIL:
 
 READCLASSIFY:
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)
+
+NOMUTATION:
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-nm.c -o eagle-nm $(AUX) $(LIBS) $(LDLIBS)
 
 clean:
 	rm -f eagle eagle-rc *.o

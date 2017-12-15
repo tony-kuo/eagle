@@ -511,7 +511,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
 
     prev[0] = 0;
     prev[1] = 0 - gap_op;
-    for (j = 2; j < read_length + 1; ++j) { prev[j] = prev[j - 1] - gap_ex; }
+    for (j = 2; j < read_length + 1; ++j) prev[j] = prev[j - 1] - gap_ex;
 
     int n = start + seq_length;
     double max_score = 0;
@@ -668,15 +668,15 @@ static char *evaluate(const Vector *var_set) {
              /* Read probability matrix */
             double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
             for (i = 0; i < read_data[readi]->length; ++i) {
-                is_match[i] = p_match[read_data[readi]->qual[i]];
-                no_match[i] = p_mismatch[read_data[readi]->qual[i]];
+                is_match[i] = p_match[read_data[readi]->qual[i]] + 1;
+                no_match[i] = p_mismatch[read_data[readi]->qual[i]] + 1;
             }
             double readprobmatrix[read_data[readi]->length * NT_CODES];
             set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
            
             /* 
             Exact Formuation:
-            Probability of read is from an outside paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
+            Probability that read is from an outside the reference paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
                a) perfect match = prod[ (1-e) ]
                b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
             Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
@@ -1038,10 +1038,10 @@ static void print_usage() {
     printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice          Allow spliced reads.\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
-    printf("     --match    INT    DP matching score. [1]. Recommend 2 for long reads with indel errors.\n");
-    printf("     --mismatch INT    DP mismatch penalty. [4]. Recommend 5 for long reads with indel errors.\n");
+    //printf("     --match    INT    DP match score. [1]. Recommend 2 for long reads with indel errors.\n");
+    //printf("     --mismatch INT    DP mismatch penalty. [4]. Recommend 5 for long reads with indel errors.\n");
     printf("     --gap_op   INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
-    printf("     --gap_ex   INT    DP gap extend penalty. [1]. Recommend 1 for long reads with indel errors.\n");
+    printf("     --gap_ex   INT    DP gap extend penalty. [1].\n");
     printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
@@ -1143,7 +1143,7 @@ int main(int argc, char **argv) {
     if (maxdist < 0) maxdist = 0;
     if (maxh < 0) maxh = 0;
     if (match <= 0) match = 1;
-    if (mismatch <= 0) mismatch = 4;
+    if (match <= 0) mismatch = 4;
     if (gap_op <= 0) gap_op = 6;
     if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
@@ -1158,8 +1158,8 @@ int main(int argc, char **argv) {
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
     init_seqnt_map(seqnt_map);
-    if (dp) init_dp_q2p_table(p_match, p_mismatch, 50, match, mismatch);
-    else init_q2p_table(p_match, p_mismatch, 50);
+    //if (dp) init_dp_q2p_table(p_match, p_mismatch, 50, match, mismatch);
+    init_q2p_table(p_match, p_mismatch, 50);
 
     /* Start processing data */
     clock_t tic = clock();

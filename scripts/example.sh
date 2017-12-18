@@ -37,8 +37,8 @@ eagle -t $CPU -v union.vcf -a father.bam -r reference.fa > father.txt
 eagle -t $CPU -v union.vcf -a mother.bam -r reference.fa > mother.txt
 
 # Filter variants based on eagle outputs, where positive sample is child and negative sample is parent
-python scripts/compile_likelihoods.py -p child.txt -n father.txt -minlr 5 -minaf 0.05 -maxlr -2 -maxaf 0.04  -mindepth 10 -seen > child.vs.father.txt
-python scripts/compile_likelihoods.py -p child.txt -n mother.txt -minlr 5 -minaf 0.05 -maxlr -2 -maxaf 0.04  -mindepth 10 -seen > child.vs.mother.txt
+python scripts/compile_likelihoods.py -p child.txt -n father.txt -minlr 5 -minaf 0.25 -maxlr -2 -maxaf 0.04  -mindepth 10 -seen > child.vs.father.txt
+python scripts/compile_likelihoods.py -p child.txt -n mother.txt -minlr 5 -minaf 0.25 -maxlr -2 -maxaf 0.04  -mindepth 10 -seen > child.vs.mother.txt
 
 # Get the variants which are present only in the child
 python scripts/tablize.py -a -i 0-7 child.vs.father.txt child.vs.mother.txt > child.vs.parents.txt

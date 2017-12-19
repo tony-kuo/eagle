@@ -54,8 +54,8 @@ python scripts/combine_vcf_eagle.py -v child.vcf -e child.vs.parents.txt > child
 lastdb -uNEAR -R01 A_origin A_transcripts.fa
 lastdb -uNEAR -R01 B_origin B_transcripts.fa
 
-lastal -D10000000000 A_origin -P$CPU B_transcripts.fa | last-map-probs -m 0.49 > A_origin.maf
-lastal -D10000000000 B_origin -P$CPU A_transcripts.fa | last-map-probs -m 0.49 > B_origin.maf
+lastal A_origin -P$CPU B_transcripts.fa | last-map-probs -m 0.49 > A_origin.maf
+lastal B_origin -P$CPU A_transcripts.fa | last-map-probs -m 0.49 > B_origin.maf
 
 # [Note] check to make sure your transcripts are based on exons or CDS in the annotation. If CDS then change below, -f exon to -f CDS
 python scripts/homeolog_genotypes.py -f exon -o Ref_A -g annotation_A.gtf A_origin.maf B_origin.maf

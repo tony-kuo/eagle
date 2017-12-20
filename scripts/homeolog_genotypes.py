@@ -153,11 +153,11 @@ def reciprocalBestHit(e1, e2, prefix, gtf):
                     aa = [];
                     bb = [];
 
-    with open(prefix+".rna.vcf", 'w') as fh:
+    with open(prefix+".raw.vcf", 'w') as fh:
         for i in naturalSort(entry):
             print("{}\t{}".format(i, entry[i]), file=fh);
     if gtf:
-        with open(prefix+".dna.vcf", 'w') as fh:
+        with open(prefix+".gtf.vcf", 'w') as fh:
             for i in naturalSort(dna_entry):
                 print("{}\t{}".format(i, dna_entry[i]), file=fh);
 

@@ -61,17 +61,21 @@ lastal B_origin -P$CPU A_transcripts.fa | last-map-probs -m 0.49 > B_origin.maf
 python scripts/homeolog_genotypes.py -f exon -o Ref_A -g annotation_A.gtf A_origin.maf B_origin.maf
 python scripts/homeolog_genotypes.py -f exon -o Ref_B -g annotation_B.gtf B_origin.maf A_origin.maf
 
-eagle -t $CPU -a data_align2_A.bam -r A.reference.fa -v Ref_A.dna.vcf --omega=1e-40 --mvh --splice --isc --verbose 1> Ref_A.sample.txt 2> Ref_A.sample.readinfo.txt
+eagle -t $CPU -a data_align2_A.bam -r A.reference.fa -v Ref_A.gtf.vcf --omega=1e-40 --mvh --splice --isc --verbose 1> Ref_A.sample.txt 2> Ref_A.sample.readinfo.txt
 eagle-rc -a data_align2_A.bam --listonly -o Ref_A.sample Ref_A.sample.txt Ref_A.sample.readinfo.txt > Ref_A.sample.list
 
-eagle -t $CPU -a data_align2_B.bam -r B.reference.fa -v Ref_B.dna.vcf --omega=1e-40 --mvh --splice --isc --verbose 1> Ref_B.sample.txt 2> Ref_B.sample.readinfo.txt
+eagle -t $CPU -a data_align2_B.bam -r B.reference.fa -v Ref_B.gtf.vcf --omega=1e-40 --mvh --splice --isc --verbose 1> Ref_B.sample.txt 2> Ref_B.sample.readinfo.txt
 eagle-rc -a data_align2_B.bam --listonly -o Ref_B.sample Ref_B.sample.txt Ref_B.sample.readinfo.txt > Ref_B.sample.list
 
 ## Find the consensus classification based on likelihood
 python scripts/mirror_consensus.py Ref_A.sample.list Ref_B.sample.list > sample.consensus.list
 
 ## Write bam files based on consensus list, using A as the reference
-eagle-rc -a data_align2_A.bam -o sample --readlist sample.consensus.list
+eagle-rc -a data_align2_A.bam -o sample.Ref_A --readlist sample.consensus.list
+
+## [Optional] If you wish to have the set of B_origin reads in Ref_B
+cat sample.cons.list | perl -ne 'chomp; @t=split(/\t/); $temp=$t[4]; $t[4]=$t[5]; $t[5]=$temp; if($t[1] eq "REF") {$t[1]="ALT";} elsif($t[1] eq "ALT") {$t[1]="REF";} print join("\t",@t)."\n";' > sample.consensus.mirror.list
+eagle-rc -a data_align2_B.bam -o sample.Ref_B --readlist sample.consensus.mirror.list
 
 ## Perform read counting as you prefer, for example:
 featureCounts -T $CPU -t exon -g transcript_id -a annotation_A.gtf -o sample.A.counts.txt sample.ref.bam

@@ -131,7 +131,7 @@ def reciprocalBestHit(e1, e2, prefix, gtf):
 
                         rProportion = float(e1[ID][3]) / e1[ID][4];
                         qProportion = float(e1[ID][8]) / e1[ID][9];
-                        entry["{}\t{}\t.\t{}\t{}".format(e1[ID][1], rna_pos, "".join(aa), "".join(bb))] = "{};rProp={:.4f};qProp{:.4f}".format(e2[ID][1], rProportion, qProportion);
+                        entry["{}\t{}\t.\t{}\t{}".format(e1[ID][1], rna_pos, "".join(aa), "".join(bb))] = "{};rProp={:.4f};qProp={:.4f}".format(e2[ID][1], rProportion, qProportion);
 
                         rID = e1[ID][1];
                         if rID in gtf:
@@ -147,7 +147,7 @@ def reciprocalBestHit(e1, e2, prefix, gtf):
                                 dna_pos += gtf[rID]['offset'][i];
                                 if dna_pos <= gtf[rID]['exon'][i][-1]: break;
 
-                            dna_entry["{}\t{}\t.\t{}\t{}".format(gtf[rID]['id'], dna_pos, "".join(aa), "".join(bb))] = "{};{};rProp={:.4f};qProp{:.4f}".format(e1[ID][1], e2[ID][1], rProportion, qProportion);
+                            dna_entry["{}\t{}\t.\t{}\t{}".format(gtf[rID]['id'], dna_pos, "".join(aa), "".join(bb))] = "{};{};rProp={:.4f};qProp={:.4f}".format(e1[ID][1], e2[ID][1], rProportion, qProportion);
 
 
                     aa = [];

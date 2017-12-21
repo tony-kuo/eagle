@@ -74,14 +74,12 @@ def readMAF(fn, refFirst):
                 if not rSeq:
                     rId = t[1];
                     rStart = int(t[2]);
-                    rEnd = rStart + int(t[3]) - 1;
                     rAlnLen = int(t[3]);
                     rLength = int(t[5]);
                     rSeq = t[6].upper();
                 elif not qSeq:
                     qId = t[1];
                     qStart = int(t[2]);
-                    qEnd = qStart + int(t[3]) - 1;
                     qAlnLen = int(t[3]);
                     qLength = int(t[5]);
                     qSeq = t[6].upper();
@@ -93,7 +91,7 @@ def readMAF(fn, refFirst):
                     ID = qId + "\t" + rId;
 
                 if rAlnLen > 200 and qAlnLen > 200:
-                    entry[ID] = (a, rId, rStart, rEnd, rLength, rSeq, qId, qStart, qEnd, qLength, qSeq, sense);
+                    entry[ID] = (a, rId, rStart, rAlnLen, rLength, rSeq, qId, qStart, qAlnLen, qLength, qSeq, sense);
                 rSeq = qSeq = "";
     return(entry);
 
@@ -131,7 +129,9 @@ def reciprocalBestHit(e1, e2, prefix, gtf):
                         if len(bb) > 1:
                             bb = [x for x in bb if x != '-'];
 
-                        entry["{}\t{}\t.\t{}\t{}".format(e1[ID][1], rna_pos, "".join(aa), "".join(bb))] = e2[ID][1];
+                        rProportion = float(e1[ID][3]) / e1[ID][4];
+                        qProportion = float(e1[ID][8]) / e1[ID][9];
+                        entry["{}\t{}\t.\t{}\t{}".format(e1[ID][1], rna_pos, "".join(aa), "".join(bb))] = "{};rProp={:.4f};qProp{:.4f}".format(e2[ID][1], rProportion, qProportion);
 
                         rID = e1[ID][1];
                         if rID in gtf:
@@ -147,7 +147,7 @@ def reciprocalBestHit(e1, e2, prefix, gtf):
                                 dna_pos += gtf[rID]['offset'][i];
                                 if dna_pos <= gtf[rID]['exon'][i][-1]: break;
 
-                            dna_entry["{}\t{}\t.\t{}\t{}".format(gtf[rID]['id'], dna_pos, "".join(aa), "".join(bb))] = "{}\t{}".format(e1[ID][1], e2[ID][1]);
+                            dna_entry["{}\t{}\t.\t{}\t{}".format(gtf[rID]['id'], dna_pos, "".join(aa), "".join(bb))] = "{};{};rProp={:.4f};qProp{:.4f}".format(e1[ID][1], e2[ID][1], rProportion, qProportion);
 
 
                     aa = [];

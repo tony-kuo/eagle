@@ -33,12 +33,11 @@ def readVCF(filename, eagle, raw):
     with open(filename, 'r') as fh:
         for line in fh:
             if re.match('^#', line): 
-                print(line);
+                print(line.strip());
                 continue;
 
             t = line.strip().split('\t');
             key = "{}\t{}\t{}\t{}".format(t[0], t[1], t[3], t[4]);
-            print(key)
             if key in eagle:
                 if raw:
                     af = float(eagle[key][6]) / float(eagle[key][4]);

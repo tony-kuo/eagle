@@ -753,7 +753,7 @@ static char *evaluate(const Vector *var_set) {
 
         calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, c[seti], &ref, &alt[seti], &het[seti], &ref_count[seti], &alt_count[seti], seti);
     }
-    if (var_set->size > 2 && (int)combo->size - n - 1 < maxh) { // triples and beyond, if doubles doesn't already exceed the limit
+    if (var_set->size > 2 && (int)combo->size - var_set->size - 1 < maxh) { // triples and beyond, if doubles doesn't already exceed the limit
         size_t j;
         seti = var_set->size;
         while (++seti < combo->size) {
@@ -772,6 +772,7 @@ static char *evaluate(const Vector *var_set) {
                     --i;
                 }
             }
+            if ((int)combo->size - var_set->size - 1 > maxh) break;
         }
     }
 

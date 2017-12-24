@@ -20,41 +20,10 @@ void vector_init(Vector *a, size_t initial_size, enum type var_type) {
     a->data = malloc(initial_size * sizeof (void *));
 }
 
-void vector_add(Vector *a, void *entry) {
-    if (a->size >= a->capacity) {
-        a->capacity *= 2;
-        void **p = realloc(a->data, a->capacity * sizeof (void *));
-        if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
-        else { a->data = p; }
-    }
-    a->data[a->size++] = entry;
-}
-
-void vector_del(Vector *a, int i) {
-    a->data[i] = NULL;
-    if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
-    a->data[a->size] = NULL;
-}
-
-void *vector_pop(Vector *a) {
-    if (a->size <= 0) return NULL;
-    void *entry = a->data[--a->size];
-    a->data[a->size] = NULL;
-    return entry;
-}
-
 Vector *vector_create(size_t initial_size, enum type var_type) {
     Vector *a = malloc(sizeof (Vector));
     vector_init(a, initial_size, var_type);
     return a;
-}
-
-Vector *vector_dup(Vector *a) {
-    Vector *v = vector_create(a->capacity, a->type);
-    v->size = a->size;
-    memcpy(&(v->data[0]), &(a->data[0]), a->size * sizeof (void *));
-    return v;
 }
 
 void vector_free(Vector *a) {
@@ -86,6 +55,107 @@ void vector_destroy(Vector *a) {
     free(a->data); a->data = NULL;
 }
 
+void vector_add(Vector *a, void *entry) {
+    if (a->size >= a->capacity) {
+        a->capacity *= 2;
+        void **p = realloc(a->data, a->capacity * sizeof (void *));
+        if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
+        else { a->data = p; }
+    }
+    a->data[a->size++] = entry;
+}
+
+void vector_del(Vector *a, int i) {
+    a->data[i] = NULL;
+    if (i == --a->size) return;
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    a->data[a->size] = NULL;
+}
+
+void *vector_pop(Vector *a) {
+    if (a->size <= 0) return NULL;
+    void *entry = a->data[--a->size];
+    a->data[a->size] = NULL;
+    return entry;
+}
+
+Vector *vector_dup(Vector *a) {
+    Vector *v = vector_create(a->capacity, a->type);
+    v->size = a->size;
+    memcpy(&(v->data[0]), &(a->data[0]), a->size * sizeof (void *));
+    return v;
+}
+
+void vector_int_init(Vector_Int *a, size_t initial_size) {
+    a->size = 0;
+    a->capacity = initial_size;
+    a->data = malloc(initial_size * sizeof (int));
+}
+
+Vector_Int *vector_int_create(size_t initial_size) {
+    Vector_Int *a = malloc(sizeof (Vector_Int));
+    vector_int_init(a, initial_size);
+    return a;
+}
+
+void vector_int_destroy(Vector_Int *a) {
+    a->size = 0;
+    free(a->data); a->data = NULL;
+    free(a); a = NULL;
+}
+
+void vector_int_add(Vector_Int *a, int entry) {
+    if (a->size >= a->capacity) {
+        a->capacity *= 2;
+        int *p = realloc(a->data, a->capacity * sizeof (int));
+        if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
+        else { a->data = p; }
+    }
+    a->data[a->size++] = entry;
+}
+
+void vector_int_del(Vector_Int *a, int i) {
+    a->data[i] = 0;
+    if (i == --a->size) return;
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    a->data[a->size] = 0;
+}
+
+void vector_double_init(Vector_Double *a, size_t initial_size) {
+    a->size = 0;
+    a->capacity = initial_size;
+    a->data = malloc(initial_size * sizeof (double));
+}
+
+Vector_Double *vector_double_create(size_t initial_size) {
+    Vector_Double *a = malloc(sizeof (Vector_Double));
+    vector_double_init(a, initial_size);
+    return a;
+}
+
+void vector_double_add(Vector_Double *a, double entry) {
+    if (a->size >= a->capacity) {
+        a->capacity *= 2;
+        double *p = realloc(a->data, a->capacity * sizeof (double));
+        if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
+        else { a->data = p; }
+    }
+    a->data[a->size++] = entry;
+}
+
+void vector_double_destroy(Vector_Double *a) {
+    a->size = 0;
+    free(a->data); a->data = NULL;
+    free(a); a = NULL;
+}
+
+void vector_double_del(Vector_Double *a, int i) {
+    a->data[i] = 0;
+    if (i == --a->size) return;
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    a->data[a->size] = 0;
+}
+
 Variant *variant_create(char *chr, int pos, char *ref, char *alt) {
     Variant *v = malloc(sizeof (Variant));
     v->chr = strdup(chr);
@@ -109,9 +179,9 @@ Read *read_create(char *name, int tid, char *chr, int pos) {
     r->tid = tid;
     r->chr = strdup(chr);
     r->pos = pos;
-    r->prgu = -10000;
-    r->prgv = -10000;
-    r->pout = -10000;
+    r->prgu = -1.0e10;
+    r->prgv = -1.0e10;
+    r->pout = -1.0e10;
     r->index = 0;
     r->var_list = vector_create(8, VOID_T);
 

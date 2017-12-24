@@ -13,6 +13,7 @@ This program is distributed under the terms of the GNU General Public License
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include "vector.h"
 
 #ifdef NDEBUG
 #define debug(M, ...)
@@ -41,5 +42,10 @@ double log_sum_exp(const double *a, size_t size);
 void init_seqnt_map(int *seqnt_map);
 void init_q2p_table(double *p_match, double *p_mismatch, size_t size);
 void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int match, int mismatch);
+
+void combinations(Vector *combo, int k, int n);
+void derive_combo(Vector *combo, Vector_Int *prev, int n);
+Vector *powerset(int n, int maxh);
+int is_subset (int arr1[], int arr2[], int m, int n);
 
 #endif

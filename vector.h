@@ -19,13 +19,35 @@ typedef struct {
 } Vector;
 
 void vector_init(Vector *a, size_t initial_size, enum type var_type);
+Vector *vector_create(size_t initial_size, enum type var_type);
+void vector_free(Vector *a);
+void vector_destroy(Vector *a);
 void vector_add(Vector *a, void *entry);
 void vector_del(Vector *a, int i);
 void *vector_pop(Vector *a);
-Vector *vector_create(size_t initial_size, enum type var_type);
 Vector *vector_dup(Vector *a);
-void vector_free(Vector *a);
-void vector_destroy(Vector *a);
+
+typedef struct {
+    size_t size, capacity;
+    int *data;
+} Vector_Int;
+
+void vector_int_init(Vector_Int *a, size_t initial_size);
+Vector_Int *vector_int_create(size_t initial_size);
+void vector_int_destroy(Vector_Int *a);
+void vector_int_add(Vector_Int *a, int entry);
+void vector_int_del(Vector_Int *a, int i);
+
+typedef struct {
+    size_t size, capacity;
+    double *data;
+} Vector_Double;
+
+void vector_double_init(Vector_Double *a, size_t initial_size);
+Vector_Double *vector_double_create(size_t initial_size);
+void vector_double_destroy(Vector_Double *a);
+void vector_double_add(Vector_Double *a, double entry);
+void vector_double_del(Vector_Double *a, int i);
 
 typedef struct {
     int pos;

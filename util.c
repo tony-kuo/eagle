@@ -10,6 +10,7 @@ This program is distributed under the terms of the GNU General Public License
 #include <stdlib.h>
 #include <ctype.h>
 #include <math.h>
+#include "vector.h"
 #include "util.h"
 
 #define M_1_LOG10E (1.0/M_LOG10E)
@@ -134,3 +135,81 @@ void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int mat
      }
 }
 
+void combinations(Vector *combo, int k, int n) {
+    int i, c[k];
+    for (i = 0; i < k; ++i) c[i] = i; // first combination
+    while (1) { // while (next_comb(c, k, n)) {
+        // record the combination
+        Vector_Int *v = vector_int_create(k);
+        for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
+        vector_add(combo, v);
+
+        i = k - 1;
+        ++c[i];
+        while ((i >= 0 && i < k) && (c[i] >= n - k + 1 + i)) {
+            --i;
+            ++c[i];
+        }
+        /* Combination (n-k, n-k+1, ..., n) reached. No more combinations can be generated */
+        if (c[0] > n - k) break; // return 0;
+        /* c now looks like (..., x, n, n, n, ..., n), turn it into (..., x, x + 1, x + 2, ...) */
+        for (i = i + 1; i < k; ++i) c[i] = c[i - 1] + 1;
+        // return 1;
+    }
+}
+
+void derive_combo(Vector *combo, Vector_Int *prev, int n) { // Derive the combinations in k+1 that contain the previous elements
+    if (prev->size == n) { exit_err("cannot derive combinations when prev->size == n\n"); }
+    if (prev->size + 1 == n) return;
+
+    int k = prev->size + 1;
+    int i, c[k];
+
+    for (i = 0; i < prev->size; ++i) c[i] = prev->data[i]; // first combination
+    c[prev->size] = c[prev->size - 1] + 1;
+
+    while (c[prev->size] < n) { // generate and record combinations
+        Vector_Int *v = vector_int_create(k);
+        for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
+        vector_add(combo, v);
+        ++c[prev->size];
+    }
+}
+
+Vector *powerset(int n, int maxh) {
+    Vector *combo = vector_create(n + 1, VOID_T);
+    if (n == 1) {
+        combinations(combo, 1, n);
+    }
+    else if (n > 1) {
+        combinations(combo, n, n);
+        combinations(combo, 1, n);
+        combinations(combo, 2, n);
+        /* depth first, k += 1
+        Vector_Int **c = (Vector_Int **)combo->data; 
+        int i = n;
+        while (++i < combo->size) derive_combo(combo, c[i], n);
+        */
+        /* breath first, constant k
+        int k; 
+        for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; ++k) combinations(combo, k, n);
+        */
+    }
+    return combo;
+}
+
+int is_subset (int arr1[], int arr2[], int m, int n) { // Check if arr2 is a subset of arr1.  Requires sorted arrays
+    int i = 0;
+    int j = 0;
+
+    if (m < n) return 0;
+    while (i < n && j < m) {
+        if (arr1[j] < arr2[i]) j++;
+        else if (arr1[j] == arr2[i]) {
+            j++;
+            i++;
+        }
+        else if (arr1[j] > arr2[i]) return 0;
+    }
+    return (i < n) ? 0 : 1;
+} 

@@ -757,9 +757,8 @@ static char *evaluate(const Vector *var_set) {
         size_t j;
         seti = var_set->size;
         while (++seti < combo->size) {
-            //fprintf(stderr, "seti %d\t%f\t%f\t%f\t%f\n", (int)seti, ref, alt[seti], het[seti], log_add_exp(alt[seti], het[seti]) - ref); int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < c[xx]->size; ++i) { fprintf(stderr, "%d;", c[xx]->data[i]); } fprintf(stderr, "\t"); for (i = 0; i < c[xx]->size; ++i) { Variant *curr = var_data[c[xx]->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
-            j = combo->size; // index of potential first add to vector
             if (log_add_exp(alt[seti], het[seti]) - ref < -10) continue;
+            j = combo->size; // index of potential first add to vector
             derive_combo(combo, c[seti], var_set->size);
             for (i = j; i < combo->size; ++i) {
                 calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, c[i], &ref, &alt[i], &het[i], &ref_count[i], &alt_count[i], i);

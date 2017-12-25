@@ -757,12 +757,20 @@ static char *evaluate(const Vector *var_set) {
         size_t j;
         seti = var_set->size;
         while (++seti < combo->size) {
-            if (log_add_exp(alt[seti], het[seti]) - ref < -10) continue;
+            //int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < c[xx]->size; ++i) { fprintf(stderr, "%d;", c[xx]->data[i]); } fprintf(stderr, "\t"); for (i = 0; i < c[xx]->size; ++i) { Variant *curr = var_data[c[xx]->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\t%f\n", log_add_exp(alt[xx], het[xx]) - ref); } fprintf(stderr, "\n");
+            if (fmax(alt[seti], het[seti]) - ref < -100 / (int)c[seti]->size) continue;
             j = combo->size; // index of potential first add to vector
             derive_combo(combo, c[seti], var_set->size);
             for (i = j; i < combo->size; ++i) {
+                vector_double_add(alt_list, 0);
+                vector_double_add(het_list, 0);
+                vector_int_add(ref_count_list, 0);
+                vector_int_add(alt_count_list, 0);
+
                 calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, c[i], &ref, &alt[i], &het[i], &ref_count[i], &alt_count[i], i);
-                if (log_add_exp(alt[i], het[i]) - ref < -10) {
+
+                if (fmax(alt[i], het[i]) - ref < -100 / (int)c[i]->size) {
+                    vector_int_destroy(combo->data[i]);
                     vector_del(combo, i);
                     vector_double_del(alt_list, i);
                     vector_double_del(het_list, i);

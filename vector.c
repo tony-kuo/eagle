@@ -117,7 +117,7 @@ void vector_int_add(Vector_Int *a, int entry) {
 void vector_int_del(Vector_Int *a, int i) {
     a->data[i] = 0;
     if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (int *));
     a->data[a->size] = 0;
 }
 
@@ -152,7 +152,7 @@ void vector_double_destroy(Vector_Double *a) {
 void vector_double_del(Vector_Double *a, int i) {
     a->data[i] = 0;
     if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (double *));
     a->data[a->size] = 0;
 }
 

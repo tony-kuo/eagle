@@ -753,14 +753,16 @@ static char *evaluate(const Vector *var_set) {
 
         calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, c[seti], &ref, &alt[seti], &het[seti], &ref_count[seti], &alt_count[seti], seti);
     }
+    /*
     if (var_set->size > 2 && (int)combo->size - var_set->size - 1 < maxh) { // triples and beyond, if doubles doesn't already exceed the limit
+        fprintf(stderr, "%s\t%d\t%s\t%s\t%zd\n", var_data[0]->chr, var_data[0]->pos, var_data[0]->ref, var_data[0]->alt, var_set->size);
         size_t j;
         seti = var_set->size;
         while (++seti < combo->size) {
-            //int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < c[xx]->size; ++i) { fprintf(stderr, "%d;", c[xx]->data[i]); } fprintf(stderr, "\t"); for (i = 0; i < c[xx]->size; ++i) { Variant *curr = var_data[c[xx]->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\t%f\n", log_add_exp(alt[xx], het[xx]) - ref); } fprintf(stderr, "\n");
             if (fmax(alt[seti], het[seti]) - ref < -100 / (int)c[seti]->size) continue;
             j = combo->size; // index of potential first add to vector
             derive_combo(combo, c[seti], var_set->size);
+            int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < c[xx]->size; ++i) { fprintf(stderr, "%d;", c[xx]->data[i]); } fprintf(stderr, "\t"); for (i = 0; i < c[xx]->size; ++i) { Variant *curr = var_data[c[xx]->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\t%f\n", log_add_exp(alt[xx], het[xx]) - ref); } fprintf(stderr, "\n");
             for (i = j; i < combo->size; ++i) {
                 vector_double_add(alt_list, 0);
                 vector_double_add(het_list, 0);
@@ -782,6 +784,7 @@ static char *evaluate(const Vector *var_set) {
             if ((int)combo->size - var_set->size - 1 > maxh) break;
         }
     }
+    */
 
     if (verbose) {
         for (readi = 0; readi < nreads; ++readi) {

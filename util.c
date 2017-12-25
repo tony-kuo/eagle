@@ -184,16 +184,15 @@ Vector *powerset(int n, int maxh) {
     else if (n > 1) {
         combinations(combo, n, n);
         combinations(combo, 1, n);
-        combinations(combo, 2, n);
         /* depth first, k += 1
+        combinations(combo, 2, n);
         Vector_Int **c = (Vector_Int **)combo->data; 
         int i = n;
         while (++i < combo->size) derive_combo(combo, c[i], n);
         */
-        /* breath first, constant k
+        // breath first, constant k
         int k; 
         for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; ++k) combinations(combo, k, n);
-        */
     }
     return combo;
 }

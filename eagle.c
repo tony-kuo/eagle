@@ -740,48 +740,45 @@ static char *evaluate(const Vector *var_set) {
     */
 
     double ref = 0;
-    Vector_Double *alt_list = vector_double_create(32);
-    Vector_Double *het_list = vector_double_create(32);
-    double *alt = alt_list->data;
-    double *het = het_list->data;
-
-    Vector_Int *ref_count_list = vector_int_create(32);
-    Vector_Int *alt_count_list = vector_int_create(32);
-    int *ref_count = ref_count_list->data;
-    int *alt_count = alt_count_list->data;
+    Vector_Double *alt = vector_double_create(var_set->size + 1);
+    Vector_Double *het = vector_double_create(var_set->size + 1);
+    Vector_Int *ref_count = vector_int_create(var_set->size + 1);
+    Vector_Int *alt_count = vector_int_create(var_set->size + 1);
 
     for (seti = 0; seti < combo->size; ++seti) { // all, singles, doubles
-        vector_double_add(alt_list, 0);
-        vector_double_add(het_list, 0);
-        vector_int_add(ref_count_list, 0);
-        vector_int_add(alt_count_list, 0);
+        vector_double_add(alt, 0);
+        vector_double_add(het, 0);
+        vector_int_add(ref_count, 0);
+        vector_int_add(alt_count, 0);
 
-        calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, (Vector_Int *)combo->data[seti], &ref, &alt[seti], &het[seti], &ref_count[seti], &alt_count[seti], seti);
+        calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, (Vector_Int *)combo->data[seti], &ref, &alt->data[seti], &het->data[seti], &ref_count->data[seti], &alt_count->data[seti], seti);
     }
 
     if (var_set->size > 2 && (int)combo->size - var_set->size - 1 < maxh) { // triples and beyond, if doubles doesn't already exceed the limit
         size_t j;
         seti = var_set->size;
         while (++seti < combo->size) {
-            if (fmax(alt[seti], het[seti]) - ref < -100 / (int)((Vector_Int *)combo->data[seti])->size) continue;
+            if (fmax(alt->data[seti], het->data[seti]) - ref < -100 / (int)((Vector_Int *)combo->data[seti])->size) continue;
             j = combo->size; // index of potential first add to vector
-            //int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < ((Vector_Int **)combo->data[xx])->size; ++i) { fprintf(stderr, "%d;", (Vector_Int **)combo->data[xx]->data[i]); } fprintf(stderr, "\t"); for (i = 0; i < (Vector_Int **)combo->data[xx]->size; ++i) { Variant *curr = var_data[(Vector_Int **)combo->data[xx]->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
+            //fprintf(stderr, "%d\t", (int)seti); for (i = 0; i < ((Vector_Int *)combo->data[seti])->size; ++i) { fprintf(stderr, "%d;", ((Vector_Int *)combo->data[seti])->data[i]); } fprintf(stderr, "\n"); 
             derive_combo(combo, (Vector_Int *)combo->data[seti], var_set->size);
+            //int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < ((Vector_Int *)combo->data[xx])->size; ++i) { fprintf(stderr, "%d;", ((Vector_Int *)combo->data[xx])->data[i]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
+
             for (i = j; i < combo->size; ++i) {
-                vector_double_add(alt_list, 0);
-                vector_double_add(het_list, 0);
-                vector_int_add(ref_count_list, 0);
-                vector_int_add(alt_count_list, 0);
+                vector_double_add(alt, 0);
+                vector_double_add(het, 0);
+                vector_int_add(ref_count, 0);
+                vector_int_add(alt_count, 0);
 
-                calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, (Vector_Int *)combo->data[i], &ref, &alt[i], &het[i], &ref_count[i], &alt_count[i], i);
+                calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, (Vector_Int *)combo->data[i], &ref, &alt->data[i], &het->data[i], &ref_count->data[i], &alt_count->data[i], i);
 
-                if (fmax(alt[i], het[i]) - ref < -100 / (int)((Vector_Int *)combo->data[i])->size) {
+                if (fmax(alt->data[i], het->data[i]) - ref < -100 / (int)((Vector_Int *)combo->data[i])->size) {
                     vector_int_destroy(combo->data[i]);
                     vector_del(combo, i);
-                    vector_double_del(alt_list, i);
-                    vector_double_del(het_list, i);
-                    vector_int_del(ref_count_list, i);
-                    vector_int_del(alt_count_list, i);
+                    vector_double_del(alt, i);
+                    vector_double_del(het, i);
+                    vector_int_del(ref_count, i);
+                    vector_int_del(alt_count, i);
                     --i;
                 }
             }
@@ -809,16 +806,16 @@ static char *evaluate(const Vector *var_set) {
         }
     }
 
-    double total = log_add_exp(ref, log_add_exp(alt[0], het[0]));
-    for (seti = 1; seti < combo->size; ++seti) { total = log_add_exp(total, log_add_exp(ref, log_add_exp(alt[seti], het[seti]))); }
+    double total = log_add_exp(ref, log_add_exp(alt->data[0], het->data[0]));
+    for (seti = 1; seti < combo->size; ++seti) { total = log_add_exp(total, log_add_exp(ref, log_add_exp(alt->data[seti], het->data[seti]))); }
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
     if (mvh) { /* Max likelihood variant hypothesis */
         int max_seti = 0;
-        double has_alt = log_add_exp(alt[0], het[0]);
+        double has_alt = log_add_exp(alt->data[0], het->data[0]);
         for (seti = 1; seti < combo->size; ++seti) { 
-            double p = log_add_exp(alt[seti], het[seti]);
+            double p = log_add_exp(alt->data[seti], het->data[seti]);
             if (p > has_alt) {
                 has_alt = p;
                 max_seti = seti;
@@ -826,7 +823,7 @@ static char *evaluate(const Vector *var_set) {
         }
         Vector *v = vector_create(var_set->size, VARIANT_T);
         for (i = 0; i < c[max_seti]->size; ++i) vector_add(v, var_data[c[max_seti]->data[i]]);
-        variant_print(&output, v, 0, (int)nreads, ref_count[max_seti], alt_count[max_seti], total, has_alt, ref);
+        variant_print(&output, v, 0, (int)nreads, ref_count->data[max_seti], alt_count->data[max_seti], total, has_alt, ref);
         vector_free(v);
     }
     else { /* Marginal probabilities & likelihood ratios*/
@@ -838,23 +835,23 @@ static char *evaluate(const Vector *var_set) {
             for (seti = 0; seti < combo->size; ++seti) {
                 not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
                 if (variant_find(c[seti], i) != -1) { // if variant is in this combination
-                    has_alt = (has_alt == 0) ? log_add_exp(alt[seti], het[seti]) : log_add_exp(has_alt, log_add_exp(alt[seti], het[seti]));
-                    if (alt_count[seti] > acount) {
-                        acount = alt_count[seti];
-                        rcount = ref_count[seti];
+                    has_alt = (has_alt == 0) ? log_add_exp(alt->data[seti], het->data[seti]) : log_add_exp(has_alt, log_add_exp(alt->data[seti], het->data[seti]));
+                    if (alt->data[seti] > acount) {
+                        acount = alt_count->data[seti];
+                        rcount = ref_count->data[seti];
                     }
                 }
                 else {
-                    not_alt = log_add_exp(not_alt, log_add_exp(alt[seti], het[seti]));
+                    not_alt = log_add_exp(not_alt, log_add_exp(alt->data[seti], het->data[seti]));
                 }
             }
             variant_print(&output, var_set, i, (int)nreads, rcount, acount, total, has_alt, not_alt);
         }
     }
-    vector_double_destroy(alt_list); alt_list = NULL;
-    vector_double_destroy(het_list); het_list = NULL;
-    vector_int_destroy(ref_count_list); ref_count_list = NULL;
-    vector_int_destroy(alt_count_list); alt_count_list = NULL;
+    vector_double_destroy(alt); alt = NULL;
+    vector_double_destroy(het); het = NULL;
+    vector_int_destroy(ref_count); ref_count = NULL;
+    vector_int_destroy(alt_count); alt_count = NULL;
     vector_destroy(read_list); free(read_list); read_list = NULL;
     for (i = 0; i < combo->size; ++i) vector_int_destroy(combo->data[i]);
     vector_free(combo);

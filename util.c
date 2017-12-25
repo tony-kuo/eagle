@@ -159,7 +159,7 @@ void combinations(Vector *combo, int k, int n) {
 }
 
 void derive_combo(Vector *combo, Vector_Int *prev, int n) { // Derive the combinations in k+1 that contain the previous elements
-    if (prev->size == n) { exit_err("cannot derive combinations when prev->size == n\n"); }
+    if (prev->size == n) { exit_err("cannot derive more combinations when prev->size == n\n"); }
     if (prev->size + 1 == n) return;
 
     int k = prev->size + 1;
@@ -169,11 +169,13 @@ void derive_combo(Vector *combo, Vector_Int *prev, int n) { // Derive the combin
     c[prev->size] = c[prev->size - 1] + 1;
 
     while (c[prev->size] < n) { // generate and record combinations
+        //for (i = 0; i < k; ++i) { fprintf(stderr, "%d;", c[i]); } fprintf(stderr, "\n");
         Vector_Int *v = vector_int_create(k);
         for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
         vector_add(combo, v);
         ++c[prev->size];
     }
+    //int ii, jj; for (ii = 0; ii < combo->size; ++ii) { Vector_Int **c = (Vector_Int **)combo->data; fprintf(stderr, "%d\t", (int)ii); for (jj = 0; jj < c[ii]->size; ++jj) { fprintf(stderr, "%d;", c[ii]->data[jj]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
 }
 
 Vector *powerset(int n, int maxh) {
@@ -185,14 +187,17 @@ Vector *powerset(int n, int maxh) {
         combinations(combo, n, n);
         combinations(combo, 1, n);
         combinations(combo, 2, n);
-        /* depth first, k += 1
-        Vector_Int **c = (Vector_Int **)combo->data; 
-        int i = n;
-        while (++i < combo->size) derive_combo(combo, c[i], n);
-        */
-        /* breath first, constant k
+        /*
         int k; 
         for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; ++k) combinations(combo, k, n);
+        */
+        /*
+        int i = 0;
+        while (++i < combo->size) {
+            Vector_Int **c = (Vector_Int **)combo->data; 
+            //fprintf(stderr, "%d\t%d\t", i, n); int jj; for (jj = 0; jj < c[i]->size; ++jj) { fprintf(stderr, "%d;", c[i]->data[jj]); } fprintf(stderr, "\n"); 
+            derive_combo(combo, c[i], n);
+        }
         */
     }
     return combo;

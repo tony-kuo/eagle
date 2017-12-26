@@ -13,151 +13,151 @@ This program is distributed under the terms of the GNU General Public License
 #include "util.h"
 #include "vector.h"
 
-void vector_init(Vector *a, size_t initial_size, enum type var_type) {
-    a->size = 0;
+void vector_init(vector_t *a, size_t initial_size, enum type var_type) {
+    a->len = 0;
     a->type = var_type;
-    a->capacity = initial_size;
+    a->size = initial_size;
     a->data = malloc(initial_size * sizeof (void *));
 }
 
-Vector *vector_create(size_t initial_size, enum type var_type) {
-    Vector *a = malloc(sizeof (Vector));
+vector_t *vector_create(size_t initial_size, enum type var_type) {
+    vector_t *a = malloc(sizeof (vector_t));
     vector_init(a, initial_size, var_type);
     return a;
 }
 
-void vector_free(Vector *a) {
-    a->size = 0;
+void vector_free(vector_t *a) {
+    a->len = 0;
     free(a->data); a->data = NULL;
     free(a); a = NULL;
 }
 
-void vector_destroy(Vector *a) {
+void vector_destroy(vector_t *a) {
     size_t i;
     enum type var_type = a->type;
-    for (i = 0; i < a->size; ++i) {
+    for (i = 0; i < a->len; ++i) {
         switch (var_type) {
             case VARIANT_T:
-                variant_destroy((Variant *)a->data[i]);
+                variant_destroy((variant_t *)a->data[i]);
                 break;
             case READ_T:
-                read_destroy((Read *)a->data[i]);
+                read_destroy((read_t *)a->data[i]);
                 break;
             case FASTA_T:
-                fasta_destroy((Fasta *)a->data[i]);
+                fasta_destroy((fasta_t *)a->data[i]);
                 break;
             default:
                 break;
         }
         free(a->data[i]); a->data[i] = NULL;
     }
-    a->size = a->capacity = 0;
+    a->len = a->size = 0;
     free(a->data); a->data = NULL;
 }
 
-void vector_add(Vector *a, void *entry) {
-    if (a->size >= a->capacity) {
-        a->capacity *= 2;
-        void **p = realloc(a->data, a->capacity * sizeof (void *));
+void vector_add(vector_t *a, void *entry) {
+    if (a->len >= a->size) {
+        a->size *= 2;
+        void **p = realloc(a->data, a->size * sizeof (void *));
         if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
         else { a->data = p; }
     }
-    a->data[a->size++] = entry;
+    a->data[a->len++] = entry;
 }
 
-void vector_del(Vector *a, int i) {
+void vector_del(vector_t *a, int i) {
     a->data[i] = NULL;
-    if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (void *));
-    a->data[a->size] = NULL;
+    if (i == --a->len) return;
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (void *));
+    a->data[a->len] = NULL;
 }
 
-void *vector_pop(Vector *a) {
-    if (a->size <= 0) return NULL;
-    void *entry = a->data[--a->size];
-    a->data[a->size] = NULL;
+void *vector_pop(vector_t *a) {
+    if (a->len <= 0) return NULL;
+    void *entry = a->data[--a->len];
+    a->data[a->len] = NULL;
     return entry;
 }
 
-Vector *vector_dup(Vector *a) {
-    Vector *v = vector_create(a->capacity, a->type);
-    v->size = a->size;
-    memcpy(&(v->data[0]), &(a->data[0]), a->size * sizeof (void *));
+vector_t *vector_dup(vector_t *a) {
+    vector_t *v = vector_create(a->size, a->type);
+    v->len = a->len;
+    memcpy(&(v->data[0]), &(a->data[0]), a->len * sizeof (void *));
     return v;
 }
 
-void vector_int_init(Vector_Int *a, size_t initial_size) {
-    a->size = 0;
-    a->capacity = initial_size;
+void vector_int_init(vector_int_t *a, size_t initial_size) {
+    a->len = 0;
+    a->size = initial_size;
     a->data = malloc(initial_size * sizeof (int));
 }
 
-Vector_Int *vector_int_create(size_t initial_size) {
-    Vector_Int *a = malloc(sizeof (Vector_Int));
+vector_int_t *vector_int_create(size_t initial_size) {
+    vector_int_t *a = malloc(sizeof (vector_int_t));
     vector_int_init(a, initial_size);
     return a;
 }
 
-void vector_int_destroy(Vector_Int *a) {
-    a->size = 0;
+void vector_int_free(vector_int_t *a) {
+    a->len = 0;
     free(a->data); a->data = NULL;
     free(a); a = NULL;
 }
 
-void vector_int_add(Vector_Int *a, int entry) {
-    if (a->size >= a->capacity) {
-        a->capacity *= 2;
-        int *p = realloc(a->data, a->capacity * sizeof (int));
+void vector_int_add(vector_int_t *a, int entry) {
+    if (a->len >= a->size) {
+        a->size *= 2;
+        int *p = realloc(a->data, a->size * sizeof (int));
         if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
         else { a->data = p; }
     }
-    a->data[a->size++] = entry;
+    a->data[a->len++] = entry;
 }
 
-void vector_int_del(Vector_Int *a, int i) {
+void vector_int_del(vector_int_t *a, int i) {
     a->data[i] = 0;
-    if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (int *));
-    a->data[a->size] = 0;
+    if (i == --a->len) return;
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (int *));
+    a->data[a->len] = 0;
 }
 
-void vector_double_init(Vector_Double *a, size_t initial_size) {
-    a->size = 0;
-    a->capacity = initial_size;
+void vector_double_init(vector_double_t *a, size_t initial_size) {
+    a->len = 0;
+    a->size = initial_size;
     a->data = malloc(initial_size * sizeof (double));
 }
 
-Vector_Double *vector_double_create(size_t initial_size) {
-    Vector_Double *a = malloc(sizeof (Vector_Double));
+vector_double_t *vector_double_create(size_t initial_size) {
+    vector_double_t *a = malloc(sizeof (vector_double_t));
     vector_double_init(a, initial_size);
     return a;
 }
 
-void vector_double_add(Vector_Double *a, double entry) {
-    if (a->size >= a->capacity) {
-        a->capacity *= 2;
-        double *p = realloc(a->data, a->capacity * sizeof (double));
+void vector_double_add(vector_double_t *a, double entry) {
+    if (a->len >= a->size) {
+        a->size *= 2;
+        double *p = realloc(a->data, a->size * sizeof (double));
         if (p == NULL) { exit_err("failed to realloc in vector_add\n"); }
         else { a->data = p; }
     }
-    a->data[a->size++] = entry;
+    a->data[a->len++] = entry;
 }
 
-void vector_double_destroy(Vector_Double *a) {
-    a->size = 0;
+void vector_double_free(vector_double_t *a) {
+    a->len = 0;
     free(a->data); a->data = NULL;
     free(a); a = NULL;
 }
 
-void vector_double_del(Vector_Double *a, int i) {
+void vector_double_del(vector_double_t *a, int i) {
     a->data[i] = 0;
-    if (i == --a->size) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->size - i) * sizeof (double *));
-    a->data[a->size] = 0;
+    if (i == --a->len) return;
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (double *));
+    a->data[a->len] = 0;
 }
 
-Variant *variant_create(char *chr, int pos, char *ref, char *alt) {
-    Variant *v = malloc(sizeof (Variant));
+variant_t *variant_create(char *chr, int pos, char *ref, char *alt) {
+    variant_t *v = malloc(sizeof (variant_t));
     v->chr = strdup(chr);
     v->pos = pos;
     v->ref = strdup(ref);
@@ -165,7 +165,7 @@ Variant *variant_create(char *chr, int pos, char *ref, char *alt) {
     return v;
 }
 
-void variant_destroy(Variant *v) {
+void variant_destroy(variant_t *v) {
     if (v == NULL) return;
     v->pos = 0;
     free(v->chr); v->chr = NULL;      
@@ -173,8 +173,8 @@ void variant_destroy(Variant *v) {
     free(v->alt); v->alt = NULL;
 }
 
-Read *read_create(char *name, int tid, char *chr, int pos) {
-    Read *r = malloc(sizeof (Read));
+read_t *read_create(char *name, int tid, char *chr, int pos) {
+    read_t *r = malloc(sizeof (read_t));
     r->name = strdup(name);
     r->tid = tid;
     r->chr = strdup(chr);
@@ -197,7 +197,7 @@ Read *read_create(char *name, int tid, char *chr, int pos) {
     return r;
 }
 
-void read_destroy(Read *r) {
+void read_destroy(read_t *r) {
     if (r == NULL) return;
     r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
     r->prgu = r->prgv = r->pout = 0;
@@ -215,39 +215,50 @@ void read_destroy(Read *r) {
     vector_destroy(r->var_list); free(r->var_list); r->var_list = NULL;
 }
 
-Fasta *fasta_create(char *name) {
-    Fasta *f = malloc(sizeof (Fasta));
+fasta_t *fasta_create(char *name) {
+    fasta_t *f = malloc(sizeof (fasta_t));
     f->name = strdup(name);
     return f;
 }
 
-void fasta_destroy(Fasta *f) {
+void fasta_destroy(fasta_t *f) {
     if (f == NULL) return;
     f->seq_length = 0;
     free(f->seq); f->seq = NULL;      
     free(f->name); f->name = NULL;
 }
 
-Region *region_create(char *chr, int pos1, int pos2) {
-    Region *g = malloc(sizeof (Region));
+region_t *region_create(char *chr, int pos1, int pos2) {
+    region_t *g = malloc(sizeof (region_t));
     g->chr = strdup(chr);
     g->pos1 = pos1;
     g->pos2 = pos2;
     return g;
 }
 
-void region_destroy(Region *g) {
+void region_destroy(region_t *g) {
     if (g == NULL) return;
     g->pos1 = g->pos2 = 0;
     free(g->chr); g->chr = NULL;      
+}
+
+stats_t *stats_create(vector_int_t *combo) {
+    stats_t *s = malloc(sizeof (stats_t));
+    s->combo = combo;
+    s->het = 0;
+    s->alt = 0;
+    s->mut = 0;
+    s->ref_count = 0;
+    s->alt_count = 0;
+    return s;
 }
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
     char *str1, *str2;
     switch (var_type) {
         case VARIANT_T: {
-            Variant *c1 = *(Variant **)a;
-            Variant *c2 = *(Variant **)b;
+            variant_t *c1 = *(variant_t **)a;
+            variant_t *c2 = *(variant_t **)b;
             if (strcasecmp(c1->chr, c2->chr) == 0) return (c1->pos > c2->pos) - (c1->pos < c2->pos);
             str1 = strdup(c1->chr);
             str2 = strdup(c2->chr);
@@ -261,8 +272,8 @@ int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
             break;
         }
         case REGION_T: {
-            Region *c1 = *(Region **)a;
-            Region *c2 = *(Region **)b;
+            region_t *c1 = *(region_t **)a;
+            region_t *c2 = *(region_t **)b;
             if (strcasecmp(c1->chr, c2->chr) == 0) return (c1->pos1 > c2->pos1) - (c1->pos1 < c2->pos1);
             str1 = strdup(c1->chr);
             str2 = strdup(c2->chr);

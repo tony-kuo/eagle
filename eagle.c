@@ -18,6 +18,7 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/khash.h"
 #include "util.h"
 #include "vector.h"
+#include "heap.h"
 
 /* Constants */
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
@@ -65,12 +66,12 @@ static int seqnt_map[26];
 /* Fastq quality to probability table */
 static double p_match[50], p_mismatch[50];
 
-KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(rsh, vector_t)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 
 
-static Vector *vcf_read(FILE *file) {
-    Vector *var_list = vector_create(64, VARIANT_T);
+static vector_t *vcf_read(FILE *file) {
+    vector_t *var_list = vector_create(8, VARIANT_T);
 
     char *line = NULL;
     ssize_t read_file = 0;
@@ -88,7 +89,7 @@ static Vector *vcf_read(FILE *file) {
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];
         for (s1 = ref; sscanf(s1, "%[^, ]%n", ref_token, &n1) == 1 || sscanf(s1, "%[-]%n", ref_token, &n1) == 1; s1 += n1 + 1) { // heterogenenous non-reference (comma-delimited) as separate entries
             for (s2 = alt; sscanf(s2, "%[^, ]%n", alt_token, &n2) == 1 || sscanf(s2, "%[-]%n", alt_token, &n2) == 1; s2 += n2 + 1) {
-                Variant *v = variant_create(chr, pos, ref_token, alt_token);
+                variant_t *v = variant_create(chr, pos, ref_token, alt_token);
                 vector_add(var_list, v);
                 if (*(s2 + n2) != ',') break;
             }
@@ -97,7 +98,7 @@ static Vector *vcf_read(FILE *file) {
     }
     free(line); line = NULL;
     fclose(file);
-    qsort(var_list->data, var_list->size, sizeof (void *), nat_sort_variant);
+    qsort(var_list->data, var_list->len, sizeof (void *), nat_sort_variant);
     return var_list;
 }
 
@@ -133,7 +134,7 @@ void fasta_read(const char *fa_file) {
         if (t < 1) { exit_err("bad fields in FA index file\n"); }
         if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
-        Fasta *f = malloc(sizeof (Fasta));
+        fasta_t *f = malloc(sizeof (fasta_t));
         f->name = strdup(name);
         f->seq = fai_fetch(fai, name, &f->seq_length);
         char *s;
@@ -141,7 +142,7 @@ void fasta_read(const char *fa_file) {
 
         int absent;
         khiter_t k = kh_put(rsh, refseq_hash, f->name, &absent);
-        Vector *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
+        vector_t *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
         if (absent) vector_init(node, 8, FASTA_T);
         vector_add(node, f);
     }
@@ -177,9 +178,9 @@ static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1,
     return(last);
 }
 
-static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
+static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant region coordinates */
-    Vector *read_list = vector_create(64, READ_T);
+    vector_t *read_list = vector_create(8, READ_T);
 
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
@@ -194,7 +195,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
             size_t i, j;
-            Read *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
+            read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
             int saw_M = 0;
             int s_offset = 0; // offset for softclip at start
@@ -228,7 +229,7 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
                 if (splice && read->cigar_opchr[i] == 'N') {
                     read->splice_pos[j] = splice_pos - s_offset;
                     read->splice_offset[j] = read->cigar_oplen[i];
-                    ++j;
+                    j++;
                 }
                 else if (splice && (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == 'I' || read->cigar_opchr[i] == 'S')) {
                     splice_pos += read->cigar_oplen[i];
@@ -272,14 +273,14 @@ static Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, 
     return read_list;
 }
 
-static Fasta *refseq_fetch(char *name, const char *fa_file) {
+static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
     size_t i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
-        Vector *node = &kh_val(refseq_hash, k);
-        Fasta **f = (Fasta **)node->data;
-        for (i = 0; i < node->size; ++i) {
+        vector_t *node = &kh_val(refseq_hash, k);
+        fasta_t **f = (fasta_t **)node->data;
+        for (i = 0; i < node->len; ++i) {
             if (strcmp(f[i]->name, name) == 0) {
                 pthread_mutex_unlock(&refseq_lock);
                 return f[i];
@@ -300,14 +301,14 @@ static Fasta *refseq_fetch(char *name, const char *fa_file) {
     }
     if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
-    Fasta *f = fasta_create(name);
+    fasta_t *f = fasta_create(name);
     f->seq = fai_fetch(fai, name, &f->seq_length);
     char *s;
     for (s = f->seq; *s != '\0'; ++s) *s = toupper(*s);
 
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
-    Vector *node = &kh_val(refseq_hash, k);
+    vector_t *node = &kh_val(refseq_hash, k);
     if (absent) vector_init(node, 8, FASTA_T);
     vector_add(node, f);
     fai_destroy(fai);
@@ -315,19 +316,19 @@ static Fasta *refseq_fetch(char *name, const char *fa_file) {
     return f;
 }
 
-static char *construct_altseq(const char *refseq, int refseq_length, const Vector_Int *combo, Variant **var_data, int *altseq_length) {
+static char *construct_altseq(const char *refseq, int refseq_length, const vector_int_t *combo, variant_t **var_data, int *altseq_length) {
     size_t i;
     int offset = 0;
     char *altseq = strdup(refseq);
     *altseq_length = refseq_length;
-    for (i = 0; i < combo->size; ++i) {
-        Variant *curr = var_data[combo->data[i]];
+    for (i = 0; i < combo->len; ++i) {
+        variant_t *curr = var_data[combo->data[i]];
         size_t pos = curr->pos - 1 + offset;
         if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", curr->chr, curr->pos); }
 
         char *var_ref, *var_alt;
         if (curr->ref[0] == '-') { // account for "-" variant representations
-            ++pos;
+            pos++;
             var_ref = "";
             var_alt = curr->alt;
         }
@@ -339,9 +340,9 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
             char *s1 = curr->ref;
             char *s2 = curr->alt;
             while (*s1 == *s2) { // account for and disregard common prefix in variant
-                ++s1;
-                ++s2;
-                ++pos;
+                s1++;
+                s2++;
+                pos++;
             }
             var_ref = s1;
             var_alt = s2;
@@ -367,9 +368,9 @@ static char *construct_altseq(const char *refseq, int refseq_length, const Vecto
     return altseq;
 }
 
-static inline int variant_find(const Vector_Int *a, int v) {
+static inline int variant_find(const vector_int_t *a, int v) {
     int i = 0;
-    int j = a->size - 1;
+    int j = a->len - 1;
     int n = (i + j) / 2;
     while (i <= j) {
         if (v == a->data[n]) return n;
@@ -380,8 +381,8 @@ static inline int variant_find(const Vector_Int *a, int v) {
     return -1;
 }
 
-static inline void variant_print(char **output, const Vector *var_set, size_t i, int nreads, int not_alt_count, int has_alt_count, double total, double has_alt, double not_alt) {
-    Variant **var_data = (Variant **)var_set->data;
+static inline void variant_print(char **output, const vector_t *var_set, size_t i, int nreads, int not_alt_count, int has_alt_count, double total, double has_alt, double not_alt) {
+    variant_t **var_data = (variant_t **)var_set->data;
 
     size_t n;
     char *token;
@@ -397,8 +398,8 @@ static inline void variant_print(char **output, const Vector *var_set, size_t i,
 
     str_resize(output, strlen(*output) + 2);
     strcat(*output, "[");
-    if (var_set->size > 1) {
-        for (i = 0; i < var_set->size; ++i) {
+    if (var_set->len > 1) {
+        for (i = 0; i < var_set->len; ++i) {
             n = snprintf(NULL, 0, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt) + 1;
             token = malloc(n * sizeof *token);
             snprintf(token, n, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt);
@@ -556,24 +557,23 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     return probability;
 }
 
-static void calc_likelihood(Variant **var_data, char *refseq, int refseq_length, Read **read_data, size_t nreads,
-                            Vector_Int *c, double *ref, double *alt, double *het, int *ref_count, int *alt_count, size_t seti) {
+static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, size_t seti) {
     size_t i, readi;
     *ref = 0;
-    *alt = 0;
-    *het = 0;
-    *ref_count = 0;
-    *alt_count = 0;
+    stat->alt = 0;
+    stat->het = 0;
+    stat->ref_count = 0;
+    stat->alt_count = 0;
 
     /* Alternative sequence */
     int altseq_length = 0;
-    char *altseq = construct_altseq(refseq, refseq_length, c, var_data, &altseq_length);
+    char *altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length);
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; ++readi) {
         /* Only consider reads that map to all in current combination
-        Variant *first = (Variant *)c->data[0];
-        Variant *last = (Variant *)c->data[c->size - 1];
+        variant_t *first = (variant_t *)stat->combo->data[0];
+        variant_t *last = (variant_t *)stat->combo->data[stat->combo->len - 1];
         if (read_data[readi]->pos > first->pos || read_data[readi]->pos + read_data[readi]->length < last->pos) continue;
         */
         int is_unmap = 0;
@@ -627,7 +627,7 @@ static void calc_likelihood(Variant **var_data, char *refseq, int refseq_length,
             int xa_pos, n;
             char xa_chr[strlen(read_data[readi]->multimapXA) + 1];
             for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
-                Fasta *f = refseq_fetch(xa_chr, fa_file);
+                fasta_t *f = refseq_fetch(xa_chr, fa_file);
                 if (f == NULL) continue;
                 char *xa_refseq = f->seq;
                 int xa_refseq_length = f->seq_length;
@@ -672,8 +672,8 @@ static void calc_likelihood(Variant **var_data, char *refseq, int refseq_length,
         if (phet90 > phet) phet = phet90;
 
         /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference */
-        if (prgv > prgu && prgv - prgu > 0.69) *alt_count += 1;
-        else if (prgu > prgv && prgu - prgv > 0.69) *ref_count += 1;
+        if (prgv > prgu && prgv - prgu > 0.69) stat->alt_count += 1;
+        else if (prgu > prgv && prgu - prgv > 0.69) stat->ref_count += 1;
 
         if (verbose && prgv > read_data[readi]->prgv) {
             read_data[readi]->prgu = prgu;
@@ -684,15 +684,15 @@ static void calc_likelihood(Variant **var_data, char *refseq, int refseq_length,
 
         /* Priors */
         *ref += prgu + ref_prior;
-        *alt += prgv + alt_prior;
-        *het += phet + het_prior;
+        stat->alt += prgv + alt_prior;
+        stat->het += phet + het_prior;
 
         if (debug >= 2) {
-            fprintf(stderr, ":%d:\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, *ref_count, *alt_count);
+            fprintf(stderr, ":%d:\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
             fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
             for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
-            for (i = 0; i < c->size; ++i) { Variant *curr = var_data[c->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+            for (i = 0; i < stat->combo->len; ++i) { variant_t *curr = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
             fprintf(stderr, "\t");
             if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
             else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
@@ -702,91 +702,76 @@ static void calc_likelihood(Variant **var_data, char *refseq, int refseq_length,
             fprintf(stderr, "\n");
         }
     }
+    stat->mut = log_add_exp(stat->alt, stat->het);
     free(altseq); altseq = NULL;
     if (debug >= 1) {
-        fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, *ref, *het, *alt, *ref_count, *alt_count, (int)nreads);
-        for (i = 0; i < c->size; ++i) { Variant *curr = var_data[c->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
+        fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, *ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
+        for (i = 0; i < stat->combo->len; ++i) { variant_t *curr = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
     }
 }
 
-static char *evaluate(const Vector *var_set) {
+static char *evaluate(const vector_t *var_set) {
     size_t i, readi, seti;
 
-    Variant **var_data = (Variant **)var_set->data;
+    variant_t **var_data = (variant_t **)var_set->data;
 
     /* Reference sequence */
-    Fasta *f = refseq_fetch(var_data[0]->chr, fa_file);
+    fasta_t *f = refseq_fetch(var_data[0]->chr, fa_file);
     if (f == NULL) return NULL;
     char *refseq = f->seq;
     int refseq_length = f->seq_length;
 
     /* Reads in variant region coordinates */
-    Vector *read_list = bam_fetch(bam_file, var_data[0]->chr, var_data[0]->pos, var_data[var_set->size - 1]->pos);
-    if (read_list->size == 0) {
+    vector_t *read_list = bam_fetch(bam_file, var_data[0]->chr, var_data[0]->pos, var_data[var_set->len - 1]->pos);
+    if (read_list->len == 0) {
         free(read_list); read_list = NULL;
         return NULL;
     }
-    Read **read_data = (Read **)read_list->data;
-    size_t nreads = read_list->size;
+    read_t **read_data = (read_t **)read_list->data;
+    size_t nreads = read_list->len;
 
-    /* Variant combinations as a Vector of Vectors */
-    Vector *combo = powerset(var_set->size, maxh);
+    /* Variant combinations as a vector of vectors */
+    vector_t *combo = powerset(var_set->len, maxh);
     /*
-    for (seti = 0; seti < combo->size; ++seti) { // Print combinations
+    for (seti = 0; seti < combo->len; ++seti) { // Print combinations
         fprintf(stderr, "%d\t", (int)seti); 
-        for (i = 0; i < ((Vector_Int *)combo->data[seti])->size; ++i) { fprintf(stderr, "%d;", ((Vector_Int *)combo->data[seti])->data[i]); } fprintf(stderr, "\t"); 
-        for (i = 0; i < ((Vector_Int *)combo->data[seti])->size; ++i) { Variant *curr = var_data[((Vector_Int *)combo->data[seti])->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); 
+        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { fprintf(stderr, "%d;", ((vector_int_t *)combo->data[seti])->data[i]); } fprintf(stderr, "\t"); 
+        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { variant_t *curr = var_data[((vector_int_t *)combo->data[seti])->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); 
     }
     */
 
     double ref = 0;
-    Vector_Double *alt = vector_double_create(var_set->size + 1);
-    Vector_Double *het = vector_double_create(var_set->size + 1);
-    Vector_Int *ref_count = vector_int_create(var_set->size + 1);
-    Vector_Int *alt_count = vector_int_create(var_set->size + 1);
-
-    for (seti = 0; seti < combo->size; ++seti) { // all, singles, doubles
-        vector_double_add(alt, 0);
-        vector_double_add(het, 0);
-        vector_int_add(ref_count, 0);
-        vector_int_add(alt_count, 0);
-
-        calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, (Vector_Int *)combo->data[seti], &ref, &alt->data[seti], &het->data[seti], &ref_count->data[seti], &alt_count->data[seti], seti);
+    vector_t *stats = vector_create(var_set->len + 1, VOID_T);
+    for (seti = 0; seti < combo->len; ++seti) { // all, singles
+        stats_t *s = stats_create((vector_int_t *)combo->data[seti]);
+        vector_add(stats, s);
+        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, nreads, seti);
     }
+    if (var_set->len > 1) { // doubles and beyond
+        //for (i = 0; i < var_set->len; ++i) { variant_t *curr = var_data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); 
+        heap_t *h = heap_create();
+        for (seti = 1; seti < combo->len; ++seti) heap_push(h, ((stats_t *)stats->data[seti])->mut, stats->data[seti]);
 
-    if (var_set->size > 2 && (int)combo->size - var_set->size - 1 < maxh) { // triples and beyond, if doubles doesn't already exceed the limit
-        size_t j;
-        seti = var_set->size;
-        while (++seti < combo->size) {
-            if (fmax(alt->data[seti], het->data[seti]) - ref < -100 / (int)((Vector_Int *)combo->data[seti])->size) continue;
-            j = combo->size; // index of potential first add to vector
-            //fprintf(stderr, "%d\t", (int)seti); for (i = 0; i < ((Vector_Int *)combo->data[seti])->size; ++i) { fprintf(stderr, "%d;", ((Vector_Int *)combo->data[seti])->data[i]); } fprintf(stderr, "\n"); 
-            derive_combo(combo, (Vector_Int *)combo->data[seti], var_set->size);
-            //int xx; for (xx = 0; xx < combo->size; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < ((Vector_Int *)combo->data[xx])->size; ++i) { fprintf(stderr, "%d;", ((Vector_Int *)combo->data[xx])->data[i]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
+        stats_t *s;
+        while (s = heap_pop(h), s != NULL && (int)stats->len - var_set->len - 1 < maxh) {
+            if (s->combo->len > 1) vector_add(stats, s);
+            //for (i = 0; i < s->combo->len; ++i) { fprintf(stderr, "%d, ", s->combo->data[i]); } fprintf(stderr, "\n");
 
-            for (i = j; i < combo->size; ++i) {
-                vector_double_add(alt, 0);
-                vector_double_add(het, 0);
-                vector_int_add(ref_count, 0);
-                vector_int_add(alt_count, 0);
-
-                calc_likelihood(var_data, refseq, refseq_length, read_data, nreads, (Vector_Int *)combo->data[i], &ref, &alt->data[i], &het->data[i], &ref_count->data[i], &alt_count->data[i], i);
-
-                if (fmax(alt->data[i], het->data[i]) - ref < -100 / (int)((Vector_Int *)combo->data[i])->size) {
-                    vector_int_destroy(combo->data[i]);
-                    vector_del(combo, i);
-                    vector_double_del(alt, i);
-                    vector_double_del(het, i);
-                    vector_int_del(ref_count, i);
-                    vector_int_del(alt_count, i);
-                    --i;
-                }
+            vector_t *c = vector_create(8, VOID_T);
+            derive_combo(c, s->combo, var_set->len);
+            //int xx; for (xx = 0; xx < c->len; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < ((vector_int_t *)c->data[xx])->len; ++i) { fprintf(stderr, "%d;", ((vector_int_t *)c->data[xx])->data[i]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
+            for (seti = 0; seti < c->len; ++seti) {
+                stats_t *s_new = stats_create((vector_int_t *)c->data[seti]);
+                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, nreads, seti + stats->len);
+                heap_push(h, s_new->mut, s_new);
             }
-            if ((int)combo->size - var_set->size - 1 > maxh) break;
+            vector_free(c);
         }
+        heap_free(h);
     }
+    vector_free(combo);
 
-    Vector_Int **c = (Vector_Int **)combo->data;
+    stats_t **stat = (stats_t **)stats->data;
     if (verbose) {
         for (readi = 0; readi < nreads; ++readi) {
             if (read_data[readi]->prgu == 0 && read_data[readi]->prgv == 0 && read_data[readi]->pout == 0) continue; // unprocessed read
@@ -800,78 +785,74 @@ static char *evaluate(const Vector *var_set) {
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
             fprintf(stderr, "[");
-            for (i = 0; i < c[read_data[readi]->index]->size; ++i) { Variant *curr = var_data[c[read_data[readi]->index]->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+            for (i = 0; i < stat[read_data[readi]->index]->combo->len; ++i) { variant_t *curr = var_data[stat[read_data[readi]->index]->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
             fprintf(stderr, "]\n");
             funlockfile(stderr);
         }
     }
 
-    double total = log_add_exp(ref, log_add_exp(alt->data[0], het->data[0]));
-    for (seti = 1; seti < combo->size; ++seti) { total = log_add_exp(total, log_add_exp(ref, log_add_exp(alt->data[seti], het->data[seti]))); }
+    double total = log_add_exp(ref, stat[0]->mut);
+    for (seti = 1; seti < stats->len; ++seti) { total = log_add_exp(total, log_add_exp(ref, stat[seti]->mut)); }
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
     if (mvh) { /* Max likelihood variant hypothesis */
         int max_seti = 0;
-        double has_alt = log_add_exp(alt->data[0], het->data[0]);
-        for (seti = 1; seti < combo->size; ++seti) { 
-            double p = log_add_exp(alt->data[seti], het->data[seti]);
+        double has_alt = stat[0]->mut;
+        for (seti = 1; seti < stats->len; ++seti) { 
+            double p = stat[seti]->mut;
             if (p > has_alt) {
                 has_alt = p;
                 max_seti = seti;
             }
         }
-        Vector *v = vector_create(var_set->size, VARIANT_T);
-        for (i = 0; i < c[max_seti]->size; ++i) vector_add(v, var_data[c[max_seti]->data[i]]);
-        variant_print(&output, v, 0, (int)nreads, ref_count->data[max_seti], alt_count->data[max_seti], total, has_alt, ref);
+        vector_t *v = vector_create(var_set->len, VARIANT_T);
+        for (i = 0; i < stat[max_seti]->combo->len; ++i) vector_add(v, var_data[stat[max_seti]->combo->data[i]]);
+        variant_print(&output, v, 0, (int)nreads, stat[max_seti]->ref_count, stat[max_seti]->alt_count, total, has_alt, ref);
         vector_free(v);
     }
     else { /* Marginal probabilities & likelihood ratios*/
-        for (i = 0; i < var_set->size; ++i) {
+        for (i = 0; i < var_set->len; ++i) {
             double has_alt = 0;
             double not_alt = 0;
             int acount = -1;
             int rcount = -1;
-            for (seti = 0; seti < combo->size; ++seti) {
+            for (seti = 0; seti < stats->len; ++seti) {
                 not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
-                if (variant_find(c[seti], i) != -1) { // if variant is in this combination
-                    has_alt = (has_alt == 0) ? log_add_exp(alt->data[seti], het->data[seti]) : log_add_exp(has_alt, log_add_exp(alt->data[seti], het->data[seti]));
-                    if (alt->data[seti] > acount) {
-                        acount = alt_count->data[seti];
-                        rcount = ref_count->data[seti];
+                if (variant_find(stat[seti]->combo, i) != -1) { // if variant is in this combination
+                    has_alt = (has_alt == 0) ? stat[seti]->mut : log_add_exp(has_alt, stat[seti]->mut);
+                    if (stat[seti]->alt > acount) {
+                        acount = stat[seti]->alt_count;
+                        rcount = stat[seti]->ref_count;
                     }
                 }
                 else {
-                    not_alt = log_add_exp(not_alt, log_add_exp(alt->data[seti], het->data[seti]));
+                    not_alt = log_add_exp(not_alt, stat[seti]->mut);
                 }
             }
             variant_print(&output, var_set, i, (int)nreads, rcount, acount, total, has_alt, not_alt);
         }
     }
-    vector_double_destroy(alt); alt = NULL;
-    vector_double_destroy(het); het = NULL;
-    vector_int_destroy(ref_count); ref_count = NULL;
-    vector_int_destroy(alt_count); alt_count = NULL;
+    for (i = 0; i < stats->len; ++i) vector_int_free(stat[i]->combo);
+    vector_destroy(stats); free(stats); stats = NULL;
     vector_destroy(read_list); free(read_list); read_list = NULL;
-    for (i = 0; i < combo->size; ++i) vector_int_destroy(combo->data[i]);
-    vector_free(combo);
     return output;
 }
 
 typedef struct {
-    Vector *queue, *results;
+    vector_t *queue, *results;
     pthread_mutex_t q_lock;
     pthread_mutex_t r_lock;
-} Work;
+} work_t;
 
 static void *pool(void *work) {
-    Work *w = (Work *)work;
-    Vector *queue = (Vector *)w->queue;
-    Vector *results = (Vector *)w->results;
+    work_t *w = (work_t *)work;
+    vector_t *queue = (vector_t *)w->queue;
+    vector_t *results = (vector_t *)w->results;
 
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
         pthread_mutex_lock(&w->q_lock);
-        Vector *var_set = (Vector *)vector_pop(queue);
+        vector_t *var_set = (vector_t *)vector_pop(queue);
         pthread_mutex_unlock(&w->q_lock);
         if (var_set == NULL) break;
         
@@ -886,23 +867,23 @@ static void *pool(void *work) {
     return NULL;
 }
 
-static void process(const Vector *var_list, FILE *out_fh) {
+static void process(const vector_t *var_list, FILE *out_fh) {
     size_t i, j;
 
-    Variant **var_data = (Variant **)var_list->data;
+    variant_t **var_data = (variant_t **)var_list->data;
 
     i = 0;
-    Vector *var_set = vector_create(var_list->size, VOID_T);
+    vector_t *var_set = vector_create(var_list->len, VOID_T);
     if (sharedr == 1) { /* Variants that share a read: shared with a given first variant */
-        while (i < var_list->size) {
-            Vector *curr = vector_create(8, VARIANT_T);
+        while (i < var_list->len) {
+            vector_t *curr = vector_create(8, VARIANT_T);
             vector_add(curr, var_data[i]);
 
             /* Reads in variant i region coordinates */
             int i_last = bam_fetch_last(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos);
 
             j = i + 1;
-            while (j < var_list->size && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) { // while last read in i will reach j
+            while (j < var_list->len && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) { // while last read in i will reach j
                 if (var_data[j]->pos > i_last) break;
                 vector_add(curr, var_data[j++]);
             }
@@ -911,29 +892,29 @@ static void process(const Vector *var_list, FILE *out_fh) {
         }
     }
     else if (sharedr == 2) { /* Variants that share a read: shared with any neighboring variant */
-        while (i < var_list->size) {
-            Vector *curr = vector_create(8, VARIANT_T);
+        while (i < var_list->len) {
+            vector_t *curr = vector_create(8, VARIANT_T);
             vector_add(curr, var_data[i]);
 
             j = i + 1;
-            while (j < var_list->size && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) { // while last read in i will reach j
+            while (j < var_list->len && strcmp(var_data[i]->chr, var_data[j]->chr) == 0) { // while last read in i will reach j
                 /* Reads in variant i region coordinates */
                 int i_last = bam_fetch_last(bam_file, var_data[i]->chr, var_data[i]->pos, var_data[i]->pos);
                 if (var_data[j]->pos > i_last) break;
                 vector_add(curr, var_data[j]);
-                ++i;
-                ++j;
+                i++;
+                j++;
             }
             i = j;
             vector_add(var_set, curr);
         }
     }
     else { /* Variants that are close together as sets */
-        while (i < var_list->size) {
-            Vector *curr = vector_create(8, VARIANT_T);
+        while (i < var_list->len) {
+            vector_t *curr = vector_create(8, VARIANT_T);
             vector_add(curr, var_data[i]);
             size_t j = i + 1;
-            while (distlim > 0 && j < var_list->size && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) {
+            while (distlim > 0 && j < var_list->len && strcmp(var_data[j]->chr, var_data[j - 1]->chr) == 0 && abs(var_data[j]->pos - var_data[j - 1]->pos) <= distlim) {
                 if (maxdist > 0 && abs(var_data[j]->pos - var_data[i]->pos) > maxdist) break;
                 vector_add(curr, var_data[j++]);
             }
@@ -945,33 +926,33 @@ static void process(const Vector *var_list, FILE *out_fh) {
     int flag_add = 1;
     while (flag_add) {
         flag_add = 0;
-        size_t nsets = var_set->size;
+        size_t nsets = var_set->len;
         for (i = 0; i < nsets; ++i) {
-            Vector *curr_set = (Vector *)var_set->data[i];
-            if (curr_set->size == 1) continue;
+            vector_t *curr_set = (vector_t *)var_set->data[i];
+            if (curr_set->len == 1) continue;
 
             int flag_nonset = 1;
-            for (j = 0; j < curr_set->size - 1; ++j) { // check if all entries have the same position
-                Variant *curr = (Variant *)curr_set->data[j];
-                Variant *next = (Variant *)curr_set->data[j + 1];
+            for (j = 0; j < curr_set->len - 1; ++j) { // check if all entries have the same position
+                variant_t *curr = (variant_t *)curr_set->data[j];
+                variant_t *next = (variant_t *)curr_set->data[j + 1];
                 if (curr->pos == next->pos && strcmp(curr->chr, next->chr) == 0 && strcmp(curr->ref, next->ref) == 0 && strcmp(curr->alt, next->alt) == 0) vector_del(curr_set, j + 1); // delete duplicate entries
                 else if (curr->pos != next->pos) flag_nonset = 0;
             }
             if (flag_nonset) { // only 1 entry, with multiple heterozygous non-reference variants
-                while (curr_set->size > 1) {
-                    Variant *curr = (Variant *)vector_pop(curr_set);
-                    Vector *dup = vector_create(8, VARIANT_T);
+                while (curr_set->len > 1) {
+                    variant_t *curr = (variant_t *)vector_pop(curr_set);
+                    vector_t *dup = vector_create(8, VARIANT_T);
                     vector_add(dup, curr);
                     vector_add(var_set, dup);
                 }
             }
             else { // multiple entries comprising a set
-                for (j = 0; j < curr_set->size - 1; ++j) {
-                    Variant *curr = (Variant *)curr_set->data[j];
-                    Variant *next = (Variant *)curr_set->data[j + 1];
+                for (j = 0; j < curr_set->len - 1; ++j) {
+                    variant_t *curr = (variant_t *)curr_set->data[j];
+                    variant_t *next = (variant_t *)curr_set->data[j + 1];
                     if (curr->pos == next->pos) {
                         flag_add = 1;
-                        Vector *dup = vector_dup(curr_set);
+                        vector_t *dup = vector_dup(curr_set);
                         vector_del(curr_set, j);
                         vector_del(dup, j + 1);
                         vector_add(var_set, dup);
@@ -980,19 +961,19 @@ static void process(const Vector *var_list, FILE *out_fh) {
             }
         }
     } 
-    if (sharedr == 1) { print_status("# Variants with shared reads to first in set: %i entries\t%s", (int)var_set->size, asctime(time_info)); }
-    else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->size, asctime(time_info)); }
-    else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->size, asctime(time_info)); }
+    if (sharedr == 1) { print_status("# Variants with shared reads to first in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
+    else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
+    else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->len, asctime(time_info)); }
 
     print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d omega=%g\n", maxh, mvh, pao, isc, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
-    Vector *queue = vector_create(var_set->size, VOID_T);
-    Vector *results = vector_create(var_set->size, VOID_T);
-    for (i = 0; i < var_set->size; ++i) {
+    vector_t *queue = vector_create(var_set->len, VOID_T);
+    vector_t *results = vector_create(var_set->len, VOID_T);
+    for (i = 0; i < var_set->len; ++i) {
         vector_add(queue, var_set->data[i]);
     }
-    Work *w = malloc(sizeof (Work));
+    work_t *w = malloc(sizeof (work_t));
     w->queue = queue;
     w->results = results;
 
@@ -1009,9 +990,9 @@ static void process(const Vector *var_list, FILE *out_fh) {
     free(w); w = NULL;
     vector_free(var_set);
 
-    qsort(results->data, results->size, sizeof (void *), nat_sort_vector);
+    qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");
-    for (i = 0; i < results->size; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
+    for (i = 0; i < results->len; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;
     print_status("# Done:\t%s\t%s", bam_file, asctime(time_info));
@@ -1161,8 +1142,8 @@ int main(int argc, char **argv) {
 
     /* Start processing data */
     clock_t tic = clock();
-    Vector *var_list = vcf_read(vcf_fh);
-    print_status("# Read VCF: %s\t%i entries\t%s", vcf_file, (int)var_list->size, asctime(time_info));
+    vector_t *var_list = vcf_read(vcf_fh);
+    print_status("# Read VCF: %s\t%i entries\t%s", vcf_file, (int)var_list->len, asctime(time_info));
 
     refseq_hash = kh_init(rsh);
     //fasta_read(fa_file);

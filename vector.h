@@ -13,49 +13,49 @@ This program is distributed under the terms of the GNU General Public License
 enum type {VOID_T, STR_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
 
 typedef struct {
-    size_t size, capacity;
+    size_t len, size;
     enum type type;
     void **data;
-} Vector;
+} vector_t;
 
-void vector_init(Vector *a, size_t initial_size, enum type var_type);
-Vector *vector_create(size_t initial_size, enum type var_type);
-void vector_free(Vector *a);
-void vector_destroy(Vector *a);
-void vector_add(Vector *a, void *entry);
-void vector_del(Vector *a, int i);
-void *vector_pop(Vector *a);
-Vector *vector_dup(Vector *a);
+void vector_init(vector_t *a, size_t initial_size, enum type var_type);
+vector_t *vector_create(size_t initial_size, enum type var_type);
+void vector_free(vector_t *a);
+void vector_destroy(vector_t *a);
+void vector_add(vector_t *a, void *entry);
+void vector_del(vector_t *a, int i);
+void *vector_pop(vector_t *a);
+vector_t *vector_dup(vector_t *a);
 
 typedef struct {
-    size_t size, capacity;
+    size_t len, size;
     int *data;
-} Vector_Int;
+} vector_int_t;
 
-void vector_int_init(Vector_Int *a, size_t initial_size);
-Vector_Int *vector_int_create(size_t initial_size);
-void vector_int_destroy(Vector_Int *a);
-void vector_int_add(Vector_Int *a, int entry);
-void vector_int_del(Vector_Int *a, int i);
+void vector_int_init(vector_int_t *a, size_t initial_size);
+vector_int_t *vector_int_create(size_t initial_size);
+void vector_int_free(vector_int_t *a);
+void vector_int_add(vector_int_t *a, int entry);
+void vector_int_del(vector_int_t *a, int i);
 
 typedef struct {
-    size_t size, capacity;
+    size_t len, size;
     double *data;
-} Vector_Double;
+} vector_double_t;
 
-void vector_double_init(Vector_Double *a, size_t initial_size);
-Vector_Double *vector_double_create(size_t initial_size);
-void vector_double_destroy(Vector_Double *a);
-void vector_double_add(Vector_Double *a, double entry);
-void vector_double_del(Vector_Double *a, int i);
+void vector_double_init(vector_double_t *a, size_t initial_size);
+vector_double_t *vector_double_create(size_t initial_size);
+void vector_double_free(vector_double_t *a);
+void vector_double_add(vector_double_t *a, double entry);
+void vector_double_del(vector_double_t *a, int i);
 
 typedef struct {
     int pos;
     char *chr, *ref, *alt;
-} Variant;
+} variant_t;
 
-Variant *variant_create(char *chr, int pos, char *ref, char *alt);
-void variant_destroy(Variant *v);
+variant_t *variant_create(char *chr, int pos, char *ref, char *alt);
+void variant_destroy(variant_t *v);
 
 typedef struct {
     int *qual, *cigar_oplen, *splice_pos, *splice_offset;
@@ -63,27 +63,35 @@ typedef struct {
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
     double prgu, prgv, pout;
     int index;
-    Vector *var_list;
-} Read;
+    vector_t *var_list;
+} read_t;
 
-Read *read_create(char *name, int tid, char *chr, int pos);
-void read_destroy(Read *r);
+read_t *read_create(char *name, int tid, char *chr, int pos);
+void read_destroy(read_t *r);
 
 typedef struct {
     int seq_length;
     char *name, *seq;
-} Fasta;
+} fasta_t;
 
-Fasta *fasta_create(char *name);
-void fasta_destroy(Fasta *f);
+fasta_t *fasta_create(char *name);
+void fasta_destroy(fasta_t *f);
 
 typedef struct {
     int pos1, pos2;
     char *chr;
-} Region;
+} region_t;
 
-Region *region_create(char *chr, int pos1, int pos2);
-void region_destroy(Region *g);
+region_t *region_create(char *chr, int pos1, int pos2);
+void region_destroy(region_t *g);
+
+typedef struct {
+    vector_int_t *combo;
+    double alt, het, mut;
+    int ref_count, alt_count;
+} stats_t;
+
+stats_t *stats_create(vector_int_t *combo);
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type);
 int nat_sort_vector(const void *a, const void *b);

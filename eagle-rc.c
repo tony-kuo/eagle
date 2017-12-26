@@ -33,13 +33,13 @@ static time_t now;
 static struct tm *time_info; 
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
-KHASH_MAP_INIT_STR(rh, Vector) // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(rh, vector_t) // hashmap: string key, vector value
 static khash_t(rh) *read_hash; // pointer to hashmap, read
 
-KHASH_MAP_INIT_STR(vh, Vector) // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(vh, vector_t) // hashmap: string key, vector value
 static khash_t(vh) *var_hash;  // pointer to hashmap, variant
 
-static void add2var_list(Vector *var_list, char *set) {
+static void add2var_list(vector_t *var_list, char *set) {
     char var[strlen(set)];
 
     int n;
@@ -47,10 +47,10 @@ static void add2var_list(Vector *var_list, char *set) {
     size_t i;
     for (s = set + 1; sscanf(s, "%[^;];%n", var, &n) == 1; s += n) { // scan variant set
         char *v = strdup(var);
-        for (i = 0; i < var_list->size; ++i) {
+        for (i = 0; i < var_list->len; ++i) {
             if (strcmp(v, (char *)var_list->data[i]) == 0) break;
         }
-        if (i == var_list->size) { vector_add(var_list, v); }
+        if (i == var_list->len) { vector_add(var_list, v); }
         else { free(v); v = NULL; } // if already exists then skip
         if (*(s + n) == ']') break;
     }
@@ -82,7 +82,7 @@ static int var_read(const char* filename) {
         for (s = set + 1; sscanf(s, "%[^;];%n", chr, &n) == 1; s += n) { // scan variant set and add to hash
             char *v = strdup(chr);
 
-            Vector *node;
+            vector_t *node;
             khiter_t k = kh_get(vh, var_hash, chr);
             if (k != kh_end(var_hash)) {
                 node = &kh_val(var_hash, k);
@@ -95,7 +95,7 @@ static int var_read(const char* filename) {
             }
             vector_add(node, v);
 
-            ++nvars;
+            nvars++;
             if (*(s + n) == ']') break;
         }
 
@@ -126,9 +126,9 @@ static int readinfo_read(const char* filename) {
 
         khiter_t k = kh_get(rh, read_hash, name);
         if (k != kh_end(read_hash)) {
-            Vector *node = &kh_val(read_hash, k);
-            Read **r = (Read **)node->data;                                                                                                                          
-            for (i = 0; i < node->size; ++i) {
+            vector_t *node = &kh_val(read_hash, k);
+            read_t **r = (read_t **)node->data;                                                                                                                          
+            for (i = 0; i < node->len; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
                     r[i]->prgu += prgu;
                     r[i]->prgv += prgv;
@@ -136,10 +136,10 @@ static int readinfo_read(const char* filename) {
                     break;
                 }
             }
-            if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
+            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         else {
-            Read *r = read_create(name, 0, chr, pos);
+            read_t *r = read_create(name, 0, chr, pos);
             r->prgu = prgu;
             r->prgv = prgv;
             r->pout = pout;
@@ -147,10 +147,10 @@ static int readinfo_read(const char* filename) {
 
             int absent;
             k = kh_put(rh, read_hash, r->name, &absent);
-            Vector *node = &kh_val(read_hash, k);
+            vector_t *node = &kh_val(read_hash, k);
             if (absent) vector_init(node, 8, READ_T);
             vector_add(node, r);
-            ++nreads;
+            nreads++;
         }
     }
     free(line); line = NULL;
@@ -211,9 +211,9 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
 
         khiter_t k = kh_get(rh, read_hash, name);
         if (k != kh_end(read_hash)) {
-            Vector *node = &kh_val(read_hash, k);
-            Read **r = (Read **)node->data;                                                                                                                          
-            for (i = 0; i < node->size; ++i) {
+            vector_t *node = &kh_val(read_hash, k);
+            read_t **r = (read_t **)node->data;                                                                                                                          
+            for (i = 0; i < node->len; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
                     if (r[i]->index == 0) out = ref_out;
                     else if (!refonly && r[i]->index == 1) out = alt_out;
@@ -223,7 +223,7 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
                     break;
                 }
             }
-            if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
+            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         else if (!refonly) {
             out = com_out;
@@ -258,11 +258,11 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
 	khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
 		if (kh_exist(read_hash, k)) {
-            Vector *node = &kh_val(read_hash, k);
-            Read **r = (Read **)node->data;
-            for (readi = 0; readi < node->size; ++readi) {
+            vector_t *node = &kh_val(read_hash, k);
+            read_t **r = (read_t **)node->data;
+            for (readi = 0; readi < node->len; ++readi) {
                 char **v = (char **)r[readi]->var_list->data;
-                size_t nvariants = r[readi]->var_list->size;
+                size_t nvariants = r[readi]->var_list->len;
  
                 int multiallele;
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
@@ -291,12 +291,12 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                 for (i = 0; i < nvariants; ++i) { 
                     khiter_t k = kh_get(vh, var_hash, v[i]);
                     if (k != kh_end(var_hash)) {
-                        Vector *var_hash_node = &kh_val(var_hash, k);
+                        vector_t *var_hash_node = &kh_val(var_hash, k);
                         char **vv = (char **)var_hash_node->data;                                                                                                                          
-                        for (j = 0; j < var_hash_node->size; ++j) {
+                        for (j = 0; j < var_hash_node->len; ++j) {
                             if (strcmp(v[i], vv[j]) == 0) break;
                         }
-                        if (j == var_hash_node->size) multiallele = 1;
+                        if (j == var_hash_node->len) multiallele = 1;
                     }
                     else { 
                         multiallele = 1; 
@@ -347,10 +347,10 @@ static void process_list(const char *filename, const char *bam_file, const char 
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open file %s\n", filename); }
 
-    Vector *ref = vector_create(64, VOID_T); // reference
-    Vector *alt = vector_create(64, VOID_T); // alternative
-    Vector *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
-    Vector *unk = vector_create(64, VOID_T); // unknown, ambiguous with equal likelihoods for reference and alternative
+    vector_t *ref = vector_create(64, VOID_T); // reference
+    vector_t *alt = vector_create(64, VOID_T); // alternative
+    vector_t *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
+    vector_t *unk = vector_create(64, VOID_T); // unknown, ambiguous with equal likelihoods for reference and alternative
 
     int nreads = 0;
     char *line = NULL;
@@ -368,9 +368,9 @@ static void process_list(const char *filename, const char *bam_file, const char 
         khiter_t k = kh_get(rh, read_hash, name);
         if (k != kh_end(read_hash)) {
             size_t i;
-            Vector *node = &kh_val(read_hash, k);
-            Read **r = (Read **)node->data;                                                                                                                          
-            for (i = 0; i < node->size; ++i) {
+            vector_t *node = &kh_val(read_hash, k);
+            read_t **r = (read_t **)node->data;                                                                                                                          
+            for (i = 0; i < node->len; ++i) {
                 if (strcmp(r[i]->name, name) == 0) {
                     if ((prgu + prgv) > (r[i]->prgu + r[i]->prgv)) {
                         r[i]->prgu = prgu;
@@ -380,20 +380,20 @@ static void process_list(const char *filename, const char *bam_file, const char 
                     }
                 }
             }
-            if (i == node->size) { exit_err("failed to find %s in hash key %d\n", name, k); }
+            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         else {
-            Read *r = read_create(name, 0, "", 0);
+            read_t *r = read_create(name, 0, "", 0);
             r->prgu = prgu;
             r->prgv = prgv;
             r->index = type2ind(type);
 
             int absent;
             khiter_t k = kh_put(rh, read_hash, r->name, &absent);
-            Vector *node = &kh_val(read_hash, k);
+            vector_t *node = &kh_val(read_hash, k);
             if (absent) vector_init(node, 8, READ_T);
             vector_add(node, r);
-            ++nreads;
+            nreads++;
         }
     }
     free(line); line = NULL;

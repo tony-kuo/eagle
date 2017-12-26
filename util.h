@@ -43,9 +43,9 @@ void init_seqnt_map(int *seqnt_map);
 void init_q2p_table(double *p_match, double *p_mismatch, size_t size);
 void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int match, int mismatch);
 
-void combinations(Vector *combo, int k, int n);
-void derive_combo(Vector *combo, Vector_Int *prev, int n);
-Vector *powerset(int n, int maxh);
+void combinations(vector_t *combo, int k, int n);
+void derive_combo(vector_t *combo, vector_int_t *prev, int n);
+vector_t *powerset(int n, int maxh);
 int is_subset (int arr1[], int arr2[], int m, int n);
 
 #endif

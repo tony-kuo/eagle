@@ -135,20 +135,20 @@ void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int mat
      }
 }
 
-void combinations(Vector *combo, int k, int n) {
+void combinations(vector_t *combo, int k, int n) {
     int i, c[k];
     for (i = 0; i < k; ++i) c[i] = i; // first combination
     while (1) { // while (next_comb(c, k, n)) {
         // record the combination
-        Vector_Int *v = vector_int_create(k);
+        vector_int_t *v = vector_int_create(k);
         for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
         vector_add(combo, v);
 
         i = k - 1;
-        ++c[i];
+        c[i]++;
         while ((i >= 0 && i < k) && (c[i] >= n - k + 1 + i)) {
-            --i;
-            ++c[i];
+            i--;
+            c[i]++;
         }
         /* Combination (n-k, n-k+1, ..., n) reached. No more combinations can be generated */
         if (c[0] > n - k) break; // return 0;
@@ -158,9 +158,8 @@ void combinations(Vector *combo, int k, int n) {
     }
 }
 
-void derive_combo(Vector *combo, Vector_Int *prev, int n) { // Derive the combinations in k+1 that contain the previous elements
-    if (prev->size == n) { exit_err("cannot derive more combinations when prev->size == n\n"); }
-    if (prev->size + 1 == n) return;
+void derive_combo(vector_t *combo, vector_int_t *prev, int n) { // Derive the combinations in k+1 that contain the previous elements
+    if (prev->size + 1 >= n) return;
 
     int k = prev->size + 1;
     int i, c[k];
@@ -170,23 +169,22 @@ void derive_combo(Vector *combo, Vector_Int *prev, int n) { // Derive the combin
 
     while (c[prev->size] < n) { // generate and record combinations
         //for (i = 0; i < k; ++i) { fprintf(stderr, "%d;", c[i]); } fprintf(stderr, "\n");
-        Vector_Int *v = vector_int_create(k);
+        vector_int_t *v = vector_int_create(k);
         for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
         vector_add(combo, v);
-        ++c[prev->size];
+        c[prev->size]++;
     }
-    //int ii, jj; for (ii = 0; ii < combo->size; ++ii) { Vector_Int **c = (Vector_Int **)combo->data; fprintf(stderr, "%d\t", (int)ii); for (jj = 0; jj < c[ii]->size; ++jj) { fprintf(stderr, "%d;", c[ii]->data[jj]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
+    //int ii, jj; for (ii = 0; ii < combo->size; ++ii) { vector_int_t **c = (vector_int_t **)combo->data; fprintf(stderr, "%d\t", (int)ii); for (jj = 0; jj < c[ii]->size; ++jj) { fprintf(stderr, "%d;", c[ii]->data[jj]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
 }
 
-Vector *powerset(int n, int maxh) {
-    Vector *combo = vector_create(n + 1, VOID_T);
+vector_t *powerset(int n, int maxh) {
+    vector_t *combo = vector_create(n + 1, VOID_T);
     if (n == 1) {
         combinations(combo, 1, n);
     }
     else if (n > 1) {
         combinations(combo, n, n);
         combinations(combo, 1, n);
-        combinations(combo, 2, n);
         /*
         int k; 
         for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; ++k) combinations(combo, k, n);
@@ -194,7 +192,7 @@ Vector *powerset(int n, int maxh) {
         /*
         int i = 0;
         while (++i < combo->size) {
-            Vector_Int **c = (Vector_Int **)combo->data; 
+            vector_int_t **c = (vector_int_t **)combo->data; 
             //fprintf(stderr, "%d\t%d\t", i, n); int jj; for (jj = 0; jj < c[i]->size; ++jj) { fprintf(stderr, "%d;", c[i]->data[jj]); } fprintf(stderr, "\n"); 
             derive_combo(combo, c[i], n);
         }

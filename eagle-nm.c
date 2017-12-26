@@ -62,12 +62,12 @@ static int seqnt_map[26];
 /* Fastq quality to probability table */
 static double p_match[50], p_mismatch[50];
 
-KHASH_MAP_INIT_STR(rsh, Vector)   // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(rsh, vector_t)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 
 
-Vector *bed_read(FILE *file) {
-    Vector *reg_list = vector_create(64, REGION_T);
+vector_t *bed_read(FILE *file) {
+    vector_t *reg_list = vector_create(64, REGION_T);
 
     char *line = NULL;
     ssize_t read_file = 0;
@@ -81,7 +81,7 @@ Vector *bed_read(FILE *file) {
         int t = sscanf(line, "%s %d %d", chr, &pos1, &pos2);
         if (t < 3) { exit_err("bad fields in BED file\n"); }
 
-        Region *g = region_create(chr, pos1, pos2);
+        region_t *g = region_create(chr, pos1, pos2);
         vector_add(reg_list, g);
     }
     free(line); line = NULL;
@@ -90,9 +90,9 @@ Vector *bed_read(FILE *file) {
     return reg_list;
 }
 
-Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
+vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant region coordinates */
-    Vector *read_list = vector_create(64, READ_T);
+    vector_t *read_list = vector_create(64, READ_T);
 
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
@@ -107,7 +107,7 @@ Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, const i
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
             size_t i, j;
-            Read *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
+            read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
             int saw_M = 0;
             int s_offset = 0; // offset for softclip at start
@@ -185,13 +185,13 @@ Vector *bam_fetch(const char *bam_file, const char *chr, const int pos1, const i
     return read_list;
 }
 
-Fasta *refseq_fetch(char *name, const char *fa_file) {
+fasta_t *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
     size_t i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
-        Vector *node = &kh_val(refseq_hash, k);
-        Fasta **f = (Fasta **)node->data;
+        vector_t *node = &kh_val(refseq_hash, k);
+        fasta_t **f = (fasta_t **)node->data;
         for (i = 0; i < node->size; ++i) {
             if (strcmp(f[i]->name, name) == 0) {
                 pthread_mutex_unlock(&refseq_lock);
@@ -213,14 +213,14 @@ Fasta *refseq_fetch(char *name, const char *fa_file) {
     }
     if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
-    Fasta *f = fasta_create(name);
+    fasta_t *f = fasta_create(name);
     f->seq = fai_fetch(fai, name, &f->seq_length);
     char *s;
     for (s = f->seq; *s != '\0'; ++s) *s = toupper(*s);
 
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
-    Vector *node = &kh_val(refseq_hash, k);
+    vector_t *node = &kh_val(refseq_hash, k);
     if (absent) vector_init(node, 8, FASTA_T);
     vector_add(node, f);
     fai_destroy(fai);
@@ -373,22 +373,22 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     return probability;
 }
 
-static char *evaluate_nomut(const Region *g) {
+static char *evaluate_nomut(const region_t *g) {
     size_t i, readi;
 
     /* Reference sequence */
-    Fasta *f = refseq_fetch(g->chr, fa_file);
+    fasta_t *f = refseq_fetch(g->chr, fa_file);
     if (f == NULL) return NULL;
     char *refseq = f->seq;
     int refseq_length = f->seq_length;
 
     /* Reads in variant region coordinates */
-    Vector *read_list = bam_fetch(bam_file, g->chr, g->pos1, g->pos2);
+    vector_t *read_list = bam_fetch(bam_file, g->chr, g->pos1, g->pos2);
     if (read_list->size == 0) {
         free(read_list); read_list = NULL;
         return NULL;
     }
-    Read **read_data = (Read **)read_list->data;
+    read_t **read_data = (read_t **)read_list->data;
     size_t nreads = read_list->size;
 
     double ref = 0;
@@ -456,19 +456,19 @@ static char *evaluate_nomut(const Region *g) {
 }
 
 typedef struct {
-    Vector *queue, *results;
+    vector_t *queue, *results;
     pthread_mutex_t q_lock;
     pthread_mutex_t r_lock;
-} Work;
+} work_t;
 
 static void *pool(void *work) {
-    Work *w = (Work *)work;
-    Vector *queue = (Vector *)w->queue;
-    Vector *results = (Vector *)w->results;
+    work_t *w = (work_t *)work;
+    vector_t *queue = (vector_t *)w->queue;
+    vector_t *results = (vector_t *)w->results;
 
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
         pthread_mutex_lock(&w->q_lock);
-        Region *g = (Region *)vector_pop(queue);
+        region_t *g = (region_t *)vector_pop(queue);
         pthread_mutex_unlock(&w->q_lock);
         if (g == NULL) break;
         
@@ -482,22 +482,22 @@ static void *pool(void *work) {
     return NULL;
 }
 
-static void process(const Vector *reg_list, FILE *out_fh) {
+static void process(const vector_t *reg_list, FILE *out_fh) {
     size_t i;
 
-    Region **reg_data = (Region **)reg_list->data;
+    region_t **reg_data = (region_t **)reg_list->data;
     size_t nregions = reg_list->size;
 
     print_status("# Options: pao=%d isc=%d\n", pao, isc);
     print_status("# Options: match=%d mismatch=%d gap_open=%d gap_extend=%d\n", match, -mismatch, -gap_op, -gap_ex);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
-    Vector *queue = vector_create(nregions, VOID_T);
-    Vector *results = vector_create(nregions, VOID_T);
+    vector_t *queue = vector_create(nregions, VOID_T);
+    vector_t *results = vector_create(nregions, VOID_T);
     for (i = 0; i < nregions; ++i) {
         vector_add(queue, reg_data[i]);
     }
-    Work *w = malloc(sizeof (Work));
+    work_t *w = malloc(sizeof (work_t));
     w->queue = queue;
     w->results = results;
 
@@ -633,7 +633,7 @@ int main(int argc, char **argv) {
     
     /* Start processing data */
     clock_t tic = clock();
-    Vector *reg_list = bed_read(bed_fh);
+    vector_t *reg_list = bed_read(bed_fh);
     print_status("# Read BED: %s\t%i entries\t%s", bed_file, (int)reg_list->size, asctime(time_info));
 
     refseq_hash = kh_init(rsh);

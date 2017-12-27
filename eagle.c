@@ -52,7 +52,7 @@ static int verbose;
 static int debug;
 static double hetbias;
 static double omega, lgomega;
-static int match, mismatch, gap_op, gap_ex;
+static int gap_op, gap_ex;
 static double ref_prior, alt_prior, het_prior;
 
 /* Time info */
@@ -507,7 +507,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
     int i;
     int b; // array[width * row + col] = value
     int n = pos + read_length;
@@ -545,16 +545,59 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
     }
     else {
-        probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i < n2; ++i) {
-            if (i != pos) {
-                probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
-                if (probability > baseline) baseline = probability;
-            }
+            if (i != pos) probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
+            if (probability > baseline) baseline = probability;
         }
     }
     return probability;
+}
+
+static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, 
+                                 const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
+    /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
+    int n1 = pos - (read_length / 2);
+    int n2 = pos + (read_length / 2);
+    if (n1 < 0) n1 = 0;
+
+    int i, j, k;
+
+    *prgu = 0;
+    double probability;
+    vector_double_t *r = vector_double_create(abs(n2 - n1)); // reference probability per position i
+    for (i = n1; i < n2; ++i) {
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, -1e6);
+        vector_double_add(r, probability);
+        *prgu = (*prgu == 0) ? probability : log_add_exp(*prgu, probability);
+    }
+
+    *prgv = 0;
+    vector_double_t *a = vector_double_create(abs(n2 - n1)); // alternative probability per position i
+    for (i = n1; i < n2; ++i) {
+        for (k = 0; k < combo->len; ++k) {
+            variant_t *curr = var_data[combo->data[k]];
+            j = curr->pos - 1 - i;
+            if (j >= read_length || j < 0) {
+                if (k == 0) vector_double_add(a, r->data[i - n1]);
+                continue;
+            }
+
+            int x = curr->ref[0] - 'A';
+            int y = curr->alt[0] - 'A';
+            if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", curr->ref[0], i, seq_length); }
+            if (y < 0 || y >= 26) { exit_err("Alt character %c at pos %d (%d) not in valid alphabet\n", curr->alt[0], i, seq_length); }
+
+            if (k == 0) vector_double_add(a, r->data[i - n1] + matrix[NT_CODES * j + seqnt_map[y]] - matrix[NT_CODES * j + seqnt_map[x]]);
+            else a->data[i - n1] = a->data[i - n1] + matrix[NT_CODES * j + seqnt_map[y]] - matrix[NT_CODES * j + seqnt_map[x]]; 
+        }
+        //printf("%d\t%f\t%f\t", i, r->data[i - n1], a->data[i - n1]);
+        //int z; for(z=i; z<i+read_length; ++z) printf("%c", seq[z]); printf("\n");
+        *prgv = (*prgv == 0) ? a->data[i - n1] : log_add_exp(*prgv, a->data[i - n1]);
+    }
+    vector_double_free(r);
+    vector_double_free(a);
 }
 
 static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, size_t seti) {
@@ -565,9 +608,19 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     stat->ref_count = 0;
     stat->alt_count = 0;
 
+    int has_indel = 0;
+    for (i = 0; i < stat->combo->len; ++i) {
+        variant_t *curr = var_data[stat->combo->data[i]];
+        if (curr->ref[0] == '-' || curr->alt[0] == '-' || strlen(curr->ref) > 1 || strlen(curr->alt) > 1) {
+            has_indel = 1;
+            break;
+        }
+    }
+
     /* Alternative sequence */
     int altseq_length = 0;
-    char *altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length);
+    char *altseq = NULL;
+    if (has_indel) altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length); 
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; ++readi) {
@@ -596,8 +649,12 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
          /* Read probability matrix */
         double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
         for (i = 0; i < read_data[readi]->length; ++i) {
-            is_match[i] = p_match[read_data[readi]->qual[i]] + 1;
-            no_match[i] = p_mismatch[read_data[readi]->qual[i]] + 1;
+            is_match[i] = p_match[read_data[readi]->qual[i]];
+            no_match[i] = p_mismatch[read_data[readi]->qual[i]];
+            if (dp) {
+                is_match[i] += 1;
+                no_match[i] += 1;
+            }
         }
         double readprobmatrix[read_data[readi]->length * NT_CODES];
         set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
@@ -618,36 +675,41 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         /* Constant outside paralog term, testing, seems to perform near identically to the exact formulation above for fixed read length sequences */
         //double elsewhere = -2.4; // < 10%
 
+        double prgu, prgv;
+        if (has_indel) {
+            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+        }
+        else {
+            calc_prob_snp(&prgu, &prgv, stat->combo, var_data, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+        }
         double pout = elsewhere;
-        double prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
-        double prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
 
         /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
         if (read_data[readi]->multimapXA != NULL) {
             int xa_pos, n;
             char xa_chr[strlen(read_data[readi]->multimapXA) + 1];
             for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
-                fasta_t *f = refseq_fetch(xa_chr, fa_file);
-                if (f == NULL) continue;
-                char *xa_refseq = f->seq;
-                int xa_refseq_length = f->seq_length;
-
-                double *p_readprobmatrix = readprobmatrix;
-                double *newreadprobmatrix = NULL;
-                if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
-                    newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * NT_CODES);
-                    p_readprobmatrix = newreadprobmatrix;
-                }
-
-                xa_pos = abs(xa_pos);
                 pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
-                prgu = log_add_exp(prgu, readprobability);
-                if (strcmp(xa_chr, read_data[readi]->chr) == 0) { // secondary alignments are in same chromosome as primary
-                    readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, altseq, altseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+                if (strcmp(xa_chr, read_data[readi]->chr) != 0 && abs(xa_pos - read_data[readi]->pos) < read_data[readi]->length) { // if secondary alignment does not overlap primary aligment
+                    fasta_t *f = refseq_fetch(xa_chr, fa_file);
+                    if (f == NULL) continue;
+                    char *xa_refseq = f->seq;
+                    int xa_refseq_length = f->seq_length;
+
+                    double *p_readprobmatrix = readprobmatrix;
+                    double *newreadprobmatrix = NULL;
+                    if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
+                        newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * NT_CODES);
+                        p_readprobmatrix = newreadprobmatrix;
+                    }
+
+                    xa_pos = abs(xa_pos);
+                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+                    prgu = log_add_exp(prgu, readprobability);
+                    prgv = log_add_exp(prgv, readprobability);
+                    free(newreadprobmatrix); newreadprobmatrix = NULL;
                 }
-                prgv = log_add_exp(prgv, readprobability);
-                free(newreadprobmatrix); newreadprobmatrix = NULL;
                 if (*(s + n) != ';') break;
             }
         }
@@ -748,18 +810,15 @@ static char *evaluate(const vector_t *var_set) {
         calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, nreads, seti);
     }
     if (var_set->len > 1) { // doubles and beyond
-        //for (i = 0; i < var_set->len; ++i) { variant_t *curr = var_data[i]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); 
         heap_t *h = heap_create();
         for (seti = 1; seti < combo->len; ++seti) heap_push(h, ((stats_t *)stats->data[seti])->mut, stats->data[seti]);
 
         stats_t *s;
         while (s = heap_pop(h), s != NULL && (int)stats->len - var_set->len - 1 < maxh) {
             if (s->combo->len > 1) vector_add(stats, s);
-            //for (i = 0; i < s->combo->len; ++i) { fprintf(stderr, "%d, ", s->combo->data[i]); } fprintf(stderr, "\n");
 
             vector_t *c = vector_create(8, VOID_T);
             derive_combo(c, s->combo, var_set->len);
-            //int xx; for (xx = 0; xx < c->len; ++xx) { fprintf(stderr, "%d\t", (int)xx); for (i = 0; i < ((vector_int_t *)c->data[xx])->len; ++i) { fprintf(stderr, "%d;", ((vector_int_t *)c->data[xx])->data[i]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
             for (seti = 0; seti < c->len; ++seti) {
                 stats_t *s_new = stats_create((vector_int_t *)c->data[seti]);
                 calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, nreads, seti + stats->len);
@@ -821,7 +880,7 @@ static char *evaluate(const vector_t *var_set) {
                 not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
                 if (variant_find(stat[seti]->combo, i) != -1) { // if variant is in this combination
                     has_alt = (has_alt == 0) ? stat[seti]->mut : log_add_exp(has_alt, stat[seti]->mut);
-                    if (stat[seti]->alt > acount) {
+                    if (stat[seti]->alt_count > acount) {
                         acount = stat[seti]->alt_count;
                         rcount = stat[seti]->ref_count;
                     }
@@ -1017,8 +1076,6 @@ static void print_usage() {
     printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice          Allow spliced reads.\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
-    //printf("     --match    INT    DP match score. [1]. Recommend 2 for long reads with indel errors.\n");
-    //printf("     --mismatch INT    DP mismatch penalty. [4]. Recommend 5 for long reads with indel errors.\n");
     printf("     --gap_op   INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
     printf("     --gap_ex   INT    DP gap extend penalty. [1].\n");
     printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
@@ -1047,8 +1104,6 @@ int main(int argc, char **argv) {
     hetbias = 0.5;
     omega = 1.0e-5;
 
-    match = 1;
-    mismatch = 4;
     gap_op = 6;
     gap_ex = 1;
 
@@ -1070,10 +1125,8 @@ int main(int argc, char **argv) {
         {"dp", no_argument, &dp, 1},
         {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},
-        {"match", optional_argument, NULL, 980},
-        {"mismatch", optional_argument, NULL, 981},
-        {"gap_op", optional_argument, NULL, 982},
-        {"gap_ex", optional_argument, NULL, 983},
+        {"gap_op", optional_argument, NULL, 981},
+        {"gap_ex", optional_argument, NULL, 982},
         {"hetbias", optional_argument, NULL, 990},
         {"omega", optional_argument, NULL, 991},
         {0, 0, 0, 0}
@@ -1095,10 +1148,8 @@ int main(int argc, char **argv) {
             case 'w': maxdist = parse_int(optarg); break;
             case 'm': maxh = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
-            case 980: match = parse_int(optarg); break;
-            case 981: mismatch = parse_int(optarg); break;
-            case 982: gap_op = parse_int(optarg); break;
-            case 983: gap_ex = parse_int(optarg); break;
+            case 981: gap_op = parse_int(optarg); break;
+            case 982: gap_ex = parse_int(optarg); break;
             case 990: hetbias = parse_float(optarg); break;
             case 991: omega = parse_float(optarg); break;
             default: exit_usage("Bad options");
@@ -1121,8 +1172,6 @@ int main(int argc, char **argv) {
     if (distlim < 0) distlim = 10;
     if (maxdist < 0) maxdist = 0;
     if (maxh < 0) maxh = 0;
-    if (match <= 0) match = 1;
-    if (match <= 0) mismatch = 4;
     if (gap_op <= 0) gap_op = 6;
     if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
@@ -1137,7 +1186,6 @@ int main(int argc, char **argv) {
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
     init_seqnt_map(seqnt_map);
-    //if (dp) init_dp_q2p_table(p_match, p_mismatch, 50, match, mismatch);
     init_q2p_table(p_match, p_mismatch, 50);
 
     /* Start processing data */

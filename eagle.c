@@ -508,14 +508,13 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
 }
 
 static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
-    int i;
-    int b; // array[width * row + col] = value
+    int i, b, c; // array[width * row + col] = value
     int n = pos + read_length;
     double probability = 0;
     for (b = pos;  b < n; ++b) {
         if (b < 0) continue;
 
-        int c = b;
+        c = b;
         for (i = 0; i < n_splice; ++i) {
             if (b - pos > splice_pos[i]) c += splice_offset[i];
         }
@@ -562,7 +561,7 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
     int n2 = pos + (read_length / 2);
     if (n1 < 0) n1 = 0;
 
-    int i, j, k;
+    int i, j, k, x, y;
 
     *prgu = 0;
     double probability;
@@ -579,21 +578,23 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
         for (k = 0; k < combo->len; ++k) {
             variant_t *curr = var_data[combo->data[k]];
             j = curr->pos - 1 - i;
+            for (x = 0; x < n_splice; ++x) {
+                if (j > splice_pos[x]) j -= splice_offset[x];
+            }
             if (j >= read_length || j < 0) {
                 if (k == 0) vector_double_add(a, r->data[i - n1]);
                 continue;
             }
 
-            int x = curr->ref[0] - 'A';
-            int y = curr->alt[0] - 'A';
-            if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", curr->ref[0], i, seq_length); }
-            if (y < 0 || y >= 26) { exit_err("Alt character %c at pos %d (%d) not in valid alphabet\n", curr->alt[0], i, seq_length); }
+            x = curr->ref[0] - 'A';
+            y = curr->alt[0] - 'A';
+            if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", curr->ref[0], curr->pos, seq_length); }
+            if (y < 0 || y >= 26) { exit_err("Alt character %c at pos %d (%d) not in valid alphabet\n", curr->alt[0], curr->pos, seq_length); }
 
-            if (k == 0) vector_double_add(a, r->data[i - n1] + matrix[NT_CODES * j + seqnt_map[y]] - matrix[NT_CODES * j + seqnt_map[x]]);
-            else a->data[i - n1] = a->data[i - n1] + matrix[NT_CODES * j + seqnt_map[y]] - matrix[NT_CODES * j + seqnt_map[x]]; 
+            if (k == 0) vector_double_add(a, r->data[i - n1] - matrix[NT_CODES * j + seqnt_map[x]] + matrix[NT_CODES * j + seqnt_map[y]]);
+            else a->data[i - n1] = a->data[i - n1] - matrix[NT_CODES * j + seqnt_map[x]] + matrix[NT_CODES * j + seqnt_map[y]]; 
         }
-        //printf("%d\t%f\t%f\t", i, r->data[i - n1], a->data[i - n1]);
-        //int z; for(z=i; z<i+read_length; ++z) printf("%c", seq[z]); printf("\n");
+        //printf("%d\t%f\t%f\n", i, r->data[i - n1], a->data[i - n1]);
         *prgv = (*prgv == 0) ? a->data[i - n1] : log_add_exp(*prgv, a->data[i - n1]);
     }
     vector_double_free(r);
@@ -1024,7 +1025,9 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
     else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->len, asctime(time_info)); }
 
-    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d omega=%g\n", maxh, mvh, pao, isc, omega);
+    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d\n", maxh, mvh, pao, isc, nodup, splice);
+    print_status("#          dp=%d gap_op=%d gap_ex=%d\n", dp, gap_op, gap_ex);
+    print_status("#          hetbias=%g omega=%g\n", hetbias, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
     vector_t *queue = vector_create(var_set->len, VOID_T);

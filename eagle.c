@@ -593,14 +593,13 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
                 x = seq[g_pos] - 'A';
                 y = curr->alt[m] - 'A';
                 if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
-                if (y < 0 || y >= 26) { exit_err("Alt character %c at pos %d (%d) not in valid alphabet\n", curr->alt[0], curr->pos, seq_length); }
+                if (y < 0 || y >= 26) { exit_err("Alt character %c at %s;%d;%s;%s not in valid alphabet\n", curr->alt[m], curr->chr, curr->pos, curr->ref, curr->alt); }
 
                 probability = matrix[NT_CODES * r_pos + seqnt_map[y]] - matrix[NT_CODES * r_pos + seqnt_map[x]];
                 if (k == 0 && m == 0) vector_double_add(a, r->data[i - n1] + probability);
                 else a->data[i - n1] = a->data[i - n1] + probability; 
             }
         }
-        //printf("%d\t%f\t%f\n", i, r->data[i - n1], a->data[i - n1]);
         *prgv = (*prgv == 0) ? a->data[i - n1] : log_add_exp(*prgv, a->data[i - n1]);
     }
     vector_double_free(r);

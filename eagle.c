@@ -561,7 +561,7 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
     int n2 = pos + (read_length / 2);
     if (n1 < 0) n1 = 0;
 
-    int i, j, k, x, y;
+    int i, j, k, m, x, y;
 
     *prgu = 0;
     double probability;
@@ -573,26 +573,32 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
     }
 
     *prgv = 0;
+    int g_pos, r_pos, l;
     vector_double_t *a = vector_double_create(abs(n2 - n1)); // alternative probability per position i
     for (i = n1; i < n2; ++i) {
         for (k = 0; k < combo->len; ++k) {
             variant_t *curr = var_data[combo->data[k]];
-            j = curr->pos - 1 - i;
-            for (x = 0; x < n_splice; ++x) {
-                if (j > splice_pos[x]) j -= splice_offset[x];
-            }
-            if (j >= read_length || j < 0) {
-                if (k == 0) vector_double_add(a, r->data[i - n1]);
-                continue;
-            }
+            l = strlen(curr->ref);
+            for (m = 0; m < l; ++m) {
+                g_pos = curr->pos - 1 + m;
+                r_pos = curr->pos - 1 - i + m;
+                for (j = 0; j < n_splice; ++j) {
+                    if (r_pos > splice_pos[j]) r_pos -= splice_offset[j];
+                }
+                if (r_pos >= read_length || r_pos < 0) {
+                    if (k == 0 && m == 0) vector_double_add(a, r->data[i - n1]);
+                    continue;
+                }
 
-            x = curr->ref[0] - 'A';
-            y = curr->alt[0] - 'A';
-            if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", curr->ref[0], curr->pos, seq_length); }
-            if (y < 0 || y >= 26) { exit_err("Alt character %c at pos %d (%d) not in valid alphabet\n", curr->alt[0], curr->pos, seq_length); }
+                x = seq[g_pos] - 'A';
+                y = curr->alt[m] - 'A';
+                if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
+                if (y < 0 || y >= 26) { exit_err("Alt character %c at pos %d (%d) not in valid alphabet\n", curr->alt[0], curr->pos, seq_length); }
 
-            if (k == 0) vector_double_add(a, r->data[i - n1] - matrix[NT_CODES * j + seqnt_map[x]] + matrix[NT_CODES * j + seqnt_map[y]]);
-            else a->data[i - n1] = a->data[i - n1] - matrix[NT_CODES * j + seqnt_map[x]] + matrix[NT_CODES * j + seqnt_map[y]]; 
+                probability = matrix[NT_CODES * r_pos + seqnt_map[y]] - matrix[NT_CODES * r_pos + seqnt_map[x]];
+                if (k == 0 && m == 0) vector_double_add(a, r->data[i - n1] + probability);
+                else a->data[i - n1] = a->data[i - n1] + probability; 
+            }
         }
         //printf("%d\t%f\t%f\n", i, r->data[i - n1], a->data[i - n1]);
         *prgv = (*prgv == 0) ? a->data[i - n1] : log_add_exp(*prgv, a->data[i - n1]);
@@ -612,7 +618,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     int has_indel = 0;
     for (i = 0; i < stat->combo->len; ++i) {
         variant_t *curr = var_data[stat->combo->data[i]];
-        if (curr->ref[0] == '-' || curr->alt[0] == '-' || strlen(curr->ref) > 1 || strlen(curr->alt) > 1) {
+        if (curr->ref[0] == '-' || curr->alt[0] == '-' || strlen(curr->ref) != strlen(curr->alt)) {
             has_indel = 1;
             break;
         }

@@ -328,7 +328,6 @@ static char *construct_altseq(const char *refseq, int refseq_length, const vecto
 
         char *var_ref, *var_alt;
         if (curr->ref[0] == '-') { // account for "-" variant representations
-            pos++;
             var_ref = "";
             var_alt = curr->alt;
         }
@@ -547,15 +546,16 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i < n2; ++i) {
-            if (i != pos) probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
-            if (probability > baseline) baseline = probability;
+            if (i != pos) {
+                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
+                if (probability > baseline) baseline = probability;
+            }
         }
     }
     return probability;
 }
 
-static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, 
-                                 const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
+static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int n1 = pos - (read_length / 2);
     int n2 = pos + (read_length / 2);
@@ -573,15 +573,22 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
     }
 
     *prgv = 0;
-    int g_pos, r_pos, l;
+    int v_pos, g_pos, r_pos, l, ref_len, alt_len, offset;
     vector_double_t *a = vector_double_create(abs(n2 - n1)); // alternative probability per position i
     for (i = n1; i < n2; ++i) {
+        offset = 0;
         for (k = 0; k < combo->len; ++k) {
             variant_t *curr = var_data[combo->data[k]];
-            l = strlen(curr->ref);
+            v_pos = curr->pos - 1 + offset;
+            ref_len = strlen(curr->ref);
+            alt_len = strlen(curr->alt);
+            if (curr->ref[0] == '-') ref_len = 0;
+            else if (curr->alt[0] == '-') alt_len = 0;
+
+            l = (ref_len == alt_len) ? ref_len : read_length; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
             for (m = 0; m < l; ++m) {
-                g_pos = curr->pos - 1 + m;
-                r_pos = curr->pos - 1 - i + m;
+                g_pos = v_pos + m;
+                r_pos = g_pos - i;
                 for (j = 0; j < n_splice; ++j) {
                     if (r_pos > splice_pos[j]) r_pos -= splice_offset[j];
                 }
@@ -591,7 +598,10 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
                 }
 
                 x = seq[g_pos] - 'A';
-                y = curr->alt[m] - 'A';
+
+                if (m >= alt_len) y = seq[g_pos + ref_len - alt_len] - 'A';
+                else y = curr->alt[m] - 'A';
+
                 if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
                 if (y < 0 || y >= 26) { exit_err("Alt character %c at %s;%d;%s;%s not in valid alphabet\n", curr->alt[m], curr->chr, curr->pos, curr->ref, curr->alt); }
 
@@ -599,6 +609,7 @@ static inline void calc_prob_snp(double *prgu, double *prgv, vector_int_t *combo
                 if (k == 0 && m == 0) vector_double_add(a, r->data[i - n1] + probability);
                 else a->data[i - n1] = a->data[i - n1] + probability; 
             }
+            offset += alt_len - ref_len;
         }
         *prgv = (*prgv == 0) ? a->data[i - n1] : log_add_exp(*prgv, a->data[i - n1]);
     }
@@ -614,19 +625,10 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     stat->ref_count = 0;
     stat->alt_count = 0;
 
-    int has_indel = 0;
-    for (i = 0; i < stat->combo->len; ++i) {
-        variant_t *curr = var_data[stat->combo->data[i]];
-        if (curr->ref[0] == '-' || curr->alt[0] == '-' || strlen(curr->ref) != strlen(curr->alt)) {
-            has_indel = 1;
-            break;
-        }
-    }
-
     /* Alternative sequence */
     int altseq_length = 0;
     char *altseq = NULL;
-    if (has_indel) altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length); 
+    if (dp) altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length); 
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; ++readi) {
@@ -682,12 +684,12 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         //double elsewhere = -2.4; // < 10%
 
         double prgu, prgv;
-        if (has_indel) {
+        if (dp) {
             prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
             prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
         }
         else {
-            calc_prob_snp(&prgu, &prgv, stat->combo, var_data, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            calc_prob_snps(&prgu, &prgv, stat->combo, var_data, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
         }
         double pout = elsewhere;
 

@@ -323,7 +323,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_readmodel(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
     int i;
     int b; // array[width * row + col] = value
     int n = pos + read_length;
@@ -361,11 +361,11 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
     }
     else {
-        probability = calc_readmodel(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
         double baseline = probability;
         for (i = n1; i < n2; ++i) {
             if (i != pos) {
-                probability = log_add_exp(probability, calc_readmodel(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
+                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
                 if (probability > baseline) baseline = probability;
             }
         }
@@ -373,7 +373,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     return probability;
 }
 
-static char *evaluate_nomut(const region_t *g) {
+static char *evaluate_nomutation(const region_t *g) {
     size_t i, readi;
 
     /* Reference sequence */
@@ -438,11 +438,11 @@ static char *evaluate_nomut(const region_t *g) {
 
         ref += prgu;
         alt += pout;
-        if (debug) {
-            printf("==");
-            //printf("%s\t%s\t%d\n", read_data[readi]->qseq, read_data[readi]->name, read_data[readi]->pos);
-            for (i = 0; i < read_data[readi]->n_cigar; ++i) printf("%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
-            printf("%s\t%d\t%f\t%f\t%f\t%d\t%d\n", read_data[readi]->name, read_data[readi]->pos, prgu, pout, prgu-pout, ref_count, alt_count);
+        if (debug > 0) {
+            fprintf(stderr, "==");
+            fprintf(stderr, "%s\t%d\t%f\t%f\t%f\t%d\t%d\t", read_data[readi]->name, read_data[readi]->pos, prgu, pout, prgu-pout, ref_count, alt_count);
+            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+            fprintf(stderr, "\n");
         }
     }
     ref *= M_1_LN10;
@@ -472,7 +472,7 @@ static void *pool(void *work) {
         pthread_mutex_unlock(&w->q_lock);
         if (g == NULL) break;
         
-        char *outstr = evaluate_nomut(g);
+        char *outstr = evaluate_nomutation(g);
         if (outstr == NULL) continue;
 
         pthread_mutex_lock(&w->r_lock);

@@ -41,7 +41,6 @@ double log_sum_exp(const double *a, size_t size);
 
 void init_seqnt_map(int *seqnt_map);
 void init_q2p_table(double *p_match, double *p_mismatch, size_t size);
-void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int match, int mismatch);
 
 void combinations(vector_t *combo, int k, int n);
 void derive_combo(vector_t *combo, vector_int_t *prev, int n);

@@ -122,19 +122,6 @@ void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
      }
 }
 
-void init_dp_q2p_table(double *p_match, double *p_mismatch, size_t size, int match, int mismatch) {
-    /* FastQ quality score to ln probability lookup table modified by match and mismatch costs for dp*/
-    int i;
-    double a;
-    for (i = 0; i < size; ++i) { 
-        if (i == 0) a = -0.01;
-        else a = (double)i / -10 * M_1_LOG10E; //convert to ln
-        a = log(1 - exp(a));
-        p_match[i] = a + match;
-        p_mismatch[i] = -(a + mismatch);
-     }
-}
-
 void combinations(vector_t *combo, int k, int n) {
     int i, c[k];
     for (i = 0; i < k; ++i) c[i] = i; // first combination
@@ -201,7 +188,7 @@ vector_t *powerset(int n, int maxh) {
     return combo;
 }
 
-int is_subset (int arr1[], int arr2[], int m, int n) { // Check if arr2 is a subset of arr1.  Requires sorted arrays
+int is_subset (int *arr1, int *arr2, int m, int n) { // Check if arr2 is a subset of arr1.  Requires sorted arrays
     int i = 0;
     int j = 0;
 

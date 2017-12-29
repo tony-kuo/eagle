@@ -87,11 +87,11 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 ### Usage Notes
 
-*compare2TruthData.py* Separate false positives and true positives based on truth data given as a VCF. 
+*compare2TruthData.py*: Separate false positives and true positives based on truth data given as a VCF. 
 
-*compile\_likelihoods.py* Post-process the probabilities calculated by EAGLE and compile the results into tab-delimited table format.  It can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to filter mutations.
+*compile\_likelihoods.py*: Post-process the probabilities calculated by EAGLE and compile the results into tab-delimited table format.  It can be used to find somatic mutations given positive (i.e. tumor) and negative (i.e. normal) results on the same set of variants. Likelihood ratio and allele frequency thresholds are then used to filter mutations.
 
-*combine\_vcf\_eagle.py* Annotate the vcf file with the results from *compile\_likelihoods.py*. Raw EAGLE output can also be used if specified in the options.
+*combine\_vcf\_eagle.py*: Annotate the vcf file with the results from *compile\_likelihoods.py*. Raw EAGLE output can also be used if specified in the options.
 
 Heterozygous non-reference variants (VCF: comma separated multiple alternative sequences) are output as separate entries. Furthermore, if they are near other variants, it will separately consider each alternative sequence in their own sets so that phasing is not an issue. This may result in entries with the first 4 columns being identical. The user will need to examine the variant set of these cases to determine which it belongs to. The script *compileLikelihood.py* will naively retain the one with the maximum probability, for entries with identical coordinates.
 

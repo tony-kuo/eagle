@@ -73,9 +73,9 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **--dp**  Instead of the short read model, which assumes no indel errors, use dynamic programming (short in long) to calculate the likelihood.  This allows handling of long reads which have higher rates of sequencing errors and indel errors.
 
-**--gap\_op** [INT]  Gap open penalty for use with **dp**.  Default is 6.  For long reads that contain indel errors, 2 may be a better.
+**--gap\_op** [INT]  Gap open penalty for use with --dp.  Default is 6.  For long reads that contain indel errors, 2 may be a better.
 
-**--gap\_ex** [INT]  Gap extend penalty for use with **dp**.  Default is 1.
+**--gap\_ex** [INT]  Gap extend penalty for use with --dp.  Default is 1.
 
 **--verbose**  Verbose mode.  Output the likelihoods for every read seen for every hypothesis to *stderr*.  Used in read classification with **eagle-rc**.
 

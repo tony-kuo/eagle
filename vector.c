@@ -117,8 +117,15 @@ void vector_int_add(vector_int_t *a, int entry) {
 void vector_int_del(vector_int_t *a, int i) {
     a->data[i] = 0;
     if (i == --a->len) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (int *));
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (int));
     a->data[a->len] = 0;
+}
+
+vector_int_t *vector_int_dup(vector_int_t *a) {
+    vector_int_t *v = vector_int_create(a->size);
+    v->len = a->len;
+    memcpy(&(v->data[0]), &(a->data[0]), a->len * sizeof (int));
+    return v;
 }
 
 void vector_double_init(vector_double_t *a, size_t initial_size) {
@@ -152,8 +159,15 @@ void vector_double_free(vector_double_t *a) {
 void vector_double_del(vector_double_t *a, int i) {
     a->data[i] = 0;
     if (i == --a->len) return;
-    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (double *));
+    memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (double));
     a->data[a->len] = 0;
+}
+
+vector_double_t *vector_double_dup(vector_double_t *a) {
+    vector_double_t *v = vector_double_create(a->size);
+    v->len = a->len;
+    memcpy(&(v->data[0]), &(a->data[0]), a->len * sizeof (double));
+    return v;
 }
 
 variant_t *variant_create(char *chr, int pos, char *ref, char *alt) {

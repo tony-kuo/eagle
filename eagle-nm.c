@@ -109,7 +109,7 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             size_t i, j;
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
-            int saw_M = 0;
+            int start_align = 0;
             int s_offset = 0; // offset for softclip at start
             int e_offset = 0; // offset for softclip at end
 
@@ -128,22 +128,16 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
                 read->splice_pos[i] = 0;
                 read->splice_offset[i] = 0;
 
-                if (isc && read->cigar_opchr[i] == 'M') { 
-                    saw_M = 1; 
-                }
-                else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') { 
-                    s_offset = read->cigar_oplen[i]; 
-                }
-                else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') { 
-                    e_offset = read->cigar_oplen[i]; 
-                }
+                if (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == '=' || read->cigar_opchr[i] == 'X') start_align = 1; 
+                else if (start_align == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i]; 
+                else if (start_align == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i]; 
 
                 if (splice && read->cigar_opchr[i] == 'N') {
-                    read->splice_pos[j] = splice_pos - s_offset;
+                    read->splice_pos[j] = (isc) ? splice_pos - s_offset : splice_pos;
                     read->splice_offset[j] = read->cigar_oplen[i];
-                    ++j;
+                    j++;
                 }
-                else if (splice && (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == 'I' || read->cigar_opchr[i] == 'S')) {
+                else if (splice && read->cigar_opchr[i] != 'D') {
                     splice_pos += read->cigar_oplen[i];
                 }
             }
@@ -151,14 +145,18 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
             read->n_splice = j;
 
-            read->pos += s_offset;
+            if (!isc) {
+                read->pos -= s_offset; // compensate for soft clip in mapped position
+                s_offset = 0;
+                e_offset = 0;
+            }
             read->length = aln->core.l_qseq - (s_offset + e_offset);
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
-            for (i = 0; i < read->length; ++i) {
-                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = qual[i + s_offset];
+            for (i = s_offset; i < read->length; ++i) {
+                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)]); // get nucleotide id and convert into IUPAC id.
+                read->qual[i] = qual[i];
             }
             read->qseq[read->length] = '\0';
 
@@ -535,8 +533,6 @@ static void print_usage() {
     printf("     --nodup             Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice            Allow spliced reads.\n");
     printf("     --dp                Use dynamic programming to calculate likelihood instead of the basic model.\n");
-    //printf("     --match      INT    DP matching score. [1]. Recommend 2 for long reads with indel errors.\n");
-    //printf("     --mismatch   INT    DP mismatch penalty. [4]. Recommend 5 for long reads with indel errors.\n");
     printf("     --gap_op     INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
     printf("     --gap_ex     INT    DP gap extend penalty. [1]. Recommend 1 for long reads with indel errors.\n");
     printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");

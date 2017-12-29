@@ -55,7 +55,7 @@ def main():
     parser = argparse.ArgumentParser(description='Compare to VCF Truth Data');
     parser.add_argument('-v', help='VCF file');
     parser.add_argument('-e', help='EAGLE file');
-    parser.add_argument('-raw', action='store_true', help='raw EAGLE output, otherwise output after compile_likelihood');
+    parser.add_argument('-raw', action='store_true', help='raw EAGLE output, otherwise output after compile_likelihoods');
     args = parser.parse_args();
 
     eagle = readEAGLE(args.e); 

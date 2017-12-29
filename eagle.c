@@ -49,6 +49,7 @@ static int nodup;
 static int splice;
 static int dp;
 static int verbose;
+static int lowmem;
 static int debug;
 static double hetbias;
 static double omega, lgomega;
@@ -197,7 +198,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             size_t i, j;
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
-            int saw_M = 0;
+            int start_align = 0;
             int s_offset = 0; // offset for softclip at start
             int e_offset = 0; // offset for softclip at end
 
@@ -216,22 +217,16 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 read->splice_pos[i] = 0;
                 read->splice_offset[i] = 0;
 
-                if (isc && read->cigar_opchr[i] == 'M') { 
-                    saw_M = 1; 
-                }
-                else if (isc && saw_M == 0 && read->cigar_opchr[i] == 'S') { 
-                    s_offset = read->cigar_oplen[i]; 
-                }
-                else if (isc && saw_M == 1 && read->cigar_opchr[i] == 'S') { 
-                    e_offset = read->cigar_oplen[i]; 
-                }
+                if (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == '=' || read->cigar_opchr[i] == 'X') start_align = 1; 
+                else if (start_align == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i]; 
+                else if (start_align == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i]; 
 
                 if (splice && read->cigar_opchr[i] == 'N') {
-                    read->splice_pos[j] = splice_pos - s_offset;
+                    read->splice_pos[j] = (isc) ? splice_pos - s_offset : splice_pos;
                     read->splice_offset[j] = read->cigar_oplen[i];
                     j++;
                 }
-                else if (splice && (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == 'I' || read->cigar_opchr[i] == 'S')) {
+                else if (splice && read->cigar_opchr[i] != 'D') {
                     splice_pos += read->cigar_oplen[i];
                 }
             }
@@ -239,14 +234,18 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
             read->n_splice = j;
 
-            read->pos += s_offset;
+            if (!isc) {
+                read->pos -= s_offset; // compensate for soft clip in mapped position
+                s_offset = 0;
+                e_offset = 0;
+            }
             read->length = aln->core.l_qseq - (s_offset + e_offset);
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
-            for (i = 0; i < read->length; ++i) {
-                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = qual[i + s_offset];
+            for (i = s_offset; i < read->length; ++i) {
+                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)]); // get nucleotide id and convert into IUPAC id.
+                read->qual[i] = qual[i];
             }
             read->qseq[read->length] = '\0';
 
@@ -322,22 +321,22 @@ static char *construct_altseq(const char *refseq, int refseq_length, const vecto
     char *altseq = strdup(refseq);
     *altseq_length = refseq_length;
     for (i = 0; i < combo->len; ++i) {
-        variant_t *curr = var_data[combo->data[i]];
-        size_t pos = curr->pos - 1 + offset;
-        if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", curr->chr, curr->pos); }
+        variant_t *v = var_data[combo->data[i]];
+        size_t pos = v->pos - 1 + offset;
+        if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", v->chr, v->pos); }
 
         char *var_ref, *var_alt;
-        if (curr->ref[0] == '-') { // account for "-" variant representations
+        if (v->ref[0] == '-') { // account for "-" variant representations
             var_ref = "";
-            var_alt = curr->alt;
+            var_alt = v->alt;
         }
-        else if (curr->alt[0] == '-') { // account for "-" variant representations
-            var_ref = curr->ref;
+        else if (v->alt[0] == '-') { // account for "-" variant representations
+            var_ref = v->ref;
             var_alt = "";
         }
         else {
-            char *s1 = curr->ref;
-            char *s2 = curr->alt;
+            char *s1 = v->ref;
+            char *s2 = v->alt;
             while (*s1 == *s2) { // account for and disregard common prefix in variant
                 s1++;
                 s2++;
@@ -562,56 +561,55 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     if (n1 < 0) n1 = 0;
 
     int i, j, k, m, x, y;
+    int v_pos, g_pos, r_pos, l, ref_len, alt_len, offset;
 
     *prgu = 0;
+    *prgv = 0;
     double probability;
+
     vector_double_t *r = vector_double_create(abs(n2 - n1)); // reference probability per position i
+    vector_double_t *a = vector_double_create(abs(n2 - n1)); // alternative probability per position i
     for (i = n1; i < n2; ++i) {
         probability = calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, -1e6);
         vector_double_add(r, probability);
-        *prgu = (*prgu == 0) ? probability : log_add_exp(*prgu, probability);
-    }
+        vector_double_add(a, probability);
 
-    *prgv = 0;
-    int v_pos, g_pos, r_pos, l, ref_len, alt_len, offset;
-    vector_double_t *a = vector_double_create(abs(n2 - n1)); // alternative probability per position i
-    for (i = n1; i < n2; ++i) {
         offset = 0;
         for (k = 0; k < combo->len; ++k) {
-            variant_t *curr = var_data[combo->data[k]];
-            v_pos = curr->pos - 1 + offset;
-            ref_len = strlen(curr->ref);
-            alt_len = strlen(curr->alt);
-            if (curr->ref[0] == '-') ref_len = 0;
-            else if (curr->alt[0] == '-') alt_len = 0;
+            variant_t *v = var_data[combo->data[k]];
+            v_pos = v->pos - 1;
+            ref_len = strlen(v->ref);
+            alt_len = strlen(v->alt);
+            if (v->ref[0] == '-') ref_len = 0;
+            else if (v->alt[0] == '-') alt_len = 0;
 
-            l = (ref_len == alt_len) ? ref_len : read_length; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
+            l = (ref_len == alt_len) ? ref_len : read_length + ref_len + alt_len; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
             for (m = 0; m < l; ++m) {
                 g_pos = v_pos + m;
-                r_pos = g_pos - i;
+                r_pos = g_pos - i + offset;
                 for (j = 0; j < n_splice; ++j) {
                     if (r_pos > splice_pos[j]) r_pos -= splice_offset[j];
                 }
-                if (r_pos >= read_length || r_pos < 0) {
-                    if (k == 0 && m == 0) vector_double_add(a, r->data[i - n1]);
-                    continue;
-                }
+                if (r_pos < 0) continue;
+                if (r_pos >= read_length) break;
 
                 x = seq[g_pos] - 'A';
 
                 if (m >= alt_len) y = seq[g_pos + ref_len - alt_len] - 'A';
-                else y = curr->alt[m] - 'A';
+                else y = v->alt[m] - 'A';
 
                 if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
-                if (y < 0 || y >= 26) { exit_err("Alt character %c at %s;%d;%s;%s not in valid alphabet\n", curr->alt[m], curr->chr, curr->pos, curr->ref, curr->alt); }
+                if (y < 0 || y >= 26) { exit_err("Alt character %c at %s;%d;%s;%s not in valid alphabet\n", v->alt[m], v->chr, v->pos, v->ref, v->alt); }
 
                 probability = matrix[NT_CODES * r_pos + seqnt_map[y]] - matrix[NT_CODES * r_pos + seqnt_map[x]];
-                if (k == 0 && m == 0) vector_double_add(a, r->data[i - n1] + probability);
-                else a->data[i - n1] = a->data[i - n1] + probability; 
+                //printf("%d\t%d\t%d\t%d\t%c\t%c\t%f\t%d\n", i, k, g_pos, r_pos, x + 'A', y + 'A', probability, m);
+                a->data[i - n1] = a->data[i - n1] + probability; // update alternative array
             }
             offset += alt_len - ref_len;
         }
+        *prgu = (*prgu == 0) ? r->data[i - n1] : log_add_exp(*prgu, r->data[i - n1]);
         *prgv = (*prgv == 0) ? a->data[i - n1] : log_add_exp(*prgv, a->data[i - n1]);
+        //printf("%d\t%f\t%f\n", i, r->data[i-n1], a->data[i-n1]);
     }
     vector_double_free(r);
     vector_double_free(a);
@@ -625,10 +623,21 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     stat->ref_count = 0;
     stat->alt_count = 0;
 
+    int has_indel = 0;
+    if (!lowmem) {
+        for (i =0; i < stat->combo->len; ++i) {
+            variant_t *v = var_data[stat->combo->data[i]];
+            if (v->ref[0] == '-' || v->alt[0] == '-' || strlen(v->ref) != strlen(v->alt)) {
+                has_indel = 1;
+                break;
+            }
+        }
+    }
+
     /* Alternative sequence */
     int altseq_length = 0;
     char *altseq = NULL;
-    if (dp) altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length); 
+    if (has_indel || dp) altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length); 
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; ++readi) {
@@ -680,17 +689,18 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
         double a = sum(is_match, read_data[readi]->length);
         double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
-        /* Constant outside paralog term, testing, seems to perform near identically to the exact formulation above for fixed read length sequences */
-        //double elsewhere = -2.4; // < 10%
 
         double prgu, prgv;
-        if (dp) {
+        //for (i =0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
+        //printf("\t%s\t%d\t%d\t%s\n", read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
+        if (has_indel || dp) {
             prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
             prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
         }
         else {
             calc_prob_snps(&prgu, &prgv, stat->combo, var_data, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
         }
+        //printf("%f\t%f\n\n", prgv, prgu);
         double pout = elsewhere;
 
         /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
@@ -762,7 +772,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
             fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
             for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
-            for (i = 0; i < stat->combo->len; ++i) { variant_t *curr = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+            for (i = 0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
             fprintf(stderr, "\t");
             if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
             else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
@@ -776,7 +786,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     free(altseq); altseq = NULL;
     if (debug >= 1) {
         fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, *ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
-        for (i = 0; i < stat->combo->len; ++i) { variant_t *curr = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n");
+        for (i = 0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n");
     }
 }
 
@@ -806,7 +816,7 @@ static char *evaluate(const vector_t *var_set) {
     for (seti = 0; seti < combo->len; ++seti) { // Print combinations
         fprintf(stderr, "%d\t", (int)seti); 
         for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { fprintf(stderr, "%d;", ((vector_int_t *)combo->data[seti])->data[i]); } fprintf(stderr, "\t"); 
-        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { variant_t *curr = var_data[((vector_int_t *)combo->data[seti])->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); } fprintf(stderr, "\n"); 
+        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { variant_t *v = var_data[((vector_int_t *)combo->data[seti])->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n"); 
     }
     */
 
@@ -852,7 +862,7 @@ static char *evaluate(const vector_t *var_set) {
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
             fprintf(stderr, "[");
-            for (i = 0; i < stat[read_data[readi]->index]->combo->len; ++i) { variant_t *curr = var_data[stat[read_data[readi]->index]->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", curr->chr, curr->pos, curr->ref, curr->alt); }
+            for (i = 0; i < stat[read_data[readi]->index]->combo->len; ++i) { variant_t *v = var_data[stat[read_data[readi]->index]->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
             fprintf(stderr, "]\n");
             funlockfile(stderr);
         }
@@ -1032,7 +1042,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
     else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->len, asctime(time_info)); }
 
-    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d\n", maxh, mvh, pao, isc, nodup, splice);
+    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d lowmem=%d\n", maxh, mvh, pao, isc, nodup, splice, lowmem);
     print_status("#          dp=%d gap_op=%d gap_ex=%d\n", dp, gap_op, gap_ex);
     print_status("#          hetbias=%g omega=%g\n", hetbias, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
@@ -1089,6 +1099,7 @@ static void print_usage() {
     printf("     --gap_op   INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
     printf("     --gap_ex   INT    DP gap extend penalty. [1].\n");
     printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
+    printf("     --lowmem          Low memory usage mode, the default mode for snps, this may be slightly slower for indels but uses less memory.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
 }
@@ -1110,6 +1121,7 @@ int main(int argc, char **argv) {
     nodup = 0;
     dp = 0;
     verbose = 0;
+    lowmem = 0;
     debug = 0;
     hetbias = 0.5;
     omega = 1.0e-5;
@@ -1134,6 +1146,7 @@ int main(int argc, char **argv) {
         {"splice", no_argument, &splice, 1},
         {"dp", no_argument, &dp, 1},
         {"verbose", no_argument, &verbose, 1},
+        {"lowmem", no_argument, &lowmem, 1},
         {"debug", optional_argument, NULL, 'd'},
         {"gap_op", optional_argument, NULL, 981},
         {"gap_ex", optional_argument, NULL, 982},

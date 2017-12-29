@@ -37,6 +37,7 @@ vector_int_t *vector_int_create(size_t initial_size);
 void vector_int_free(vector_int_t *a);
 void vector_int_add(vector_int_t *a, int entry);
 void vector_int_del(vector_int_t *a, int i);
+vector_int_t *vector_int_dup(vector_int_t *a);
 
 typedef struct {
     size_t len, size;
@@ -48,6 +49,7 @@ vector_double_t *vector_double_create(size_t initial_size);
 void vector_double_free(vector_double_t *a);
 void vector_double_add(vector_double_t *a, double entry);
 void vector_double_del(vector_double_t *a, int i);
+vector_double_t *vector_double_dup(vector_double_t *a);
 
 typedef struct {
     int pos;

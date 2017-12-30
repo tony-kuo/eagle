@@ -723,8 +723,8 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
             is_match[i] = p_match[read_data[readi]->qual[i]];
             no_match[i] = p_mismatch[read_data[readi]->qual[i]];
             if (dp) {
-                no_match[i] -= is_match[i] + 1;
-                is_match[i] = 1;
+                is_match[i] += 1;
+                no_match[i] += 1;
             }
         }
         double readprobmatrix[NT_CODES * read_data[readi]->length];

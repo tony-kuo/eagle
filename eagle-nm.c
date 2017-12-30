@@ -272,35 +272,34 @@ void set_prob_matrix(double *matrix, const char *seq, int read_length, const dou
     }
 }
 
-static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start) { /* short in long version */
-    size_t i, j;
+static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end) { /* short in long version */
+    int i, j;
+    int min_value = -1e6;
 
     double prev[read_length + 1], curr[read_length + 1];
-    double a_gap_prev[read_length + 1], a_gap_curr[read_length + 1];
+    double a_gap_curr[read_length + 1];
     double b_gap_prev[read_length + 1], b_gap_curr[read_length + 1];
-
-    memset(a_gap_prev, -1e6, sizeof(a_gap_prev));
-    memset(b_gap_prev, -1e6, sizeof(b_gap_prev));
 
     prev[0] = 0;
     prev[1] = 0 - gap_op;
     for (j = 2; j < read_length + 1; ++j) prev[j] = prev[j - 1] - gap_ex;
+    memset(b_gap_prev, min_value, sizeof(b_gap_prev));
 
-    int n = start + seq_length;
-    double max_score = 0;
-    for (i = start; i < n; ++i) {
+    double max_score = min_value;
+    double upleft, open, extend, row_max;
+    for (i = start; i < end; ++i) {
+        row_max = min_value;
         curr[0] = 0;
-        a_gap_curr[0] = 0;
-        b_gap_curr[0] = 0;
-        double row_max = 0;
-        for (j = 1; j < read_length + 1; ++j) {
-            int t = seq[i] - 'A';
-            if (t < 0 || t >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], (int)i, seq_length); }
+        a_gap_curr[0] = min_value;
+        b_gap_curr[0] = min_value;
+        for (j = 1; j <= read_length; ++j) {
+            int c = seq[i] - 'A';
+            if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
-            double upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[t]];
+            upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[c]];
 
-            double open = curr[j - 1] - gap_op;
-            double extend = a_gap_curr[j - 1] - gap_ex;
+            open = curr[j - 1] - gap_op;
+            extend = a_gap_curr[j - 1] - gap_ex;
             a_gap_curr[j] = (open >= extend) ? open : extend;
 
             open = prev[j] - gap_op;
@@ -315,57 +314,80 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
         if (row_max > max_score) max_score = row_max;
 
         memcpy(prev, curr, sizeof(prev));
-        memcpy(a_gap_prev, a_gap_curr, sizeof(a_gap_prev));
         memcpy(b_gap_prev, b_gap_curr, sizeof(b_gap_prev));
     }
     return max_score;
 }
 
-static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, double baseline) {
-    int i;
-    int b; // array[width * row + col] = value
+static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
+    int i, c; // array[width * row + col] = value
     int n = pos + read_length;
     double probability = 0;
-    for (b = pos;  b < n; ++b) {
-        if (b < 0) continue;
+    for (i = pos;  i < n; ++i) {
+        if (i < 0) continue;
 
-        int c = b;
-        for (i = 0; i < n_splice; ++i) {
-            if (b - pos > splice_pos[i]) c += splice_offset[i];
-        }
-        if (c >= seq_length) break;
+        c = seq[i] - 'A';
+        if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
-        i = seq[c] - 'A';
-        if (i < 0 || i >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[c], c, seq_length); }
-
-        probability += matrix[NT_CODES * (b - pos) + seqnt_map[i]]; 
+        probability += matrix[NT_CODES * (i - pos) + seqnt_map[c]]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
+    }
+    return probability;
+}
+
+static inline double calc_prob_region(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end) {
+    int i;
+    double probability = 0;
+    if (dp) {
+        end += read_length;
+        if (end >= seq_length) end = seq_length - 1;
+        probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
+    }
+    else {
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -1e6);
+        double baseline = probability;
+        for (i = start; i < end; ++i) {
+            if (i >= seq_length) break;
+            if (i != pos) {
+                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, baseline));
+                if (probability > baseline) baseline = probability;
+            }
+        }
     }
     return probability;
 }
 
 static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
-    int n1 = pos - (read_length / 2);
-    int n2 = pos + (read_length / 2);
-    if (n1 < 0) n1 = 0;
+    int n = read_length / 2;
+    int start = pos - n;
+    int end = pos + n;
+    if (start < 0) start = 0;
 
     int i;
     double probability = 0;
-    if (dp) {
-        n2 += read_length;
-        for (i = 0; i < n_splice; ++i) n2 += splice_offset[i];
-        if (n2 >= seq_length) n2 = seq_length - 1;
-        probability = smith_waterman_gotoh(matrix, read_length, seq, n2 - n1 + 1, n1);
+    if (n_splice == 0) {
+        probability = calc_prob_region(matrix, read_length, seq, seq_length, pos, start, end);
     }
-    else {
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, splice_pos, splice_offset, n_splice, -1e6);
-        double baseline = probability;
-        for (i = n1; i < n2; ++i) {
-            if (i != pos) {
-                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, splice_pos, splice_offset, n_splice, baseline));
-                if (probability > baseline) baseline = probability;
-            }
+    else { // calculate the probability for each splice section separately
+        int r_pos = 0;
+        int g_pos = pos;
+        int r_len;
+        double *submatrix;
+        for (i = 0; i <= n_splice; ++i) {
+            if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
+            else r_len = read_length -  1 - r_pos + 1;
+            n = r_len / 2;
+            start = g_pos - n;
+            end = g_pos + n;
+
+            submatrix = malloc(NT_CODES * r_len * sizeof(double));
+            memcpy(submatrix, &matrix[NT_CODES * r_pos], NT_CODES * r_len * sizeof(double));
+            probability += calc_prob_region(submatrix, r_len, seq, seq_length, pos, start, end);
+            free(submatrix); submatrix = NULL;
+
+            g_pos += r_len + splice_offset[i];
+            r_pos = splice_pos[i] + 1;
         }
     }
     return probability;
@@ -413,10 +435,14 @@ static char *evaluate_nomutation(const region_t *g) {
 
         double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
         for (i = 0; i < read_data[readi]->length; ++i) {
-            is_match[i] = p_match[read_data[readi]->qual[i]] + 1;
-            no_match[i] = p_mismatch[read_data[readi]->qual[i]] + 1;
+            is_match[i] = p_match[read_data[readi]->qual[i]];
+            no_match[i] = p_mismatch[read_data[readi]->qual[i]];
+            if (dp) {
+                no_match[i] -= is_match[i] + 1;
+                is_match[i] = 1;
+            }
         }
-        double readprobmatrix[read_data[readi]->length * NT_CODES];
+        double readprobmatrix[NT_CODES * read_data[readi]->length];
         set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
 
         /* 

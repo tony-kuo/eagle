@@ -8,23 +8,25 @@ This program is distributed under the terms of the GNU General Public License
 */
 
 #include <stdlib.h>
-#include "util.h"
 #include "heap.h"
+#include "util.h"
+#include "vector.h"
 
-void heap_init(heap_t *a) {
+void heap_init(heap_t *a, enum type var_type) {
     a->len = 0;
     a->size = 4;
+    a->type = var_type;
     a->nodes = malloc(4 * sizeof (node_t));
 }
 
-heap_t *heap_create() {
+heap_t *heap_create(enum type var_type) {
     heap_t *a = malloc(sizeof (heap_t));
-    heap_init(a);
+    heap_init(a, var_type);
     return a;
 }
 
 void heap_free(heap_t *a) {
-    a->len = 0;
+    a->len = a->size = 0;
     free(a->nodes); a->nodes = NULL;
     free(a); a = NULL;
 }

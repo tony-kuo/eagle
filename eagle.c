@@ -669,7 +669,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, size_t seti) {
+static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads) {
     size_t i, readi;
     *ref = 0;
     stat->alt = 0;
@@ -679,7 +679,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
 
     int has_indel = 0;
     if (!lowmem) {
-        for (i =0; i < stat->combo->len; ++i) {
+        for (i = 0; i < stat->combo->len; ++i) {
             variant_t *v = var_data[stat->combo->data[i]];
             if (v->ref[0] == '-' || v->alt[0] == '-' || strlen(v->ref) != strlen(v->alt)) {
                 has_indel = 1;
@@ -813,7 +813,19 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
             read_data[readi]->prgu = prgu;
             read_data[readi]->prgv = prgv;
             read_data[readi]->pout = pout;
-            read_data[readi]->index = (int)seti;
+
+            vector_destroy(read_data[readi]->var_list); free(read_data[readi]->var_list); read_data[readi]->var_list = NULL;
+            read_data[readi]->var_list = vector_create(8, VOID_T);
+
+            int n;
+            char *token;
+            for (i = 0; i < stat->combo->len; ++i) {
+                variant_t *v = var_data[stat->combo->data[i]];
+                n = snprintf(NULL, 0, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt) + 1;
+                token = malloc(n * sizeof *token);
+                snprintf(token, n, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt);
+                vector_add(read_data[readi]->var_list, token);
+            }
         }
 
         /* Priors */
@@ -822,7 +834,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         stat->het += phet + het_prior;
 
         if (debug >= 2) {
-            fprintf(stderr, ":%d:\t%f\t%f\t%f\t%f\t%d\t%d\t", (int)seti, prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
+            fprintf(stderr, "::\t%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
             fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
             for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
@@ -839,7 +851,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     stat->mut = log_add_exp(stat->alt, stat->het);
     free(altseq); altseq = NULL;
     if (debug >= 1) {
-        fprintf(stderr, "=%d=\t%f\t%f\t%f\t%d\t%d\t%d\t", (int)seti, *ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
+        fprintf(stderr, "==\t%f\t%f\t%f\t%d\t%d\t%d\t", *ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
         for (i = 0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n");
     }
 }
@@ -875,25 +887,26 @@ static char *evaluate(const vector_t *var_set) {
     */
 
     double ref = 0;
-    vector_t *stats = vector_create(var_set->len + 1, VOID_T);
+    vector_t *stats = vector_create(var_set->len + 1, STATS_T);
     for (seti = 0; seti < combo->len; ++seti) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti]);
         vector_add(stats, s);
-        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, nreads, seti);
+        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, nreads);
     }
     if (var_set->len > 1) { // doubles and beyond
-        heap_t *h = heap_create();
+        heap_t *h = heap_create(STATS_T);
         for (seti = 1; seti < combo->len; ++seti) heap_push(h, ((stats_t *)stats->data[seti])->mut, stats->data[seti]);
 
         stats_t *s;
-        while (s = heap_pop(h), s != NULL && (int)stats->len - var_set->len - 1 < maxh) {
+        while (s = heap_pop(h), s != NULL) {
             if (s->combo->len > 1) vector_add(stats, s);
+            if ((int)stats->len - var_set->len - 1 >= maxh) continue;
 
             vector_t *c = vector_create(8, VOID_T);
             derive_combo(c, s->combo, var_set->len);
             for (seti = 0; seti < c->len; ++seti) {
                 stats_t *s_new = stats_create((vector_int_t *)c->data[seti]);
-                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, nreads, seti + stats->len);
+                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, nreads);
                 heap_push(h, s_new->mut, s_new);
             }
             vector_free(c);
@@ -916,7 +929,8 @@ static char *evaluate(const vector_t *var_set) {
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             else fprintf(stderr, "NONE\t");
             fprintf(stderr, "[");
-            for (i = 0; i < stat[read_data[readi]->index]->combo->len; ++i) { variant_t *v = var_data[stat[read_data[readi]->index]->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
+            for (i = 0; i < read_data[readi]->var_list->len; ++i) fprintf(stderr, "%s", (char *)read_data[readi]->var_list->data[i]);
+            //for (i = 0; i < stat[read_data[readi]->index]->combo->len; ++i) { variant_t *v = var_data[stat[read_data[readi]->index]->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
             fprintf(stderr, "]\n");
             funlockfile(stderr);
         }
@@ -964,9 +978,8 @@ static char *evaluate(const vector_t *var_set) {
             variant_print(&output, var_set, i, (int)nreads, rcount, acount, total, has_alt, not_alt);
         }
     }
-    for (i = 0; i < stats->len; ++i) vector_int_free(stat[i]->combo);
-    vector_destroy(stats); free(stats); stats = NULL;
     vector_destroy(read_list); free(read_list); read_list = NULL;
+    vector_destroy(stats); free(stats); stats = NULL;
     return output;
 }
 

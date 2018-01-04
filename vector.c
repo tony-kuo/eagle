@@ -37,6 +37,9 @@ void vector_destroy(vector_t *a) {
     enum type var_type = a->type;
     for (i = 0; i < a->len; ++i) {
         switch (var_type) {
+            case STATS_T:
+                stats_destroy((stats_t *)a->data[i]);
+                break;
             case VARIANT_T:
                 variant_destroy((variant_t *)a->data[i]);
                 break;
@@ -265,6 +268,11 @@ stats_t *stats_create(vector_int_t *combo) {
     s->ref_count = 0;
     s->alt_count = 0;
     return s;
+}
+
+void stats_destroy(stats_t *s) {
+    s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
+    vector_int_free(s->combo);
 }
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type) {

@@ -10,7 +10,7 @@ This program is distributed under the terms of the GNU General Public License
 #ifndef _vector_h_
 #define _vector_h_
 
-enum type {VOID_T, STR_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
+enum type {VOID_T, STR_T, STATS_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
 
 typedef struct {
     size_t len, size;
@@ -94,6 +94,7 @@ typedef struct {
 } stats_t;
 
 stats_t *stats_create(vector_int_t *combo);
+void stats_destroy(stats_t *s);
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type);
 int nat_sort_vector(const void *a, const void *b);

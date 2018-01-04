@@ -243,8 +243,8 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
-            for (i = s_offset; i < read->length; ++i) {
-                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)]); // get nucleotide id and convert into IUPAC id.
+            for (i = 0; i < read->length; ++i) {
+                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
                 read->qual[i] = qual[i];
             }
             read->qseq[read->length] = '\0';

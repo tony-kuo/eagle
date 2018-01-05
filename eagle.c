@@ -911,6 +911,7 @@ static char *evaluate(const vector_t *var_set) {
             }
             vector_free(c);
         }
+        //for (i = 1; i <= h->len; ++i) { s = (stats_t *)h->node[i].data; if (s->combo->len > 1) { stats_destroy(s); free(h->node[i].data); h->node[i].data = NULL; } } // destroy the heap, but leave the singles as they are in the stats vector
         heap_free(h);
     }
     vector_free(combo);
@@ -930,7 +931,6 @@ static char *evaluate(const vector_t *var_set) {
             else fprintf(stderr, "NONE\t");
             fprintf(stderr, "[");
             for (i = 0; i < read_data[readi]->var_list->len; ++i) fprintf(stderr, "%s", (char *)read_data[readi]->var_list->data[i]);
-            //for (i = 0; i < stat[read_data[readi]->index]->combo->len; ++i) { variant_t *v = var_data[stat[read_data[readi]->index]->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
             fprintf(stderr, "]\n");
             funlockfile(stderr);
         }
@@ -945,9 +945,8 @@ static char *evaluate(const vector_t *var_set) {
         int max_seti = 0;
         double has_alt = stat[0]->mut;
         for (seti = 1; seti < stats->len; ++seti) { 
-            double p = stat[seti]->mut;
-            if (p > has_alt) {
-                has_alt = p;
+            if (stat[seti]->mut > has_alt) {
+                has_alt = stat[seti]->mut;
                 max_seti = seti;
             }
         }

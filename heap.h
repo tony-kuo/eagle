@@ -19,7 +19,7 @@ typedef struct {
 
 typedef struct {
     size_t len, size;
-    node_t *nodes;
+    node_t *node;
     enum type type;
 } heap_t;
 

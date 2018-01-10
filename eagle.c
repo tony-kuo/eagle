@@ -245,7 +245,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             uint8_t *qual = bam_get_qual(aln);
             for (i = 0; i < read->length; ++i) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = qual[i];
+                read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
 

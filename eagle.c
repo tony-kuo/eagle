@@ -326,11 +326,11 @@ static char *construct_altseq(const char *refseq, int refseq_length, const vecto
         if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", v->chr, v->pos); }
 
         char *var_ref, *var_alt;
-        if (v->ref[0] == '-') { // account for "-" variant representations
+        if (v->ref[0] == '-' || strcmp("<*:DEL>", v->ref) == 0) { // account for "-" and <*:DEL> variant representations 
             var_ref = "";
             var_alt = v->alt;
         }
-        else if (v->alt[0] == '-') { // account for "-" variant representations
+        else if (v->alt[0] == '-' || strcmp("<*:DEL>", v->alt) == 0) { // account for "-" and <*:DEL> variant representations
             var_ref = v->ref;
             var_alt = "";
         }
@@ -509,6 +509,7 @@ static inline double calc_read_prob(const double *matrix, int read_length, const
     double probability = 0;
     for (i = pos;  i < n; ++i) {
         if (i < 0) continue;
+        if (i >= seq_length) break;
 
         c = seq[i] - 'A';
         if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
@@ -588,6 +589,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
     vector_double_t *r = vector_double_create(abs(end - start)); // reference probability per position i
     vector_double_t *a = vector_double_create(abs(end - start)); // alternative probability per position i
     for (i = start; i < end; ++i) {
+        if (i >= seq_length) break;
         probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
         vector_double_add(r, probability);
         vector_double_add(a, probability);
@@ -598,15 +600,15 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
             v_pos = v->pos - 1;
             ref_len = strlen(v->ref);
             alt_len = strlen(v->alt);
-            if (v->ref[0] == '-') ref_len = 0;
-            else if (v->alt[0] == '-') alt_len = 0;
+            if (v->ref[0] == '-' || strcmp("<*:DEL>", v->ref) == 0) ref_len = 0;
+            else if (v->alt[0] == '-' || strcmp("<*:DEL>", v->alt) == 0) alt_len = 0;
 
             l = (ref_len == alt_len) ? ref_len : read_length + ref_len + alt_len; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
             for (m = 0; m < l; ++m) {
                 g_pos = v_pos + m;
                 r_pos = g_pos - i + offset;
                 if (r_pos < 0) continue;
-                if (r_pos >= read_length) break;
+                if (r_pos >= read_length || g_pos >= seq_length) break;
 
                 x = seq[g_pos] - 'A';
 
@@ -681,7 +683,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     if (!lowmem) {
         for (i = 0; i < stat->combo->len; ++i) {
             variant_t *v = var_data[stat->combo->data[i]];
-            if (v->ref[0] == '-' || v->alt[0] == '-' || strlen(v->ref) != strlen(v->alt)) {
+            if (v->ref[0] == '-' || strcmp("<*:DEL>", v->ref) == 0 || v->alt[0] == '-' || strcmp("<*:DEL>", v->alt) == 0 || strlen(v->ref) != strlen(v->alt)) {
                 has_indel = 1;
                 break;
             }

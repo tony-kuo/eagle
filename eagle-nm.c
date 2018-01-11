@@ -49,7 +49,7 @@ static int dp;
 static int verbose;
 static int debug;
 static int match, mismatch, gap_op, gap_ex;
-static double mut_prior; 
+//static double mut_prior; 
 
 /* Time info */
 static time_t now; 
@@ -86,12 +86,12 @@ vector_t *bed_read(FILE *file) {
     }
     free(line); line = NULL;
     fclose(file);
-    qsort(reg_list->data, reg_list->size, sizeof (void *), nat_sort_variant);
+    qsort(reg_list->data, reg_list->len, sizeof (void *), nat_sort_region);
     return reg_list;
 }
 
 vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
-    /* Reads in variant region coordinates */
+    /* Reads in region coordinates */
     vector_t *read_list = vector_create(64, READ_T);
 
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
@@ -156,7 +156,7 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             uint8_t *qual = bam_get_qual(aln);
             for (i = s_offset; i < read->length; ++i) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = qual[i];
+                read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
 
@@ -190,7 +190,7 @@ fasta_t *refseq_fetch(char *name, const char *fa_file) {
     if (k != kh_end(refseq_hash)) {
         vector_t *node = &kh_val(refseq_hash, k);
         fasta_t **f = (fasta_t **)node->data;
-        for (i = 0; i < node->size; ++i) {
+        for (i = 0; i < node->len; ++i) {
             if (strcmp(f[i]->name, name) == 0) {
                 pthread_mutex_unlock(&refseq_lock);
                 return f[i];
@@ -402,14 +402,14 @@ static char *evaluate_nomutation(const region_t *g) {
     char *refseq = f->seq;
     int refseq_length = f->seq_length;
 
-    /* Reads in variant region coordinates */
+    /* Reads in region coordinates */
     vector_t *read_list = bam_fetch(bam_file, g->chr, g->pos1, g->pos2);
-    if (read_list->size == 0) {
+    if (read_list->len == 0) {
         free(read_list); read_list = NULL;
         return NULL;
     }
     read_t **read_data = (read_t **)read_list->data;
-    size_t nreads = read_list->size;
+    size_t nreads = read_list->len;
 
     double ref = 0;
     double alt = 0;
@@ -510,7 +510,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     size_t i;
 
     region_t **reg_data = (region_t **)reg_list->data;
-    size_t nregions = reg_list->size;
+    size_t nregions = reg_list->len;
 
     print_status("# Options: pao=%d isc=%d\n", pao, isc);
     print_status("# Options: match=%d mismatch=%d gap_open=%d gap_extend=%d\n", match, -mismatch, -gap_op, -gap_ex);
@@ -537,9 +537,9 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
 
     free(w); w = NULL;
 
-    qsort(results->data, results->size, sizeof (void *), nat_sort_vector);
+    qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# CHR\tPOS1\tPOS2\tReads\tRefReads\tAltReads\tRefProb\tMutProb\tOdds\n");
-    for (i = 0; i < results->size; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
+    for (i = 0; i < results->len; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;
     print_status("# Done:\t%s\t%s", bam_file, asctime(time_info));
@@ -548,7 +548,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
 static void print_usage() {
     printf("\nUsage: eagle [options] -v regions.bed -a alignment.bam -r reference.fasta\n\n");
     printf("Required:\n");
-    printf("  -v --bed        FILE   Variant regions BED file. [stdin]\n");
+    printf("  -v --bed        FILE   Genome regions, BED file. [stdin]\n");
     printf("  -a --bam        FILE   Alignment data bam files, ref-coord sorted with bai index file.\n");
     printf("  -r --ref        FILE   Reference sequence, fasta file with fai index file.\n");
     printf("Options:\n");
@@ -561,7 +561,7 @@ static void print_usage() {
     printf("     --dp                Use dynamic programming to calculate likelihood instead of the basic model.\n");
     printf("     --gap_op     INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
     printf("     --gap_ex     INT    DP gap extend penalty. [1]. Recommend 1 for long reads with indel errors.\n");
-    printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
+    //printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
 }
 
@@ -584,7 +584,7 @@ int main(int argc, char **argv) {
     gap_op = 6;
     gap_ex = 1;
 
-    mut_prior = 0.001;
+    //mut_prior = 0.001;
 
     static struct option long_options[] = {
         {"bed", required_argument, NULL, 'v'},
@@ -603,7 +603,7 @@ int main(int argc, char **argv) {
         {"mismatch", optional_argument, NULL, 981},
         {"gap_op", optional_argument, NULL, 982},
         {"gap_ex", optional_argument, NULL, 983},
-        {"mut_prior", optional_argument, NULL, 990},
+        //{"mut_prior", optional_argument, NULL, 990},
         {0, 0, 0, 0}
     };
 
@@ -623,7 +623,7 @@ int main(int argc, char **argv) {
             case 981: mismatch = parse_int(optarg); break;
             case 982: gap_op = parse_int(optarg); break;
             case 983: gap_ex = parse_int(optarg); break;
-            case 990: mut_prior = parse_float(optarg); break;
+            //case 990: mut_prior = parse_float(optarg); break;
             default: exit_usage("Bad options");
         }
     }
@@ -644,19 +644,19 @@ int main(int argc, char **argv) {
     if (mismatch <= 0) mismatch = 4;
     if (gap_op <= 0) gap_op = 6;
     if (gap_ex <= 0) gap_ex = 1;
-    if (mut_prior < 0 || mut_prior > 1) mut_prior = 0.001;
+    //if (mut_prior < 0 || mut_prior > 1) mut_prior = 0.001;
 
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
     init_seqnt_map(seqnt_map);
-    mut_prior = log(mut_prior) - LG3;
+    //mut_prior = log(mut_prior) - LG3;
     init_q2p_table(p_match, p_mismatch, 50);
     
     /* Start processing data */
     clock_t tic = clock();
     vector_t *reg_list = bed_read(bed_fh);
-    print_status("# Read BED: %s\t%i entries\t%s", bed_file, (int)reg_list->size, asctime(time_info));
+    print_status("# Read BED: %s\t%i entries\t%s", bed_file, (int)reg_list->len, asctime(time_info));
 
     refseq_hash = kh_init(rsh);
 

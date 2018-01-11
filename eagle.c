@@ -90,8 +90,10 @@ static vector_t *vcf_read(FILE *file) {
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];
         for (s1 = ref; sscanf(s1, "%[^, ]%n", ref_token, &n1) == 1 || sscanf(s1, "%[-]%n", ref_token, &n1) == 1; s1 += n1 + 1) { // heterogenenous non-reference (comma-delimited) as separate entries
             for (s2 = alt; sscanf(s2, "%[^, ]%n", alt_token, &n2) == 1 || sscanf(s2, "%[-]%n", alt_token, &n2) == 1; s2 += n2 + 1) {
-                variant_t *v = variant_create(chr, pos, ref_token, alt_token);
-                vector_add(var_list, v);
+                if (alt_token[0] != '*' && strcmp("<*:DEL>", alt_token) != 0) {
+                    variant_t *v = variant_create(chr, pos, ref_token, alt_token);
+                    vector_add(var_list, v);
+                }
                 if (*(s2 + n2) != ',') break;
             }
             if (*(s1 + n1) != ',') break;
@@ -326,11 +328,11 @@ static char *construct_altseq(const char *refseq, int refseq_length, const vecto
         if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", v->chr, v->pos); }
 
         char *var_ref, *var_alt;
-        if (v->ref[0] == '-' || strcmp("<*:DEL>", v->ref) == 0) { // account for "-" and <*:DEL> variant representations 
+        if (v->ref[0] == '-') { // account for "-" variant representations 
             var_ref = "";
             var_alt = v->alt;
         }
-        else if (v->alt[0] == '-' || strcmp("<*:DEL>", v->alt) == 0) { // account for "-" and <*:DEL> variant representations
+        else if (v->alt[0] == '-') { // account for "-" variant representations
             var_ref = v->ref;
             var_alt = "";
         }
@@ -600,8 +602,8 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
             v_pos = v->pos - 1;
             ref_len = strlen(v->ref);
             alt_len = strlen(v->alt);
-            if (v->ref[0] == '-' || strcmp("<*:DEL>", v->ref) == 0) ref_len = 0;
-            else if (v->alt[0] == '-' || strcmp("<*:DEL>", v->alt) == 0) alt_len = 0;
+            if (v->ref[0] == '-') ref_len = 0;
+            else if (v->alt[0] == '-') alt_len = 0;
 
             l = (ref_len == alt_len) ? ref_len : read_length + ref_len + alt_len; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
             for (m = 0; m < l; ++m) {
@@ -683,7 +685,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     if (!lowmem) {
         for (i = 0; i < stat->combo->len; ++i) {
             variant_t *v = var_data[stat->combo->data[i]];
-            if (v->ref[0] == '-' || strcmp("<*:DEL>", v->ref) == 0 || v->alt[0] == '-' || strcmp("<*:DEL>", v->alt) == 0 || strlen(v->ref) != strlen(v->alt)) {
+            if (v->ref[0] == '-' || v->alt[0] == '-' || strlen(v->ref) != strlen(v->alt)) {
                 has_indel = 1;
                 break;
             }

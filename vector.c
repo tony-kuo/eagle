@@ -296,7 +296,7 @@ int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
         case REGION_T: {
             region_t *c1 = *(region_t **)a;
             region_t *c2 = *(region_t **)b;
-            if (strcasecmp(c1->chr, c2->chr) == 0) return (c1->pos1 > c2->pos1) - (c1->pos1 < c2->pos1);
+            if (strcasecmp(c1->chr, c2->chr) == 0) return ((c1->pos1 > c2->pos1) - (c1->pos1 < c2->pos1)) + ((c1->pos2 > c2->pos2) - (c1->pos2 < c2->pos2));
             str1 = strdup(c1->chr);
             str2 = strdup(c2->chr);
             c1 = NULL;

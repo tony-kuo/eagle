@@ -99,8 +99,8 @@ def outputResults(pos_entry, neg_entry, pos_files, neg_files):
             if not neg_entry or key not in neg_entry: continue;
             pos_prob = sorted(pos_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
             neg_prob = sorted(neg_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
-            if np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])) < 0.99: 
-                #print(pos_prob, neg_prob, np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])));
+            if np.power(10, pos_prob[3]) * (1 - np.power(10, neg_prob[3])) < 0.95: 
+                #print(key, pos_prob, neg_prob, np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])));
                 continue;
 
         if header:

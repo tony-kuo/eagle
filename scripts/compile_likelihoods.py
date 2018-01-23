@@ -95,7 +95,7 @@ def compileLOH(pos_entry, neg_entry, minlr, maxlr, depth):
 def outputResults(pos_entry, neg_entry, pos_files, neg_files):
     header = True;
     for key in naturalSort(pos_entry):
-        if neg_entry:
+        if neg_files:
             if not neg_entry or key not in neg_entry: continue;
             pos_prob = sorted(pos_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
             neg_prob = sorted(neg_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files

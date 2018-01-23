@@ -92,14 +92,14 @@ def compileLOH(pos_entry, neg_entry, minlr, maxlr, depth):
         new_neg_entry[key] = neg_entry[key];
     return(new_pos_entry, new_neg_entry);
 
-def outputResults(pos_entry, neg_entry, pos_files, neg_files):
+def outputResults(pos_entry, neg_entry, pos_files, neg_files, mincp):
     header = True;
     for key in naturalSort(pos_entry):
         if neg_files:
             if not neg_entry or key not in neg_entry: continue;
             pos_prob = sorted(pos_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
             neg_prob = sorted(neg_entry[key].values(), key=lambda tup:tup[3], reverse=True)[0]; # Max probability across files
-            if np.power(10, pos_prob[3]) * (1 - np.power(10, neg_prob[3])) < 0.95: 
+            if np.power(10, pos_prob[3]) * (1 - np.power(10, neg_prob[3])) < mincp: 
                 #print(key, pos_prob, neg_prob, np.power(10, pos_prob[3]) * (1-np.power(10, neg_prob[3])));
                 continue;
 
@@ -138,12 +138,13 @@ def main():
     parser = argparse.ArgumentParser(description='Compile results from output of EAGLE [multiple, positive/negative]. If negative samples provided, somatic mutations are compiled where data for variant must exist in the negative sample and not support the variant [so Pr_positive * (1-Pr_negative) >= 0.99]');
     parser.add_argument('-p', nargs='+', help='positive samples [f1 f2...]');
     parser.add_argument('-n', nargs='+', help='negative samples [f1 f2...]');
-    parser.add_argument('-minlr', type=float, default=5, help='threshold for minimum log likelihood ratio for positive samples (default: 5)');
-    parser.add_argument('-maxlr', type=float, default=-2, help='threshold for maximum log likelihood ratio for negative samples (default: -2)');
-    parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples (default: 0.05)');
-    parser.add_argument('-maxaf', type=float, default=0.04, help='maximum allele frequency for negative samples (default: 0.04)');
-    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples (default: 1)');
-    parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth (instead of: ref + alt)');
+    parser.add_argument('-minlr', type=float, default=5, help='threshold for minimum log likelihood ratio for positive samples [default: 5]');
+    parser.add_argument('-maxlr', type=float, default=-2, help='threshold for maximum log likelihood ratio for negative samples [default: -2]');
+    parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples [default: 0.05]');
+    parser.add_argument('-maxaf', type=float, default=0.04, help='maximum allele frequency for negative samples [default: 0.04]');
+    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples [default: 1]');
+    parser.add_argument('-mincp', type=float, default=0.95, help='minimum combined probability: positive * (1-negative) [default: 0.95]');
+    parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth [instead of: ref + alt]');
     parser.add_argument('-loh', action='store_true', help='include mutations with loss of heterozygosity, labeled with LOH');
     args = parser.parse_args();
 
@@ -158,7 +159,7 @@ def main():
         if args.loh:
             (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth);
 
-    outputResults(pos_entry, neg_entry, args.p, args.n);
+    outputResults(pos_entry, neg_entry, args.p, args.n, args.mincp);
     if args.loh:
         outputLOH(pos_loh_entry, neg_loh_entry, args.p, args.n);
 

@@ -59,7 +59,6 @@ def compileEntries(entry, likelihood, af, depth, isnegative):
         
         if isnegative and current[2] > likelihood: continue;
         elif not isnegative and current[2] < likelihood: continue;
-        if isnegative: print(key, entry[key])
         # Check AF
         current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0]; # Max AF across files
         if isnegative and current[1] > af: continue;

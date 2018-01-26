@@ -29,6 +29,7 @@ def readFiles(files, reads_seen):
                 t = line.strip().split('\t');
                 ref = t[2].split(',');
                 alt = t[3].split(',');
+                if int(t[5]) == 0 and int(t[6]) == 0: continue
                 # Account for double heterozygous non-reference or entries with the same position
                 for i in ref:
                     for j in alt:
@@ -61,7 +62,7 @@ def compileEntries(entry, likelihood, af, depth, isnegative):
         if isnegative: print(key, entry[key])
         # Check AF
         current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0]; # Max AF across files
-        if isnegative and (current[1] > af or current[1] == 0): continue;
+        if isnegative and current[1] > af: continue;
         elif not isnegative and current[1] < af: continue;
         # Check read depth
         current = sorted(entry[key].values(), key=lambda tup:tup[1])[0]; # Min Read Depth across files

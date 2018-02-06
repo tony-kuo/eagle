@@ -34,6 +34,7 @@ int parse_int(const char *str);
 float parse_float(const char *str);
 
 double sum(const double *a, int size);
+int sum_i(const int *a, int size);
 double *reverse(double *a, int size);
 
 double log_add_exp(double a, double b);

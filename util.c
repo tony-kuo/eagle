@@ -58,6 +58,12 @@ double sum(const double *a, int size) {
     return s;
 }
 
+int sum_i(const int *a, int size) {
+    int s = 0;
+    while (--size >= 0) s += a[size];
+    return s;
+}
+
 double *reverse(double *a, int size) {
     int i = 0;
     double *b = malloc(size * sizeof *b);

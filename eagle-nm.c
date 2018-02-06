@@ -45,11 +45,9 @@ static int pao;
 static int isc;
 static int nodup;
 static int splice;
-static int dp;
 static int verbose;
 static int debug;
-static int match, mismatch, gap_op, gap_ex;
-//static double mut_prior; 
+static double ref_prior, alt_prior, het_prior;
 
 /* Time info */
 static time_t now; 
@@ -58,6 +56,7 @@ static struct tm *time_info;
 
 /* Mapping table */
 static int seqnt_map[26];
+static char NT[4] = "ATGC";
 
 /* Fastq quality to probability table */
 static double p_match[50], p_mismatch[50];
@@ -154,8 +153,8 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
-            for (i = s_offset; i < read->length; ++i) {
-                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i)]); // get nucleotide id and convert into IUPAC id.
+            for (i = 0; i < read->length; ++i) {
+                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
                 read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
@@ -272,59 +271,12 @@ void set_prob_matrix(double *matrix, const char *seq, int read_length, const dou
     }
 }
 
-static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end) { /* short in long version */
-    int i, j;
-    int min_value = -1e6;
-
-    double prev[read_length + 1], curr[read_length + 1];
-    double a_gap_curr[read_length + 1];
-    double b_gap_prev[read_length + 1], b_gap_curr[read_length + 1];
-
-    prev[0] = 0;
-    prev[1] = 0 - gap_op;
-    for (j = 2; j < read_length + 1; ++j) prev[j] = prev[j - 1] - gap_ex;
-    memset(b_gap_prev, min_value, sizeof(b_gap_prev));
-
-    double max_score = min_value;
-    double upleft, open, extend, row_max;
-    for (i = start; i < end; ++i) {
-        row_max = min_value;
-        curr[0] = 0;
-        a_gap_curr[0] = min_value;
-        b_gap_curr[0] = min_value;
-        for (j = 1; j <= read_length; ++j) {
-            int c = seq[i] - 'A';
-            if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
-
-            upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[c]];
-
-            open = curr[j - 1] - gap_op;
-            extend = a_gap_curr[j - 1] - gap_ex;
-            a_gap_curr[j] = (open >= extend) ? open : extend;
-
-            open = prev[j] - gap_op;
-            extend = b_gap_prev[j] - gap_ex;
-            b_gap_curr[j] = (open >= extend) ? open : extend;
-
-            curr[j] = upleft;
-            if (a_gap_curr[j] >= curr[j]) curr[j] = a_gap_curr[j];
-            if (b_gap_curr[j] >= curr[j]) curr[j] = b_gap_curr[j];
-            if (curr[j] > row_max) row_max = curr[j];
-        }
-        if (row_max > max_score) max_score = row_max;
-
-        memcpy(prev, curr, sizeof(prev));
-        memcpy(b_gap_prev, b_gap_curr, sizeof(b_gap_prev));
-    }
-    return max_score;
-}
-
-static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int baseline) {
     int i, c; // array[width * row + col] = value
-    int n = pos + read_length;
     double probability = 0;
-    for (i = pos;  i < n; ++i) {
+    for (i = pos;  i < pos + read_length; ++i) {
         if (i < 0) continue;
+        if (i >= seq_length) break;
 
         c = seq[i] - 'A';
         if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
@@ -336,22 +288,18 @@ static inline double calc_read_prob(const double *matrix, int read_length, const
 }
 
 static inline double calc_prob_region(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end) {
-    int i;
     double probability = 0;
-    if (dp) {
-        end += read_length;
-        if (end >= seq_length) end = seq_length - 1;
-        probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
-    }
-    else {
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -1e6);
-        double baseline = probability;
-        for (i = start; i < end; ++i) {
-            if (i >= seq_length) break;
-            if (i != pos) {
-                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, baseline));
-                if (probability > baseline) baseline = probability;
-            }
+    if (start < 0) start = 0;
+
+    probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -1e6);
+    double baseline = probability;
+
+    int i;
+    for (i = start; i < end; ++i) {
+        if (i >= seq_length) break;
+        if (i != pos) {
+            probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, baseline));
+            if (probability > baseline) baseline = probability;
         }
     }
     return probability;
@@ -362,7 +310,6 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     int n = read_length / 2;
     int start = pos - n;
     int end = pos + n;
-    if (start < 0) start = 0;
 
     int i;
     double probability = 0;
@@ -393,6 +340,82 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     return probability;
 }
 
+static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end) {
+    int i, r_pos, k, x;
+
+    double prgu_n = 0;
+    double prgv_n = 0;
+    double probability, p;
+
+    if (start < 0) start = 0;
+
+    vector_double_t *r = vector_double_create(abs(end - start)); // reference probability per position i
+    vector_double_t *a = vector_double_create(abs(end - start)); // alternative probability per position i
+    for (i = start; i < end; ++i) {
+        if (i >= seq_length || g_pos >= seq_length) break;
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
+        vector_double_add(r, probability);
+        vector_double_add(a, probability);
+
+        r_pos = g_pos - pos;
+        if (r_pos >= 0 && r_pos < read_length) {
+            x = seq[g_pos] - 'A';
+            if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
+
+            probability = 0;
+            for (k = 0; k < 4; ++k) {
+                if (NT[k] != seq[g_pos]) {
+                    p = matrix[NT_CODES * r_pos + seqnt_map[NT[k] - 'A']];
+                    probability = (probability == 0) ? p : log_add_exp(probability, p);
+                    //printf("%c %f\t", NT[k], p);
+                }
+            }
+            a->data[i - start] = a->data[i - start] - matrix[NT_CODES * r_pos + seqnt_map[x]] + probability; // update alternative array
+            //printf("%d\t%d\t%c\t%d\t%f\t%f\t%f\t%f\n", i, g_pos, seq[g_pos], r_pos, r->data[i - start], a->data[i - start], matrix[NT_CODES * r_pos + seqnt_map[x]], probability);
+        }
+        prgu_n = (prgu_n == 0) ? r->data[i - start] : log_add_exp(prgu_n, r->data[i - start]);
+        prgv_n = (prgv_n == 0) ? a->data[i - start] : log_add_exp(prgv_n, a->data[i - start]);
+    }
+    *prgu += prgu_n;
+    *prgv += prgv_n;
+    vector_double_free(r);
+    vector_double_free(a);
+}
+
+static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
+    /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
+    int start = pos; // - (read_length / 2);
+    int end = pos + 1; //(read_length / 2);
+
+    *prgu = 0;
+    *prgv = 0;
+
+    int i;
+    if (n_splice == 0) {
+        calc_prob_snps_region(prgu, prgv, g_pos, matrix, read_length, seq, seq_length, pos, start, end);
+    }
+    else { // calculate the probability for each splice section separately
+        int r_pos = 0;
+        int g_pos = pos;
+        int r_len;
+        double *submatrix;
+        for (i = 0; i <= n_splice; ++i) {
+            if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
+            else r_len = read_length -  1 - r_pos + 1;
+            start = g_pos - (r_len / 2);
+            end = g_pos + (r_len / 2);
+
+            submatrix = malloc(NT_CODES * r_len * sizeof(double));
+            memcpy(submatrix, &matrix[NT_CODES * r_pos], NT_CODES * r_len * sizeof(double));
+            calc_prob_snps_region(prgu, prgv, g_pos, submatrix, r_len, seq, seq_length, pos, start, end);
+            free(submatrix); submatrix = NULL;
+
+            g_pos += r_len + splice_offset[i];
+            r_pos = splice_pos[i] + 1;
+        }
+    }
+}
+
 static char *evaluate_nomutation(const region_t *g) {
     size_t i, readi;
 
@@ -409,71 +432,115 @@ static char *evaluate_nomutation(const region_t *g) {
         return NULL;
     }
     read_t **read_data = (read_t **)read_list->data;
-    size_t nreads = read_list->len;
 
-    double ref = 0;
-    double alt = 0;
-    int ref_count = 0;
-    int alt_count = 0;
+    int g_pos;
+    double alt_probability = 0;
+    double ref_probability = 0;
+    for (g_pos = g->pos1; g_pos <= g->pos2; ++g_pos) {
+        double ref = 0;
+        double alt = 0;
+        int ref_count = 0;
+        int alt_count = 0;
 
-    /* Aligned reads */
-    for (readi = 0; readi < nreads; ++readi) {
-        int is_unmap = 0;
-        int is_dup = 0;
-        int is_secondary = 0;
-        int n;
-        char *s, token[strlen(read_data[readi]->flag) + 1];
-        for (s = read_data[readi]->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-            if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-            else if (strcmp("DUP", token) == 0) is_dup = 1;
-            else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
-            if (*(s + n) != ',') break;
-        }
-        if (is_unmap) continue;
-        if (nodup && is_dup) continue;
-        if (pao && is_secondary) continue;
+        /* Aligned reads */
+        for (readi = 0; readi < read_list->len; ++readi) {
+            if (read_data[readi]->pos < g->pos1 || read_data[readi]->pos > g->pos2) continue;
 
-        double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; ++i) {
-            is_match[i] = p_match[read_data[readi]->qual[i]];
-            no_match[i] = p_mismatch[read_data[readi]->qual[i]];
-            if (dp) {
-                is_match[i] += 1;
-                no_match[i] += 1;
+            int is_unmap = 0;
+            int is_dup = 0;
+            int is_reverse = 0;
+            int is_secondary = 0;
+            int n;
+            char *s, token[strlen(read_data[readi]->flag) + 1];
+            for (s = read_data[readi]->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+                if (strcmp("UNMAP", token) == 0) is_unmap = 1;
+                else if (strcmp("DUP", token) == 0) is_dup = 1;
+                else if (strcmp("REVERSE", token) == 0) is_reverse = 1;
+                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
+                if (*(s + n) != ',') break;
+            }
+            if (is_unmap) continue;
+            if (nodup && is_dup) continue;
+            if (pao && is_secondary) continue;
+
+            double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
+            for (i = 0; i < read_data[readi]->length; ++i) {
+                is_match[i] = p_match[read_data[readi]->qual[i]];
+                no_match[i] = p_mismatch[read_data[readi]->qual[i]];
+            }
+            double readprobmatrix[NT_CODES * read_data[readi]->length];
+            set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
+
+            double prgu, prgv;
+            //printf("\t%d\t%s\t%d\t%d\t%s\n", g_pos, read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
+            calc_prob_snps(&prgu, &prgv, g_pos, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            //printf("%f\t%f\n\n", prgu, prgv);
+
+            /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
+            if (read_data[readi]->multimapXA != NULL) {
+                int xa_pos, n;
+                char xa_chr[strlen(read_data[readi]->multimapXA) + 1];
+                for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
+                    if (strcmp(xa_chr, read_data[readi]->chr) != 0 && abs(xa_pos - read_data[readi]->pos) < read_data[readi]->length) { // if secondary alignment does not overlap primary aligment
+                        fasta_t *f = refseq_fetch(xa_chr, fa_file);
+                        if (f == NULL) continue;
+                        char *xa_refseq = f->seq;
+                        int xa_refseq_length = f->seq_length;
+
+                        double *p_readprobmatrix = readprobmatrix;
+                        double *newreadprobmatrix = NULL;
+                        if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
+                            newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * NT_CODES);
+                            p_readprobmatrix = newreadprobmatrix;
+                        }
+
+                        xa_pos = abs(xa_pos);
+                        double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+                        prgu = log_add_exp(prgu, readprobability);
+                        prgv = log_add_exp(prgv, readprobability);
+                        free(newreadprobmatrix); newreadprobmatrix = NULL;
+                    }
+                    if (*(s + n) != ';') break;
+                }
+            }
+            else if (read_data[readi]->multimapNH > 1) { // scale by the number of multimap positions
+                double n = log(read_data[readi]->multimapNH - 1);
+                double readprobability = prgu + n;
+                prgu = log_add_exp(prgu, readprobability);
+                prgv = log_add_exp(prgv, readprobability);
+            }
+
+            if (prgu == 0 && prgv == 0) continue;
+
+            if (prgu > prgv && prgu - prgv > 0.69) ref_count += 1;
+            else if (prgv > prgu && prgv - prgu > 0.69) alt_count += 1;
+
+            double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
+            double phet10 = log_add_exp(LG10 + prgv, LG90 + prgu);
+            double phet90 = log_add_exp(LG90 + prgv, LG10 + prgu);
+            if (phet10 > phet) phet = phet10;
+            if (phet90 > phet) phet = phet90;
+
+            /* Priors */
+            ref += prgu + ref_prior;
+            alt += log_add_exp(prgv + alt_prior, phet + het_prior);
+
+            if (debug > 1) {
+                fprintf(stderr, "::%d\t%s\t%d\t%f\t%f\t%f\t%d\t%d\t", g_pos, read_data[readi]->name, read_data[readi]->pos, prgu, prgv, prgu-prgv, ref_count, alt_count);
+                for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+                fprintf(stderr, "\n");
             }
         }
-        double readprobmatrix[NT_CODES * read_data[readi]->length];
-        set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
-
-        /* 
-        Probability that read is from a hamming/edit distance one reference sequence (f), i.e. the reference has a mutation:
-           a) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-        Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
-           b) lengthfactor = alpha ^ (read length - expected read length)
-        */
-        double delta[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
-        double a = sum(is_match, read_data[readi]->length);
-        double pout = a + log_sum_exp(delta, read_data[readi]->length) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
-        double prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
-
-        if (prgu > pout && prgu - pout > 0.69) ref_count += 1;
-        else alt_count += 1;
-
-        ref += prgu;
-        alt += pout;
-        if (debug > 0) {
-            fprintf(stderr, "==");
-            fprintf(stderr, "%s\t%d\t%f\t%f\t%f\t%d\t%d\t", read_data[readi]->name, read_data[readi]->pos, prgu, pout, prgu-pout, ref_count, alt_count);
-            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
-            fprintf(stderr, "\n");
-        }
+        //probability = (probability == 0) ? ref - log_add_exp(ref, alt) : probability + (ref - log_add_exp(ref, alt));
+        ref_probability = ref;
+        alt_probability = (alt_probability == 0) ? alt : log_add_exp(alt_probability, alt);
+        if (debug > 0) fprintf(stderr, "++%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", g->pos1, g->pos2, g_pos, (int)read_list->len, ref_count, alt_count, ref, alt, ref - alt, alt_probability);
     }
-    ref *= M_1_LN10;
-    alt *= M_1_LN10;
-    size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)nreads, ref_count, alt_count, ref, alt, ref - alt) + 1;
+
+    double odds = (ref_probability - alt_probability) * M_1_LN10;
+    size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, odds) + 1;
     char *output = malloc(n * sizeof *output);
-    snprintf(output, n, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)nreads, ref_count, alt_count, ref, alt, ref - alt);
+    snprintf(output, n, "%s\t%d\t%d\t%d\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, odds);
 
     vector_destroy(read_list); free(read_list); read_list = NULL;
     return output;
@@ -512,8 +579,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     region_t **reg_data = (region_t **)reg_list->data;
     size_t nregions = reg_list->len;
 
-    print_status("# Options: pao=%d isc=%d\n", pao, isc);
-    print_status("# Options: match=%d mismatch=%d gap_open=%d gap_extend=%d\n", match, -mismatch, -gap_op, -gap_ex);
+    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d\n", pao, isc, nodup, splice);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
     vector_t *queue = vector_create(nregions, VOID_T);
@@ -538,7 +604,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     free(w); w = NULL;
 
     qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
-    fprintf(out_fh, "# CHR\tPOS1\tPOS2\tReads\tRefReads\tAltReads\tRefProb\tMutProb\tOdds\n");
+    fprintf(out_fh, "# CHR\tPOS1\tPOS2\tReads\tRefProb\n");
     for (i = 0; i < results->len; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;
@@ -558,9 +624,6 @@ static void print_usage() {
     printf("     --isc               Ignore soft-clipped bases.\n");
     printf("     --nodup             Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice            Allow spliced reads.\n");
-    printf("     --dp                Use dynamic programming to calculate likelihood instead of the basic model.\n");
-    printf("     --gap_op     INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
-    printf("     --gap_ex     INT    DP gap extend penalty. [1]. Recommend 1 for long reads with indel errors.\n");
     //printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
 }
@@ -575,14 +638,8 @@ int main(int argc, char **argv) {
     pao = 0;
     isc = 0;
     nodup = 0;
-    dp = 0;
     verbose = 0;
     debug = 0;
-
-    match = 1;
-    mismatch = 4;
-    gap_op = 6;
-    gap_ex = 1;
 
     //mut_prior = 0.001;
 
@@ -596,19 +653,14 @@ int main(int argc, char **argv) {
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
-        {"dp", no_argument, &dp, 1},
         {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},
-        {"match", optional_argument, NULL, 980},
-        {"mismatch", optional_argument, NULL, 981},
-        {"gap_op", optional_argument, NULL, 982},
-        {"gap_ex", optional_argument, NULL, 983},
         //{"mut_prior", optional_argument, NULL, 990},
         {0, 0, 0, 0}
     };
 
     int opt = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:n:w:m:d:", long_options, &opt)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:d:", long_options, &opt)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -619,10 +671,6 @@ int main(int argc, char **argv) {
             case 'o': out_file = optarg; break;
             case 't': nthread = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
-            case 980: match = parse_int(optarg); break;
-            case 981: mismatch = parse_int(optarg); break;
-            case 982: gap_op = parse_int(optarg); break;
-            case 983: gap_ex = parse_int(optarg); break;
             //case 990: mut_prior = parse_float(optarg); break;
             default: exit_usage("Bad options");
         }
@@ -640,11 +688,11 @@ int main(int argc, char **argv) {
     if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } 
     if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (nthread < 1) nthread = 1;
-    if (match <= 0) match = 1;
-    if (mismatch <= 0) mismatch = 4;
-    if (gap_op <= 0) gap_op = 6;
-    if (gap_ex <= 0) gap_ex = 1;
     //if (mut_prior < 0 || mut_prior > 1) mut_prior = 0.001;
+
+    ref_prior = log(0.5);
+    alt_prior = log(0.25);
+    het_prior = log(0.25);
 
     FILE *out_fh = stdout;
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used

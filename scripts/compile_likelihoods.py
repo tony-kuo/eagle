@@ -20,7 +20,7 @@ def naturalSort(l):
     alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
     return sorted(l, key=alphanum_key)
 
-def readFiles(files, reads_seen):
+def readFiles(files, reads_seen, minrp):
     entry = {}
     for fn in files: 
         with open(fn, 'r') as fh:
@@ -30,6 +30,7 @@ def readFiles(files, reads_seen):
                 ref = t[2].split(',')
                 alt = t[3].split(',')
                 if int(t[5]) == 0 and int(t[6]) == 0: continue
+                if (float(t[5]) + float(t[6])) / float(t[4]) < minrp: continue
                 # Account for double heterozygous non-reference or entries with the same position
                 for i in ref:
                     for j in alt:
@@ -85,7 +86,8 @@ def compileLOH(pos_entry, neg_entry, minlr, maxlr, depth):
         if depth > 0 and current[0] < depth: continue
 
         current = sorted(neg_entry[key].values(), key=lambda tup:tup[2], reverse=True)[0] # Max LR across files
-        if maxlr < current[2] < minlr: continue # neg should be homozygous mutation or reference, thus should be < maxlr or > minlr
+        if maxlr < current[2] < minlr: continue # neg should be homozygous variant or reference, thus should be < maxlr or > minlr
+        if current[1] >= 0.3 or current[1] <= 0.7: continue # neg should be homozygous variant or reference
         current = sorted(neg_entry[key].values(), key=lambda tup:tup[1])[0] # Min Read Depth across files
         if depth > 0 and current[0] < depth: continue
 
@@ -143,19 +145,20 @@ def main():
     parser.add_argument('-maxlr', type=float, default=-2, help='threshold for maximum log likelihood ratio for negative samples [default: -2]')
     parser.add_argument('-minaf', type=float, default=0.05, help='minimum allele frequency for positive samples [default: 0.05]')
     parser.add_argument('-maxaf', type=float, default=0.04, help='maximum allele frequency for negative samples [default: 0.04]')
-    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth, applies to both positive and negative samples [default: 1]')
+    parser.add_argument('-mindepth', type=int, default=1, help='minimum read depth [default: 1]')
     parser.add_argument('-mincp', type=float, default=0.95, help='minimum combined probability: positive * (1-negative) [default: 0.95]')
+    parser.add_argument('-minrp', type=float, default=0.75, help='minimum read proportion: reads seen that are unambiguously ref or alt [default: 0.75]')
     parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth [instead of: ref + alt]')
     parser.add_argument('-loh', action='store_true', help='include mutations with loss of heterozygosity, labeled with LOH')
     args = parser.parse_args()
 
-    pos = readFiles(args.p, args.seen) 
+    pos = readFiles(args.p, args.seen, args.minrp) 
     pos_entry = compileEntries(pos, args.minlr, args.minaf, args.mindepth, False)
     neg_entry = {}
     pos_loh_entry = {}
     neg_loh_entry = {}
     if args.n:
-        neg = readFiles(args.n, args.seen)
+        neg = readFiles(args.n, args.seen, args.minrp)
         neg_entry = compileEntries(neg, args.maxlr, args.maxaf, args.mindepth, True)
         if args.loh:
             (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth)

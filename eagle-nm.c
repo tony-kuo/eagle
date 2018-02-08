@@ -436,11 +436,13 @@ static char *evaluate_nomutation(const region_t *g) {
     int g_pos;
     double alt_probability = 0;
     double ref_probability = 0;
+    int ref_count = 0;
+    int alt_count = 0;
     for (g_pos = g->pos1; g_pos <= g->pos2; ++g_pos) {
         double ref = 0;
         double alt = 0;
-        int ref_count = 0;
-        int alt_count = 0;
+        int r_count = 0;
+        int a_count = 0;
 
         /* Aligned reads */
         for (readi = 0; readi < read_list->len; ++readi) {
@@ -512,8 +514,8 @@ static char *evaluate_nomutation(const region_t *g) {
 
             if (prgu == 0 && prgv == 0) continue;
 
-            if (prgu > prgv && prgu - prgv > 0.69) ref_count += 1;
-            else if (prgv > prgu && prgv - prgu > 0.69) alt_count += 1;
+            if (prgu > prgv && prgu - prgv > 0.69) r_count += 1;
+            else if (prgv > prgu && prgv - prgu > 0.69) a_count += 1;
 
             double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
             double phet10 = log_add_exp(LG10 + prgv, LG90 + prgu);
@@ -526,21 +528,25 @@ static char *evaluate_nomutation(const region_t *g) {
             alt += log_add_exp(prgv + alt_prior, phet + het_prior);
 
             if (debug > 1) {
-                fprintf(stderr, "::%d\t%s\t%d\t%f\t%f\t%f\t%d\t%d\t", g_pos, read_data[readi]->name, read_data[readi]->pos, prgu, prgv, prgu-prgv, ref_count, alt_count);
+                fprintf(stderr, "::\t%d\t%s\t%d\t%f\t%f\t%f\t%d\t%d\t", g_pos, read_data[readi]->name, read_data[readi]->pos, prgu, prgv, prgu-prgv, r_count, a_count);
                 for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
                 fprintf(stderr, "\n");
             }
         }
         //probability = (probability == 0) ? ref - log_add_exp(ref, alt) : probability + (ref - log_add_exp(ref, alt));
-        ref_probability = ref;
+        ref_probability = (ref_probability == 0) ? ref : log_add_exp(ref_probability, ref);
         alt_probability = (alt_probability == 0) ? alt : log_add_exp(alt_probability, alt);
-        if (debug > 0) fprintf(stderr, "++%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", g->pos1, g->pos2, g_pos, (int)read_list->len, ref_count, alt_count, ref, alt, ref - alt, alt_probability);
+        if (a_count > alt_count) {
+            ref_count = r_count;
+            alt_count = a_count;
+        }
+        if (debug > 0) fprintf(stderr, "++\t%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", g->pos1, g->pos2, g_pos, (int)read_list->len, ref_count, alt_count, ref, alt, ref - alt, alt_probability);
     }
 
     double odds = (ref_probability - alt_probability) * M_1_LN10;
-    size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, odds) + 1;
+    size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds) + 1;
     char *output = malloc(n * sizeof *output);
-    snprintf(output, n, "%s\t%d\t%d\t%d\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, odds);
+    snprintf(output, n, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds);
 
     vector_destroy(read_list); free(read_list); read_list = NULL;
     return output;
@@ -604,7 +610,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     free(w); w = NULL;
 
     qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
-    fprintf(out_fh, "# CHR\tPOS1\tPOS2\tReads\tRefProb\n");
+    fprintf(out_fh, "# CHR\tPOS1\tPOS2\tReads\tRefCount\tAltCount\tRefProb\tAltProb\tOdds\n");
     for (i = 0; i < results->len; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;

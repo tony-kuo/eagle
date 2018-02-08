@@ -808,24 +808,22 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         if (prgv > prgu && prgv - prgu > 0.69) stat->alt_count += 1;
         else if (prgu > prgv && prgu - prgv > 0.69) stat->ref_count += 1;
 
-        if (verbose && prgv > read_data[readi]->prgv) {
-            if (read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= ((variant_t *)var_data[stat->combo->data[0]])->pos) { // read crosses variant in current set
-                read_data[readi]->prgu = prgu;
-                read_data[readi]->prgv = prgv;
-                read_data[readi]->pout = pout;
+        if (verbose && prgv > read_data[readi]->prgv && read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= ((variant_t *)var_data[stat->combo->data[0]])->pos && read_data[readi]->pos <= ((variant_t *)var_data[stat->combo->data[stat->combo->len - 1]])->pos) { // read crosses a variant in current combo
+            read_data[readi]->prgu = prgu;
+            read_data[readi]->prgv = prgv;
+            read_data[readi]->pout = pout;
 
-                vector_destroy(read_data[readi]->var_list); free(read_data[readi]->var_list); read_data[readi]->var_list = NULL;
-                read_data[readi]->var_list = vector_create(8, VOID_T);
+            vector_destroy(read_data[readi]->var_list); free(read_data[readi]->var_list); read_data[readi]->var_list = NULL;
+            read_data[readi]->var_list = vector_create(8, VOID_T);
 
-                int n;
-                char *token;
-                for (i = 0; i < stat->combo->len; ++i) {
-                    variant_t *v = var_data[stat->combo->data[i]];
-                    n = snprintf(NULL, 0, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt) + 1;
-                    token = malloc(n * sizeof *token);
-                    snprintf(token, n, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt);
-                    vector_add(read_data[readi]->var_list, token);
-                }
+            int n;
+            char *token;
+            for (i = 0; i < stat->combo->len; ++i) {
+                variant_t *v = var_data[stat->combo->data[i]];
+                n = snprintf(NULL, 0, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt) + 1;
+                token = malloc(n * sizeof *token);
+                snprintf(token, n, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt);
+                vector_add(read_data[readi]->var_list, token);
             }
         }
 

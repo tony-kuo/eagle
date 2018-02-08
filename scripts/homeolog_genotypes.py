@@ -8,7 +8,7 @@
 # Determines sequences differences as putative candidate variants / genotypes
 # Writes genotypes into VCFs in the RNA and DNA coordinates of the "database" reference genome
 
-## If you need transcript and have the annotation GFF:
+## If you need transcripts and have the annotation GFF, using gffread (Cufflinks: https://github.com/cole-trapnell-lab/cufflinks.git):
 #    gffread -MKQ -w transcripts.fa -g REF.fa GTF.gff
 
 ## LAST reciprocal best hit to find homeologs from transcripts

@@ -72,7 +72,7 @@ def writeTable(chrA, chrB, chrD, out_prefix):
         y = [chrA[key][1], chrB[key][1], chrD[key][1]] # denominator
         z = [chrA[key][2], chrB[key][2], chrD[key][2]]
 
-        y = [y[i] - double for i in z if z[i] == 0] # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
+        y = [y[i] - double if z[i] == 0 else y[i] for i in z] # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
 
         p = [chrA[key][0] - chrA[key][1], chrB[key][0] - chrB[key][1], chrD[key][0] - chrD[key][1]]
         i = p.index(reduce(lambda x,y: max(x,y), p))

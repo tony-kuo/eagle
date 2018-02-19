@@ -48,6 +48,7 @@ static int splice;
 static int verbose;
 static int debug;
 static double ref_prior, alt_prior, het_prior;
+static double mut_prior, nomut_prior;
 
 /* Time info */
 static time_t now; 
@@ -434,7 +435,7 @@ static char *evaluate_nomutation(const region_t *g) {
     read_t **read_data = (read_t **)read_list->data;
 
     int g_pos;
-    double alt_probability = 0;
+    double alt_probability = -1e6;
     double ref_probability = 0;
     int ref_count = 0;
     int alt_count = 0;
@@ -533,9 +534,9 @@ static char *evaluate_nomutation(const region_t *g) {
                 fprintf(stderr, "\n");
             }
         }
-        //probability = (probability == 0) ? ref - log_add_exp(ref, alt) : probability + (ref - log_add_exp(ref, alt));
-        ref_probability = (ref_probability == 0) ? ref : log_add_exp(ref_probability, ref);
-        alt_probability = (alt_probability == 0) ? alt : log_add_exp(alt_probability, alt);
+        //ref_probability = (ref_probability == 0) ? ref : log_add_exp(ref_probability, ref);
+        ref_probability = ref;
+        alt_probability = (alt > alt_probability) ? alt : alt_probability;
         if (a_count > alt_count) {
             ref_count = r_count;
             alt_count = a_count;
@@ -543,6 +544,8 @@ static char *evaluate_nomutation(const region_t *g) {
         if (debug > 0) fprintf(stderr, "++\t%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", g->pos1, g->pos2, g_pos, (int)read_list->len, ref_count, alt_count, ref, alt, ref - alt, alt_probability);
     }
 
+    ref_probability += nomut_prior;
+    alt_probability += mut_prior;
     double odds = (ref_probability - alt_probability) * M_1_LN10;
     size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds) + 1;
     char *output = malloc(n * sizeof *output);
@@ -630,7 +633,7 @@ static void print_usage() {
     printf("     --isc               Ignore soft-clipped bases.\n");
     printf("     --nodup             Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice            Allow spliced reads.\n");
-    //printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
+    printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
 }
 
@@ -647,7 +650,7 @@ int main(int argc, char **argv) {
     verbose = 0;
     debug = 0;
 
-    //mut_prior = 0.001;
+    mut_prior = 0.001;
 
     static struct option long_options[] = {
         {"bed", required_argument, NULL, 'v'},
@@ -661,12 +664,12 @@ int main(int argc, char **argv) {
         {"splice", no_argument, &splice, 1},
         {"verbose", no_argument, &verbose, 1},
         {"debug", optional_argument, NULL, 'd'},
-        //{"mut_prior", optional_argument, NULL, 990},
+        {"mut_prior", optional_argument, NULL, 990},
         {0, 0, 0, 0}
     };
 
     int opt = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:d:", long_options, &opt)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:d:", long_options, &opt)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -677,7 +680,7 @@ int main(int argc, char **argv) {
             case 'o': out_file = optarg; break;
             case 't': nthread = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
-            //case 990: mut_prior = parse_float(optarg); break;
+            case 990: mut_prior = parse_float(optarg); break;
             default: exit_usage("Bad options");
         }
     }
@@ -694,7 +697,8 @@ int main(int argc, char **argv) {
     if (bam_file == NULL) { exit_usage("Missing alignments given as BAM file!"); } 
     if (fa_file == NULL) { exit_usage("Missing reference genome given as Fasta file!"); }
     if (nthread < 1) nthread = 1;
-    //if (mut_prior < 0 || mut_prior > 1) mut_prior = 0.001;
+    if (mut_prior < 0 || mut_prior > 1) mut_prior = 0.001;
+    nomut_prior = 1 - mut_prior;
 
     ref_prior = log(0.5);
     alt_prior = log(0.25);
@@ -704,7 +708,8 @@ int main(int argc, char **argv) {
     if (out_file != NULL) out_fh = fopen(out_file, "w"); // default output file handle is stdout unless output file option is used
 
     init_seqnt_map(seqnt_map);
-    //mut_prior = log(mut_prior) - LG3;
+    mut_prior = log(mut_prior);
+    nomut_prior = log(nomut_prior);
     init_q2p_table(p_match, p_mismatch, 50);
     
     /* Start processing data */

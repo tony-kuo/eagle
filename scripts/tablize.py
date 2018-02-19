@@ -1,4 +1,12 @@
 #!/usr/bin/python
+
+# Copyright 2016 Tony Kuo
+# This program is distributed under the terms of the GNU General Public License
+
+# Utility Script
+# Works with tab-delimited tables, where samples are in rows and variables are in columns
+# Useful for finding the union or intersection of multiple table files, or extracting column values
+
 from __future__ import print_function
 import argparse;
 import re;
@@ -18,7 +26,7 @@ def sortbyMean(l, count):
     else: meanvalues = [( k, sum([1/float(v[0]) for v in l[k].values()]) / count ) for k in l];
     return([a[0] for a in sorted(meanvalues, key=lambda tup:tup[1], reverse=True)]);
 
-def readFiles(files, idcol, valcol):
+def readFiles(files, idcol, valcol, delim):
     entry = {};
     numval = {};
     if len(idcol) > 0:
@@ -46,7 +54,8 @@ def readFiles(files, idcol, valcol):
                     continue;
 
                 numlines += 1;
-                t = line.strip().split('\t');
+                if delim == 's+': t = line.strip().split();
+                else: t = line.strip().split(delim);
                 if len(idcol) > 1: key = '\t'.join([t[i] for i in idcol]);
                 else: key = t[idcol[0]];
 
@@ -120,6 +129,7 @@ def main():
     parser.add_argument('-v1', action='store_true', help='only print entry if *one file* contains said entry, over-rides [-a & -v]');
     parser.add_argument('-i', type=str, default='0', help='comma separated values to specify the id columns, 0-based indexing (default: 0)');
     parser.add_argument('-c', type=str, default='', help='comma separated values to specify the value columns to extract from each file, 0-based indexing (default: 1:end)');
+    parser.add_argument('-delim', type=str, default='\t', help='delimiter for columns (default: \t, s+ for whitespace)');
     parser.add_argument('-skip', type=int, default=0, help='skip a number of header rows for all files (default: 0)');
     parser.add_argument('-miss', type=str, default='', help='symbol for missing values (default: '')');
     parser.add_argument('-mean', action='store_true', help='sort by mean of values (numerical data only), ascending order, rather than id');
@@ -138,7 +148,7 @@ def main():
     sortbymean = args.mean;
     sortdesc = args.desc;
 
-    (entry, numid, numval) = readFiles(args.files, args.i, args.c); 
+    (entry, numid, numval) = readFiles(args.files, args.i, args.c, args.delim); 
     writeTable(entry, numid, numval, args.files);
 
 if __name__ == '__main__':

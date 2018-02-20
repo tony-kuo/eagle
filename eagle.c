@@ -615,11 +615,16 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
 
                 x = seq[g_pos] - 'A';
 
-                if (m >= alt_len) y = seq[g_pos + ref_len - alt_len] - 'A';
-                else y = v->alt[m] - 'A';
+                if (m >= alt_len) {
+                    if (g_pos + ref_len - alt_len >= seq_length) break;
+                    y = seq[g_pos + ref_len - alt_len] - 'A';
+                }
+                else {
+                    y = v->alt[m] - 'A';
+                }
 
-                if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
-                if (y < 0 || y >= 26) { exit_err("Alt character %c at %s;%d;%s;%s not in valid alphabet\n", v->alt[m], v->chr, v->pos, v->ref, v->alt); }
+                if (x < 0 || x >= 26) { exit_err("Ref character %c at gpos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
+                if (y < 0 || y >= 26) { exit_err("Alt character %c at rpos %d for %s;%d;%s;%s not in valid alphabet\n", v->alt[m], m, v->chr, v->pos, v->ref, v->alt); }
 
                 a->data[i - start] = a->data[i - start] - matrix[NT_CODES * r_pos + seqnt_map[x]] + matrix[NT_CODES * r_pos + seqnt_map[y]]; // update alternative array
             }

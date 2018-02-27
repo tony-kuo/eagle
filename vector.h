@@ -89,6 +89,7 @@ void region_destroy(region_t *g);
 
 typedef struct {
     vector_int_t *combo;
+    vector_double_t *read_prgv;
     double alt, het, mut;
     int ref_count, alt_count;
 } stats_t;

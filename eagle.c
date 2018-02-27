@@ -140,7 +140,7 @@ void fasta_read(const char *fa_file) {
         f->name = strdup(name);
         f->seq = fai_fetch(fai, name, &f->seq_length);
         char *s;
-        for (s = f->seq; *s != '\0'; ++s) *s = toupper(*s);
+        for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
 
         int absent;
         khiter_t k = kh_put(rsh, refseq_hash, f->name, &absent);
@@ -212,7 +212,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
 
             j = 0;
             int splice_pos = 0; // track splice position in reads
-            for (i = 0; i < read->n_cigar; ++i) {
+            for (i = 0; i < read->n_cigar; i++) {
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
                 read->splice_pos[i] = 0;
@@ -244,7 +244,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
-            for (i = 0; i < read->length; ++i) {
+            for (i = 0; i < read->length; i++) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
                 read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
             }
@@ -280,7 +280,7 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     if (k != kh_end(refseq_hash)) {
         vector_t *node = &kh_val(refseq_hash, k);
         fasta_t **f = (fasta_t **)node->data;
-        for (i = 0; i < node->len; ++i) {
+        for (i = 0; i < node->len; i++) {
             if (strcmp(f[i]->name, name) == 0) {
                 pthread_mutex_unlock(&refseq_lock);
                 return f[i];
@@ -304,7 +304,7 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     fasta_t *f = fasta_create(name);
     f->seq = fai_fetch(fai, name, &f->seq_length);
     char *s;
-    for (s = f->seq; *s != '\0'; ++s) *s = toupper(*s);
+    for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
 
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
@@ -321,7 +321,7 @@ static char *construct_altseq(const char *refseq, int refseq_length, const vecto
     int offset = 0;
     char *altseq = strdup(refseq);
     *altseq_length = refseq_length;
-    for (i = 0; i < combo->len; ++i) {
+    for (i = 0; i < combo->len; i++) {
         variant_t *v = var_data[combo->data[i]];
         size_t pos = v->pos - 1 + offset;
         if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", v->chr, v->pos); }
@@ -398,7 +398,7 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
     str_resize(output, strlen(*output) + 2);
     strcat(*output, "[");
     if (var_set->len > 1) {
-        for (i = 0; i < var_set->len; ++i) {
+        for (i = 0; i < var_set->len; i++) {
             n = snprintf(NULL, 0, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt) + 1;
             token = malloc(n * sizeof *token);
             snprintf(token, n, "%s,%d,%s,%s;", var_data[i]->chr, var_data[i]->pos, var_data[i]->ref, var_data[i]->alt);
@@ -413,8 +413,8 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
 
 static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
     int i, b; // array[width * row + col] = value
-    for (b = 0; b < read_length; ++b) {
-        for (i = 0; i < NT_CODES; ++i) matrix[NT_CODES * b + i] = no_match[b];
+    for (b = 0; b < read_length; b++) {
+        for (i = 0; i < NT_CODES; i++) matrix[NT_CODES * b + i] = no_match[b];
         matrix[NT_CODES * b + seqnt_map[seq[b] - 'A']] = is_match[b];
         switch (seq[b]) {
         case 'A':
@@ -467,17 +467,17 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
 
     prev[0] = 0;
     prev[1] = 0 - gap_op;
-    for (j = 2; j < read_length + 1; ++j) prev[j] = prev[j - 1] - gap_ex;
+    for (j = 2; j < read_length + 1; j++) prev[j] = prev[j - 1] - gap_ex;
     memset(b_gap_prev, min_value, sizeof(b_gap_prev));
 
     double max_score = min_value;
     double upleft, open, extend, row_max;
-    for (i = start; i < end; ++i) {
+    for (i = start; i < end; i++) {
         row_max = min_value;
         curr[0] = 0;
         a_gap_curr[0] = min_value;
         b_gap_curr[0] = min_value;
-        for (j = 1; j <= read_length; ++j) {
+        for (j = 1; j <= read_length; j++) {
             int c = seq[i] - 'A';
             if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
@@ -507,7 +507,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
 static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
     int i, c; // array[width * row + col] = value
     double probability = 0;
-    for (i = pos;  i < pos + read_length; ++i) {
+    for (i = pos;  i < pos + read_length; i++) {
         if (i < 0) continue;
         if (i >= seq_length) break;
 
@@ -533,7 +533,7 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
         double baseline = probability;
 
         int i;
-        for (i = start; i < end; ++i) {
+        for (i = start; i < end; i++) {
             if (i >= seq_length) break;
             if (i != pos) {
                 probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, baseline));
@@ -560,7 +560,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         int g_pos = pos;
         int r_len;
         double *submatrix;
-        for (i = 0; i <= n_splice; ++i) {
+        for (i = 0; i <= n_splice; i++) {
             if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
             else r_len = read_length -  1 - r_pos + 1;
             n = r_len / 2;
@@ -591,14 +591,14 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
 
     vector_double_t *r = vector_double_create(abs(end - start)); // reference probability per position i
     vector_double_t *a = vector_double_create(abs(end - start)); // alternative probability per position i
-    for (i = start; i < end; ++i) {
+    for (i = start; i < end; i++) {
         if (i >= seq_length) break;
         probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
         vector_double_add(r, probability);
         vector_double_add(a, probability);
 
         offset = 0;
-        for (j = 0; j < combo->len; ++j) {
+        for (j = 0; j < combo->len; j++) {
             variant_t *v = var_data[combo->data[j]];
             v_pos = v->pos - 1;
             ref_len = strlen(v->ref);
@@ -607,7 +607,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
             else if (v->alt[0] == '-') alt_len = 0;
 
             l = (ref_len == alt_len) ? ref_len : read_length + ref_len + alt_len; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
-            for (m = 0; m < l; ++m) {
+            for (m = 0; m < l; m++) {
                 g_pos = v_pos + m;
                 r_pos = g_pos - i + offset;
                 if (r_pos < 0) continue;
@@ -656,7 +656,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
         int g_pos = pos;
         int r_len;
         double *submatrix;
-        for (i = 0; i <= n_splice; ++i) {
+        for (i = 0; i <= n_splice; i++) {
             if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
             else r_len = read_length -  1 - r_pos + 1;
             start = g_pos - (r_len / 2);
@@ -673,7 +673,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads) {
+static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, size_t seti) {
     size_t i, readi;
     *ref = 0;
     stat->alt = 0;
@@ -683,7 +683,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
 
     int has_indel = 0;
     if (!lowmem) {
-        for (i = 0; i < stat->combo->len; ++i) {
+        for (i = 0; i < stat->combo->len; i++) {
             variant_t *v = var_data[stat->combo->data[i]];
             if (v->ref[0] == '-' || v->alt[0] == '-' || strlen(v->ref) != strlen(v->alt)) {
                 has_indel = 1;
@@ -698,7 +698,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     if (has_indel || dp) altseq = construct_altseq(refseq, refseq_length, stat->combo, var_data, &altseq_length); 
 
     /* Aligned reads */
-    for (readi = 0; readi < nreads; ++readi) {
+    for (readi = 0; readi < nreads; readi++) {
         /* Only consider reads that map to all in current combination
         variant_t *first = (variant_t *)stat->combo->data[0];
         variant_t *last = (variant_t *)stat->combo->data[stat->combo->len - 1];
@@ -723,7 +723,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
 
          /* Read probability matrix */
         double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; ++i) {
+        for (i = 0; i < read_data[readi]->length; i++) {
             is_match[i] = p_match[read_data[readi]->qual[i]];
             no_match[i] = p_mismatch[read_data[readi]->qual[i]];
             if (dp) {
@@ -744,12 +744,12 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         P(r|f) = (perfect + hamming_1) / lengthfactor 
         */
         double delta[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; ++i) delta[i] = no_match[i] - is_match[i];
+        for (i = 0; i < read_data[readi]->length; i++) delta[i] = no_match[i] - is_match[i];
         double a = sum(is_match, read_data[readi]->length);
         double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
 
         double prgu, prgv;
-        //for (i =0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
+        //for (i =0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
         //printf("\t%s\t%d\t%d\t%s\n", read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
         if (has_indel || dp) {
             prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
@@ -797,10 +797,19 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
             prgv = log_add_exp(prgv, readprobability);
         }
 
+        if (prgv > read_data[readi]->prgv && read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= ((variant_t *)var_data[stat->combo->data[0]])->pos && read_data[readi]->pos <= ((variant_t *)var_data[stat->combo->data[stat->combo->len - 1]])->pos) { // read crosses a variant in current combo
+            read_data[readi]->index = seti;
+            read_data[readi]->prgu = prgu;
+            read_data[readi]->prgv = prgv;
+            read_data[readi]->pout = pout;
+        }
+
         /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
         pout += lgomega;
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
+
+        vector_double_add(stat->read_prgv, prgv);
 
         /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
         double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
@@ -813,25 +822,6 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         if (prgv > prgu && prgv - prgu > 0.69) stat->alt_count += 1;
         else if (prgu > prgv && prgu - prgv > 0.69) stat->ref_count += 1;
 
-        if (verbose && prgv > read_data[readi]->prgv && read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= ((variant_t *)var_data[stat->combo->data[0]])->pos && read_data[readi]->pos <= ((variant_t *)var_data[stat->combo->data[stat->combo->len - 1]])->pos) { // read crosses a variant in current combo
-            read_data[readi]->prgu = prgu;
-            read_data[readi]->prgv = prgv;
-            read_data[readi]->pout = pout;
-
-            vector_destroy(read_data[readi]->var_list); free(read_data[readi]->var_list); read_data[readi]->var_list = NULL;
-            read_data[readi]->var_list = vector_create(8, VOID_T);
-
-            int n;
-            char *token;
-            for (i = 0; i < stat->combo->len; ++i) {
-                variant_t *v = var_data[stat->combo->data[i]];
-                n = snprintf(NULL, 0, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt) + 1;
-                token = malloc(n * sizeof *token);
-                snprintf(token, n, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt);
-                vector_add(read_data[readi]->var_list, token);
-            }
-        }
-
         /* Priors */
         *ref += prgu + ref_prior;
         stat->alt += prgv + alt_prior;
@@ -840,15 +830,15 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         if (debug >= 2) {
             fprintf(stderr, "::\t%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
             fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
-            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+            for (i = 0; i < read_data[readi]->n_cigar; i++) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
-            for (i = 0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
+            for (i = 0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
             fprintf(stderr, "\t");
             if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
             else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
             if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
             fprintf(stderr, "%s\t", read_data[readi]->qseq);
-            for (i = 0; i < read_data[readi]->length; ++i) fprintf(stderr, "%d ", read_data[readi]->qual[i]);
+            for (i = 0; i < read_data[readi]->length; i++) fprintf(stderr, "%d ", read_data[readi]->qual[i]);
             fprintf(stderr, "\n");
         }
     }
@@ -856,7 +846,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     free(altseq); altseq = NULL;
     if (debug >= 1) {
         fprintf(stderr, "==\t%f\t%f\t%f\t%d\t%d\t%d\t", *ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
-        for (i = 0; i < stat->combo->len; ++i) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n");
+        for (i = 0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n");
     }
 }
 
@@ -882,90 +872,93 @@ static char *evaluate(const vector_t *var_set) {
     /* Variant combinations as a vector of vectors */
     vector_t *combo = powerset(var_set->len, maxh);
     /*
-    for (seti = 0; seti < combo->len; ++seti) { // Print combinations
+    for (seti = 0; seti < combo->len; seti++) { // Print combinations
         fprintf(stderr, "%d\t", (int)seti); 
-        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { fprintf(stderr, "%d;", ((vector_int_t *)combo->data[seti])->data[i]); } fprintf(stderr, "\t"); 
-        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; ++i) { variant_t *v = var_data[((vector_int_t *)combo->data[seti])->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n"); 
+        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; i++) { fprintf(stderr, "%d;", ((vector_int_t *)combo->data[seti])->data[i]); } fprintf(stderr, "\t"); 
+        for (i = 0; i < ((vector_int_t *)combo->data[seti])->len; i++) { variant_t *v = var_data[((vector_int_t *)combo->data[seti])->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n"); 
     }
     */
 
     double ref = 0;
     vector_t *stats = vector_create(var_set->len + 1, STATS_T);
-    for (seti = 0; seti < combo->len; ++seti) { // all, singles
+
+    for (seti = 0; seti < combo->len; seti++) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti]);
         vector_add(stats, s);
-        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, read_list->len);
+        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, read_list->len, seti);
     }
     if (var_set->len > 1) { // doubles and beyond
         heap_t *h = heap_create(STATS_T);
-        for (seti = 1; seti < combo->len; ++seti) heap_push(h, ((stats_t *)stats->data[seti])->mut, stats->data[seti]);
+        for (seti = 1; seti < combo->len; seti++) heap_push(h, ((stats_t *)stats->data[seti])->mut, stats->data[seti]);
 
         stats_t *s;
         while (s = heap_pop(h), s != NULL) {
-            if (s->combo->len > 1) vector_add(stats, s);
             if ((int)stats->len - var_set->len - 1 >= maxh) continue;
 
             vector_t *c = vector_create(8, VOID_T);
             derive_combo(c, s->combo, var_set->len);
-            for (seti = 0; seti < c->len; ++seti) {
-                stats_t *s_new = stats_create((vector_int_t *)c->data[seti]);
-                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, read_list->len);
+            for (i = 0; i < c->len; i++) {
+                stats_t *s_new = stats_create((vector_int_t *)c->data[i]);
+                vector_add(stats, s_new);
+                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1);
                 heap_push(h, s_new->mut, s_new);
             }
             vector_free(c);
         }
-        //for (i = 1; i <= h->len; ++i) { s = (stats_t *)h->node[i].data; if (s->combo->len > 1) { stats_destroy(s); free(h->node[i].data); h->node[i].data = NULL; } } // destroy the heap, but leave the singles as they are in the stats vector
+        //for (i = 1; i <= h->len; i++) { s = (stats_t *)h->node[i].data; if (s->combo->len > 1) { stats_destroy(s); free(h->node[i].data); h->node[i].data = NULL; } } // destroy the heap, but leave the singles as they are in the stats vector
         heap_free(h);
     }
     vector_free(combo);
 
     stats_t **stat = (stats_t **)stats->data;
-    if (verbose) {
-        for (readi = 0; readi < read_list->len; ++readi) {
-            if (read_data[readi]->prgu == 0 && read_data[readi]->prgv == 0 && read_data[readi]->pout == 0) continue; // unprocessed read
-            flockfile(stderr);
-            fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
-            fprintf(stderr, "%f\t%f\t%f\t", read_data[readi]->prgu, read_data[readi]->prgv, read_data[readi]->pout);
-            for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
-            fprintf(stderr, "\t");
-            if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
-            else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
-            if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
-            else fprintf(stderr, "NONE\t");
-            fprintf(stderr, "[");
-            for (i = 0; i < read_data[readi]->var_list->len; ++i) fprintf(stderr, "%s", (char *)read_data[readi]->var_list->data[i]);
-            fprintf(stderr, "]\n");
-            funlockfile(stderr);
-        }
+
+    /* Heterozygous haplotypes as mixture model hypotheses */
+    int c[stats->len];
+    vector_int_t *haplotypes = vector_int_create(8);
+    memset(c, 0, sizeof(c));
+    for (i = 0; i < read_list->len; i++) c[read_data[i]->index]++; // combinations, based on best combination in each read
+    for (i = 0; i < stats->len; i++) {
+        if ((double)c[i] / read_list->len > 0.01) vector_int_add(haplotypes, i); // relevant combination if read count > 1%
+    }
+    combo = vector_create(haplotypes->len, VOID_T);
+    if (haplotypes->len > 1) combinations(combo, 2, haplotypes->len); // combination pairs
+
+    int x, y;
+    double prhap[combo->len];
+    memset(prhap, 0, sizeof(prhap));
+    for (seti = 0; seti < combo->len; seti++) { // mixture model probabilities of combination pairs
+        x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
+        y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
+        for (readi = 0; readi < read_list->len; readi++) prhap[seti] += log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]) + LG50;
     }
 
-    double total = log_add_exp(ref, stat[0]->mut);
-    for (seti = 1; seti < stats->len; ++seti) { total = log_add_exp(total, log_add_exp(ref, stat[seti]->mut)); }
+    double total = ref;
+    for (seti = 0; seti < stats->len; seti++) total = log_add_exp(total, stat[seti]->mut);
+    for (seti = 0; seti < combo->len; seti++) total = log_add_exp(total, prhap[seti]);
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
     if (mvh) { /* Max likelihood variant hypothesis */
         int max_seti = 0;
         double has_alt = stat[0]->mut;
-        for (seti = 1; seti < stats->len; ++seti) { 
+        for (seti = 1; seti < stats->len; seti++) { 
             if (stat[seti]->mut > has_alt) {
                 has_alt = stat[seti]->mut;
                 max_seti = seti;
             }
         }
         vector_t *v = vector_create(var_set->len, VARIANT_T);
-        for (i = 0; i < stat[max_seti]->combo->len; ++i) vector_add(v, var_data[stat[max_seti]->combo->data[i]]);
+        for (i = 0; i < stat[max_seti]->combo->len; i++) vector_add(v, var_data[stat[max_seti]->combo->data[i]]);
         variant_print(&output, v, 0, (int)read_list->len, stat[max_seti]->ref_count, stat[max_seti]->alt_count, total, has_alt, ref);
         vector_free(v);
     }
     else { /* Marginal probabilities & likelihood ratios*/
-        for (i = 0; i < var_set->len; ++i) {
+        for (i = 0; i < var_set->len; i++) {
             double has_alt = 0;
-            double not_alt = 0;
+            double not_alt = ref;
             int acount = -1;
             int rcount = -1;
-            for (seti = 0; seti < stats->len; ++seti) {
-                not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
+            for (seti = 0; seti < stats->len; seti++) {
                 if (variant_find(stat[seti]->combo, i) != -1) { // if variant is in this combination
                     has_alt = (has_alt == 0) ? stat[seti]->mut : log_add_exp(has_alt, stat[seti]->mut);
                     if (stat[seti]->alt_count > acount) {
@@ -977,9 +970,49 @@ static char *evaluate(const vector_t *var_set) {
                     not_alt = log_add_exp(not_alt, stat[seti]->mut);
                 }
             }
+            for (seti = 0; seti < combo->len; seti++) {
+                x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
+                y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
+                if (variant_find(stat[x]->combo, i) != -1 || variant_find(stat[y]->combo, i) != -1) {
+                    has_alt = log_add_exp(has_alt, prhap[seti]);
+                    if (stat[x]->alt_count + stat[y]->alt_count > acount) {
+                        acount = stat[x]->alt_count + stat[y]->alt_count;
+                        rcount = (stat[x]->ref_count > stat[y]->ref_count) ? stat[x]->ref_count : stat[y]->ref_count;
+                    }
+                }
+                else {
+                    not_alt = log_add_exp(not_alt, prhap[seti]);
+                }
+            }
             variant_print(&output, var_set, i, (int)read_list->len, rcount, acount, total, has_alt, not_alt);
         }
     }
+
+    if (verbose) {
+        for (readi = 0; readi < read_list->len; readi++) {
+            if (read_data[readi]->prgu == 0 && read_data[readi]->prgv == 0 && read_data[readi]->pout == 0) continue; // unprocessed read
+            flockfile(stderr);
+            fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
+            fprintf(stderr, "%f\t%f\t%f\t", read_data[readi]->prgu, read_data[readi]->prgv, read_data[readi]->pout);
+            for (i = 0; i < read_data[readi]->n_cigar; i++) fprintf(stderr, "%d%c", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+            fprintf(stderr, "\t");
+            if (read_data[readi]->multimapXA != NULL) fprintf(stderr, "%s\t", read_data[readi]->multimapXA);
+            else fprintf(stderr, "%d\t", read_data[readi]->multimapNH);
+            if (read_data[readi]->flag != NULL) fprintf(stderr, "%s\t", read_data[readi]->flag);
+            else fprintf(stderr, "NONE\t");
+            fprintf(stderr, "[");
+            for (i = 0; i < stat[read_data[readi]->index]->combo->len; i++) {
+                variant_t *v = var_data[stat[read_data[readi]->index]->combo->data[i]];
+                fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt);
+            }
+            fprintf(stderr, "]\n");
+            funlockfile(stderr);
+        }
+    }
+
+    for (i = 0; i < combo->len; i++) vector_int_free(combo->data[i]);
+    vector_free(combo);
+    vector_int_free(haplotypes);
     vector_destroy(read_list); free(read_list); read_list = NULL;
     vector_destroy(stats); free(stats); stats = NULL;
     return output;
@@ -1072,12 +1105,12 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     int flag_add = 1;
     while (flag_add) {
         flag_add = 0;
-        for (i = 0; i < var_set->len; ++i) {
+        for (i = 0; i < var_set->len; i++) {
             vector_t *curr_set = (vector_t *)var_set->data[i];
             if (curr_set->len == 1) continue;
 
             int flag_nonset = 1;
-            for (j = 0; j < curr_set->len - 1; ++j) { // check if all entries have the same position
+            for (j = 0; j < curr_set->len - 1; j++) { // check if all entries have the same position
                 variant_t *curr = (variant_t *)curr_set->data[j];
                 variant_t *next = (variant_t *)curr_set->data[j + 1];
                 if (curr->pos == next->pos && strcmp(curr->chr, next->chr) == 0 && strcmp(curr->ref, next->ref) == 0 && strcmp(curr->alt, next->alt) == 0) vector_del(curr_set, j + 1); // delete duplicate entries
@@ -1092,7 +1125,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
                 }
             }
             else { // multiple entries comprising a set
-                for (j = 0; j < curr_set->len - 1; ++j) {
+                for (j = 0; j < curr_set->len - 1; j++) {
                     variant_t *curr = (variant_t *)curr_set->data[j];
                     variant_t *next = (variant_t *)curr_set->data[j + 1];
                     if (curr->pos == next->pos) {
@@ -1117,7 +1150,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
 
     vector_t *queue = vector_create(var_set->len, VOID_T);
     vector_t *results = vector_create(var_set->len, VOID_T);
-    for (i = 0; i < var_set->len; ++i) {
+    for (i = 0; i < var_set->len; i++) {
         vector_add(queue, var_set->data[i]);
     }
     work_t *w = malloc(sizeof (work_t));
@@ -1128,8 +1161,8 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     pthread_mutex_init(&w->r_lock, NULL);
 
     pthread_t tid[nthread];
-    for (i = 0; i < nthread; ++i) pthread_create(&tid[i], NULL, pool, w);
-    for (i = 0; i < nthread; ++i) pthread_join(tid[i], NULL);
+    for (i = 0; i < nthread; i++) pthread_create(&tid[i], NULL, pool, w);
+    for (i = 0; i < nthread; i++) pthread_join(tid[i], NULL);
 
     pthread_mutex_destroy(&w->q_lock);
     pthread_mutex_destroy(&w->r_lock);
@@ -1139,7 +1172,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
 
     qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");
-    for (i = 0; i < results->len; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
+    for (i = 0; i < results->len; i++) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;
     print_status("# Done:\t%s\t%s", bam_file, asctime(time_info));
@@ -1293,7 +1326,7 @@ int main(int argc, char **argv) {
     pthread_mutex_destroy(&refseq_lock);
 
     khiter_t k;
-    for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {
+    for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
         if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
     }
     kh_destroy(rsh, refseq_hash);

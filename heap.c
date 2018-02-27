@@ -34,7 +34,7 @@ void heap_free(heap_t *a) {
 void heap_destroy(heap_t *a) {
     size_t i;
     enum type var_type = a->type;
-    for (i = 1; i <= a->len; ++i) {
+    for (i = 1; i <= a->len; i++) {
         switch (var_type) {
             case STATS_T:
                 stats_destroy((stats_t *)a->node[i].data);

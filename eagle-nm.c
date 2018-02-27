@@ -122,7 +122,7 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
 
             j = 0;
             int splice_pos = 0; // track splice position in reads
-            for (i = 0; i < read->n_cigar; ++i) {
+            for (i = 0; i < read->n_cigar; i++) {
                 read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
                 read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
                 read->splice_pos[i] = 0;
@@ -154,7 +154,7 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
             uint8_t *qual = bam_get_qual(aln);
-            for (i = 0; i < read->length; ++i) {
+            for (i = 0; i < read->length; i++) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
                 read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
             }
@@ -190,7 +190,7 @@ fasta_t *refseq_fetch(char *name, const char *fa_file) {
     if (k != kh_end(refseq_hash)) {
         vector_t *node = &kh_val(refseq_hash, k);
         fasta_t **f = (fasta_t **)node->data;
-        for (i = 0; i < node->len; ++i) {
+        for (i = 0; i < node->len; i++) {
             if (strcmp(f[i]->name, name) == 0) {
                 pthread_mutex_unlock(&refseq_lock);
                 return f[i];
@@ -214,7 +214,7 @@ fasta_t *refseq_fetch(char *name, const char *fa_file) {
     fasta_t *f = fasta_create(name);
     f->seq = fai_fetch(fai, name, &f->seq_length);
     char *s;
-    for (s = f->seq; *s != '\0'; ++s) *s = toupper(*s);
+    for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
 
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
@@ -228,8 +228,8 @@ fasta_t *refseq_fetch(char *name, const char *fa_file) {
 
 void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
     int i, b; // array[width * row + col] = value
-    for (b = 0; b < read_length; ++b) {
-        for (i = 0; i < NT_CODES; ++i) matrix[NT_CODES * b + i] = no_match[b];
+    for (b = 0; b < read_length; b++) {
+        for (i = 0; i < NT_CODES; i++) matrix[NT_CODES * b + i] = no_match[b];
         matrix[NT_CODES * b + seqnt_map[seq[b] - 'A']] = is_match[b];
         switch (seq[b]) {
         case 'A':
@@ -275,7 +275,7 @@ void set_prob_matrix(double *matrix, const char *seq, int read_length, const dou
 static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int baseline) {
     int i, c; // array[width * row + col] = value
     double probability = 0;
-    for (i = pos;  i < pos + read_length; ++i) {
+    for (i = pos;  i < pos + read_length; i++) {
         if (i < 0) continue;
         if (i >= seq_length) break;
 
@@ -296,7 +296,7 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
     double baseline = probability;
 
     int i;
-    for (i = start; i < end; ++i) {
+    for (i = start; i < end; i++) {
         if (i >= seq_length) break;
         if (i != pos) {
             probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, baseline));
@@ -322,7 +322,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         int g_pos = pos;
         int r_len;
         double *submatrix;
-        for (i = 0; i <= n_splice; ++i) {
+        for (i = 0; i <= n_splice; i++) {
             if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
             else r_len = read_length -  1 - r_pos + 1;
             n = r_len / 2;
@@ -352,7 +352,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
 
     vector_double_t *r = vector_double_create(abs(end - start)); // reference probability per position i
     vector_double_t *a = vector_double_create(abs(end - start)); // alternative probability per position i
-    for (i = start; i < end; ++i) {
+    for (i = start; i < end; i++) {
         if (i >= seq_length || g_pos >= seq_length) break;
         probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
         vector_double_add(r, probability);
@@ -364,7 +364,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
             if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
 
             probability = 0;
-            for (k = 0; k < 4; ++k) {
+            for (k = 0; k < 4; k++) {
                 if (NT[k] != seq[g_pos]) {
                     p = matrix[NT_CODES * r_pos + seqnt_map[NT[k] - 'A']];
                     probability = (probability == 0) ? p : log_add_exp(probability, p);
@@ -400,7 +400,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const d
         int g_pos = pos;
         int r_len;
         double *submatrix;
-        for (i = 0; i <= n_splice; ++i) {
+        for (i = 0; i <= n_splice; i++) {
             if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
             else r_len = read_length -  1 - r_pos + 1;
             start = g_pos - (r_len / 2);
@@ -439,15 +439,15 @@ static char *evaluate_nomutation(const region_t *g) {
     double ref_probability = 0;
     int ref_count = 0;
     int alt_count = 0;
-    for (g_pos = g->pos1; g_pos <= g->pos2; ++g_pos) {
+    for (g_pos = g->pos1; g_pos <= g->pos2; g_pos++) {
         double ref = 0;
         double alt = 0;
         int r_count = 0;
         int a_count = 0;
 
         /* Aligned reads */
-        for (readi = 0; readi < read_list->len; ++readi) {
-            if (read_data[readi]->pos < g->pos1 || read_data[readi]->pos > g->pos2) continue;
+        for (readi = 0; readi < read_list->len; readi++) {
+            //if (read_data[readi]->pos < g->pos1 || read_data[readi]->pos > g->pos2) continue;
 
             int is_unmap = 0;
             int is_dup = 0;
@@ -467,7 +467,7 @@ static char *evaluate_nomutation(const region_t *g) {
             if (pao && is_secondary) continue;
 
             double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
-            for (i = 0; i < read_data[readi]->length; ++i) {
+            for (i = 0; i < read_data[readi]->length; i++) {
                 is_match[i] = p_match[read_data[readi]->qual[i]];
                 no_match[i] = p_mismatch[read_data[readi]->qual[i]];
             }
@@ -530,13 +530,12 @@ static char *evaluate_nomutation(const region_t *g) {
 
             if (debug > 1) {
                 fprintf(stderr, "::\t%d\t%s\t%d\t%f\t%f\t%f\t%d\t%d\t", g_pos, read_data[readi]->name, read_data[readi]->pos, prgu, prgv, prgu-prgv, r_count, a_count);
-                for (i = 0; i < read_data[readi]->n_cigar; ++i) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
+                for (i = 0; i < read_data[readi]->n_cigar; i++) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
                 fprintf(stderr, "\n");
             }
         }
-        //ref_probability = (ref_probability == 0) ? ref : log_add_exp(ref_probability, ref);
         ref_probability = ref;
-        alt_probability = (alt > alt_probability) ? alt : alt_probability;
+        alt_probability = (alt_probability == 0) ? alt : log_add_exp(alt_probability, alt);
         if (a_count > alt_count) {
             ref_count = r_count;
             alt_count = a_count;
@@ -593,7 +592,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
 
     vector_t *queue = vector_create(nregions, VOID_T);
     vector_t *results = vector_create(nregions, VOID_T);
-    for (i = 0; i < nregions; ++i) {
+    for (i = 0; i < nregions; i++) {
         vector_add(queue, reg_data[i]);
     }
     work_t *w = malloc(sizeof (work_t));
@@ -604,8 +603,8 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     pthread_mutex_init(&w->r_lock, NULL);
 
     pthread_t tid[nthread];
-    for (i = 0; i < nthread; ++i) pthread_create(&tid[i], NULL, pool, w);
-    for (i = 0; i < nthread; ++i) pthread_join(tid[i], NULL);
+    for (i = 0; i < nthread; i++) pthread_create(&tid[i], NULL, pool, w);
+    for (i = 0; i < nthread; i++) pthread_join(tid[i], NULL);
 
     pthread_mutex_destroy(&w->q_lock);
     pthread_mutex_destroy(&w->r_lock);
@@ -614,7 +613,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
 
     qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# CHR\tPOS1\tPOS2\tReads\tRefCount\tAltCount\tRefProb\tAltProb\tOdds\n");
-    for (i = 0; i < results->len; ++i) fprintf(out_fh, "%s", (char *)results->data[i]);
+    for (i = 0; i < results->len; i++) fprintf(out_fh, "%s", (char *)results->data[i]);
     vector_destroy(queue); free(queue); queue = NULL;
     vector_destroy(results); free(results); results = NULL;
     print_status("# Done:\t%s\t%s", bam_file, asctime(time_info));
@@ -726,7 +725,7 @@ int main(int argc, char **argv) {
     pthread_mutex_destroy(&refseq_lock);
 
     khiter_t k;
-    for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); ++k) {
+    for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
         if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
     }
     kh_destroy(rsh, refseq_hash);

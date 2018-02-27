@@ -79,11 +79,11 @@ double log_add_exp(double a, double b) {
 double log_sum_exp(const double *a, size_t size) {
     int i;
     double max_exp = a[0]; 
-    for (i = 1; i < size; ++i) { 
+    for (i = 1; i < size; i++) { 
         if (a[i] > max_exp) max_exp = a[i]; 
     }
     double s = 0;
-    for (i = 0; i < size; ++i) s += exp(a[i] - max_exp);
+    for (i = 0; i < size; i++) s += exp(a[i] - max_exp);
     return log(s) + max_exp;
 }
 
@@ -120,7 +120,7 @@ void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
     /* FastQ quality score to ln probability lookup table */
     int i;
     double a;
-    for (i = 0; i < size; ++i) { 
+    for (i = 0; i < size; i++) { 
         if (i == 0) a = -0.01;
         else a = (double)i / -10 * M_1_LOG10E; //convert to ln
         p_match[i] = log(1 - exp(a)); // log(1-err)
@@ -130,11 +130,11 @@ void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
 
 void combinations(vector_t *combo, int k, int n) {
     int i, c[k];
-    for (i = 0; i < k; ++i) c[i] = i; // first combination
+    for (i = 0; i < k; i++) c[i] = i; // first combination
     while (1) { // while (next_comb(c, k, n)) {
         // record the combination
         vector_int_t *v = vector_int_create(k);
-        for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
+        for (i = 0; i < k; i++) vector_int_add(v, c[i]);
         vector_add(combo, v);
 
         i = k - 1;
@@ -146,7 +146,7 @@ void combinations(vector_t *combo, int k, int n) {
         /* Combination (n-k, n-k+1, ..., n) reached. No more combinations can be generated */
         if (c[0] > n - k) break; // return 0;
         /* c now looks like (..., x, n, n, n, ..., n), turn it into (..., x, x + 1, x + 2, ...) */
-        for (i = i + 1; i < k; ++i) c[i] = c[i - 1] + 1;
+        for (i = i + 1; i < k; i++) c[i] = c[i - 1] + 1;
         // return 1;
     }
 }
@@ -157,17 +157,17 @@ void derive_combo(vector_t *combo, vector_int_t *prev, int n) { // Derive the co
     int k = prev->size + 1;
     int i, c[k];
 
-    for (i = 0; i < prev->size; ++i) c[i] = prev->data[i]; // first combination
+    for (i = 0; i < prev->size; i++) c[i] = prev->data[i]; // first combination
     c[prev->size] = c[prev->size - 1] + 1;
 
     while (c[prev->size] < n) { // generate and record combinations
-        //for (i = 0; i < k; ++i) { fprintf(stderr, "%d;", c[i]); } fprintf(stderr, "\n");
+        //for (i = 0; i < k; i++) { fprintf(stderr, "%d;", c[i]); } fprintf(stderr, "\n");
         vector_int_t *v = vector_int_create(k);
-        for (i = 0; i < k; ++i) vector_int_add(v, c[i]);
+        for (i = 0; i < k; i++) vector_int_add(v, c[i]);
         vector_add(combo, v);
         c[prev->size]++;
     }
-    //int ii, jj; for (ii = 0; ii < combo->size; ++ii) { vector_int_t **c = (vector_int_t **)combo->data; fprintf(stderr, "%d\t", (int)ii); for (jj = 0; jj < c[ii]->size; ++jj) { fprintf(stderr, "%d;", c[ii]->data[jj]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
+    //int ii, jj; for (ii = 0; ii < combo->size; ii++) { vector_int_t **c = (vector_int_t **)combo->data; fprintf(stderr, "%d\t", (int)ii); for (jj = 0; jj < c[ii]->size; jj++) { fprintf(stderr, "%d;", c[ii]->data[jj]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
 }
 
 vector_t *powerset(int n, int maxh) {
@@ -180,13 +180,13 @@ vector_t *powerset(int n, int maxh) {
         combinations(combo, 1, n);
         /*
         int k; 
-        for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; ++k) combinations(combo, k, n);
+        for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; k++) combinations(combo, k, n);
         */
         /*
         int i = 0;
         while (++i < combo->size) {
             vector_int_t **c = (vector_int_t **)combo->data; 
-            //fprintf(stderr, "%d\t%d\t", i, n); int jj; for (jj = 0; jj < c[i]->size; ++jj) { fprintf(stderr, "%d;", c[i]->data[jj]); } fprintf(stderr, "\n"); 
+            //fprintf(stderr, "%d\t%d\t", i, n); int jj; for (jj = 0; jj < c[i]->size; jj++) { fprintf(stderr, "%d;", c[i]->data[jj]); } fprintf(stderr, "\n"); 
             derive_combo(combo, c[i], n);
         }
         */

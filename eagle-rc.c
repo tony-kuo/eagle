@@ -47,7 +47,7 @@ static void add2var_list(vector_t *var_list, char *set) {
     size_t i;
     for (s = set + 1; sscanf(s, "%[^;];%n", var, &n) == 1; s += n) { // scan variant set
         char *v = strdup(var);
-        for (i = 0; i < var_list->len; ++i) {
+        for (i = 0; i < var_list->len; i++) {
             if (strcmp(v, (char *)var_list->data[i]) == 0) break;
         }
         if (i == var_list->len) { vector_add(var_list, v); }
@@ -128,7 +128,7 @@ static int readinfo_read(const char* filename) {
         if (k != kh_end(read_hash)) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;                                                                                                                          
-            for (i = 0; i < node->len; ++i) {
+            for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0) {
                     r[i]->prgu += prgu;
                     r[i]->prgv += prgv;
@@ -213,7 +213,7 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
         if (k != kh_end(read_hash)) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;                                                                                                                          
-            for (i = 0; i < node->len; ++i) {
+            for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0) {
                     if (r[i]->index == 0) out = ref_out;
                     else if (!refonly && r[i]->index == 1) out = alt_out;
@@ -256,11 +256,11 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
 
     size_t readi, i, j;
 	khiter_t k;
-    for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
+    for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;
-            for (readi = 0; readi < node->len; ++readi) {
+            for (readi = 0; readi < node->len; readi++) {
                 char **v = (char **)r[readi]->var_list->data;
                 size_t nvariants = r[readi]->var_list->len;
  
@@ -268,7 +268,7 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
                     multiallele = 1;
                     int prev_pos = -1;
-                    for (i = 0; i < nvariants; ++i) { 
+                    for (i = 0; i < nvariants; i++) { 
                         int pos;
                         int t = sscanf(v[i], "%*[^,],%d,%*[^,],%*[^,],", &pos);
                         if (t < 1) { exit_err("bad fields in %s\n", v[i]); }
@@ -281,19 +281,19 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                     if (multiallele) {
                         r[readi]->index = 3;
                         fprintf(stdout, "%s\tMUL\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
-                        for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
+                        for (i = 0; i < nvariants; i++) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
                         continue;
                     }
                 }
 
                 // if any variant in list is not in EAGLE output, it suggests variants are from a different phase if alt wins
                 multiallele = 0;
-                for (i = 0; i < nvariants; ++i) { 
+                for (i = 0; i < nvariants; i++) { 
                     khiter_t k = kh_get(vh, var_hash, v[i]);
                     if (k != kh_end(var_hash)) {
                         vector_t *var_hash_node = &kh_val(var_hash, k);
                         char **vv = (char **)var_hash_node->data;                                                                                                                          
-                        for (j = 0; j < var_hash_node->len; ++j) {
+                        for (j = 0; j < var_hash_node->len; j++) {
                             if (strcmp(v[i], vv[j]) == 0) break;
                         }
                         if (j == var_hash_node->len) multiallele = 1;
@@ -321,7 +321,7 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
                     r[readi]->index = 4;
                     fprintf(stdout, "%s\tUNK\t%s\t%d\t%f\t%f\t%f\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout);
                 }
-                for (i = 0; i < nvariants; ++i) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
+                for (i = 0; i < nvariants; i++) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
             }
         }
     }
@@ -370,7 +370,7 @@ static void process_list(const char *filename, const char *bam_file, const char 
             size_t i;
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;                                                                                                                          
-            for (i = 0; i < node->len; ++i) {
+            for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0) {
                     if ((prgu + prgv) > (r[i]->prgu + r[i]->prgv)) {
                         r[i]->prgu = prgu;
@@ -484,12 +484,12 @@ int main(int argc, char **argv) {
     }
 
     khiter_t k;
-    for (k = kh_begin(var_hash); k != kh_end(var_hash); ++k) {
+    for (k = kh_begin(var_hash); k != kh_end(var_hash); k++) {
         if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
     }
     kh_destroy(vh, var_hash);
 
-    for (k = kh_begin(read_hash); k != kh_end(read_hash); ++k) {
+    for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
         if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
     }
     kh_destroy(rh, read_hash);

@@ -35,7 +35,7 @@ void vector_free(vector_t *a) {
 void vector_destroy(vector_t *a) {
     size_t i;
     enum type var_type = a->type;
-    for (i = 0; i < a->len; ++i) {
+    for (i = 0; i < a->len; i++) {
         switch (var_type) {
             case STATS_T:
                 stats_destroy((stats_t *)a->data[i]);
@@ -143,6 +143,12 @@ vector_double_t *vector_double_create(size_t initial_size) {
     return a;
 }
 
+void vector_double_free(vector_double_t *a) {
+    a->len = 0;
+    free(a->data); a->data = NULL;
+    free(a); a = NULL;
+}
+
 void vector_double_add(vector_double_t *a, double entry) {
     if (a->len >= a->size) {
         a->size *= 2;
@@ -151,12 +157,6 @@ void vector_double_add(vector_double_t *a, double entry) {
         else { a->data = p; }
     }
     a->data[a->len++] = entry;
-}
-
-void vector_double_free(vector_double_t *a) {
-    a->len = 0;
-    free(a->data); a->data = NULL;
-    free(a); a = NULL;
 }
 
 void vector_double_del(vector_double_t *a, int i) {
@@ -262,6 +262,7 @@ void region_destroy(region_t *g) {
 stats_t *stats_create(vector_int_t *combo) {
     stats_t *s = malloc(sizeof (stats_t));
     s->combo = combo;
+    s->read_prgv = vector_double_create(8);
     s->het = 0;
     s->alt = 0;
     s->mut = 0;
@@ -273,6 +274,7 @@ stats_t *stats_create(vector_int_t *combo) {
 void stats_destroy(stats_t *s) {
     s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
     vector_int_free(s->combo);
+    vector_double_free(s->read_prgv);
 }
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type) {

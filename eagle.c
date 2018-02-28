@@ -912,11 +912,12 @@ static char *evaluate(const vector_t *var_set) {
 
     stats_t **stat = (stats_t **)stats->data;
 
-    /* Heterozygous haplotypes as mixture model hypotheses */
+    /* Heterozygous non-reference haplotypes as mixture model hypotheses */
     int c[stats->len];
-    vector_int_t *haplotypes = vector_int_create(8);
     memset(c, 0, sizeof(c));
     for (i = 0; i < read_list->len; i++) c[read_data[i]->index]++; // combinations, based on best combination in each read
+
+    vector_int_t *haplotypes = vector_int_create(8);
     for (i = 0; i < stats->len; i++) {
         if ((double)c[i] / read_list->len > 0.01) vector_int_add(haplotypes, i); // relevant combination if read count > 1%
     }

@@ -290,11 +290,6 @@ int nat_sort_cmp(const void *a, const void *b, enum type var_type) {
             c2 = NULL;
             break;
         }
-        case STR_T: {
-            str1 = strdup((char *)a);
-            str2 = strdup((char *)b);
-            break;
-        }
         case REGION_T: {
             region_t *c1 = *(region_t **)a;
             region_t *c2 = *(region_t **)b;

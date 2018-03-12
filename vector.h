@@ -10,7 +10,7 @@ This program is distributed under the terms of the GNU General Public License
 #ifndef _vector_h_
 #define _vector_h_
 
-enum type {VOID_T, STR_T, STATS_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
+enum type {VOID_T, STATS_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
 
 typedef struct {
     size_t len, size;

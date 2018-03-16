@@ -1029,6 +1029,7 @@ static void *pool(void *work) {
     vector_t *queue = (vector_t *)w->queue;
     vector_t *results = (vector_t *)w->results;
 
+    size_t n = queue->len / 10;
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
         pthread_mutex_lock(&w->q_lock);
         vector_t *var_set = (vector_t *)vector_pop(queue);
@@ -1039,8 +1040,8 @@ static void *pool(void *work) {
         if (outstr == NULL) continue;
 
         pthread_mutex_lock(&w->r_lock);
-        if (!verbose && results->len + queue->len > 100 && results->len % ((results->len + queue->len) / 10) == 0) { 
-            print_status("# Progress: %d%%: %d / %d\t%s", 100 * (int)results->len / (int)(results->len + queue->len), (int)results->len, (int)results->len + (int)queue->len, asctime(time_info));
+        if (!verbose && n > 10 && results->len > 10 && results->len % n == 0) { 
+            print_status("# Progress: %d%%: %d / %d\t%s", 10 * (int)results->len / (int)n, (int)results->len, (int)queue->len, asctime(time_info));
         }
         vector_add(results, outstr);
         vector_free(var_set);

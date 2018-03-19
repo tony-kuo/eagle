@@ -49,6 +49,7 @@ static int nodup;
 static int splice;
 static int verbose;
 static int lowmem;
+static int phred64;
 static double hetbias;
 static double omega, lgomega;
 static int dp, gap_op, gap_ex;
@@ -246,7 +247,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             uint8_t *qual = bam_get_qual(aln);
             for (i = 0; i < read->length; i++) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
+                read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
 
@@ -832,7 +833,7 @@ static char *evaluate(const vector_t *var_set) {
     /* Reads in variant region coordinates */
     vector_t *read_list = bam_fetch(bam_file, var_data[0]->chr, var_data[0]->pos, var_data[var_set->len - 1]->pos);
     if (read_list->len == 0) {
-        free(read_list); read_list = NULL;
+        vector_destroy(read_list); free(read_list); read_list = NULL;
         return NULL;
     }
     read_t **read_data = (read_t **)read_list->data;
@@ -1037,15 +1038,15 @@ static void *pool(void *work) {
         if (var_set == NULL) break;
         
         char *outstr = evaluate(var_set);
-        if (outstr == NULL) continue;
-
-        pthread_mutex_lock(&w->r_lock);
-        if (!verbose && n > 10 && results->len > 10 && results->len % n == 0) { 
-            print_status("# Progress: %d%%: %d / %d\t%s", 10 * (int)results->len / (int)n, (int)results->len, (int)queue->len, asctime(time_info));
+        if (outstr != NULL) {
+            pthread_mutex_lock(&w->r_lock);
+            if (!verbose && n > 10 && results->len > 10 && results->len % n == 0) {
+                print_status("# Progress: %d%%: %d / %d\t%s", 10 * (int)results->len / (int)n, (int)results->len, (int)queue->len, asctime(time_info));
+            }
+            vector_add(results, outstr);
+            pthread_mutex_unlock(&w->r_lock);
         }
-        vector_add(results, outstr);
         vector_free(var_set);
-        pthread_mutex_unlock(&w->r_lock);
     }
     return NULL;
 }
@@ -1147,7 +1148,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
     else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->len, asctime(time_info)); }
 
-    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d lowmem=%d\n", maxh, mvh, pao, isc, nodup, splice, lowmem);
+    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d lowmem=%d phred64=%d\n", maxh, mvh, pao, isc, nodup, splice, lowmem, phred64);
     print_status("#          dp=%d gap_op=%d gap_ex=%d\n", dp, gap_op, gap_ex);
     print_status("#          hetbias=%g omega=%g\n", hetbias, omega);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
@@ -1204,6 +1205,7 @@ static void print_usage() {
     printf("     --gap_ex   INT    DP gap extend penalty. [1].\n");
     printf("     --verbose         Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --lowmem          Low memory usage mode, the default mode for snps, this may be slightly slower for indels but uses less memory.\n");
+    printf("     --phred64         Read quality scores are in phred64.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
 }
@@ -1225,6 +1227,7 @@ int main(int argc, char **argv) {
     nodup = 0;
     verbose = 0;
     lowmem = 0;
+    phred64 = 0;
     dp = 0;
     gap_op = 6;
     gap_ex = 1;
@@ -1249,6 +1252,7 @@ int main(int argc, char **argv) {
         {"splice", no_argument, &splice, 1},
         {"verbose", no_argument, &verbose, 1},
         {"lowmem", no_argument, &lowmem, 1},
+        {"phred64", no_argument, &phred64, 1},
         {"dp", no_argument, &dp, 1},
         {"gap_op", optional_argument, NULL, 981},
         {"gap_ex", optional_argument, NULL, 982},

@@ -926,8 +926,8 @@ static char *evaluate(const vector_t *var_set) {
 
     int x, y;
     double prhap[combo->len];
-    memset(prhap, 0, sizeof(prhap));
     for (seti = 0; seti < combo->len; seti++) { // mixture model probabilities of combination pairs
+        prhap[seti] = 0;
         x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
         y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
         for (readi = 0; readi < read_list->len; readi++) prhap[seti] += log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]) + LG50;
@@ -1030,7 +1030,9 @@ static void *pool(void *work) {
     vector_t *queue = (vector_t *)w->queue;
     vector_t *results = (vector_t *)w->results;
 
+    pthread_mutex_lock(&w->q_lock);
     size_t n = queue->len / 10;
+    pthread_mutex_unlock(&w->q_lock);
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
         pthread_mutex_lock(&w->q_lock);
         vector_t *var_set = (vector_t *)vector_pop(queue);

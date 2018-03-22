@@ -1023,6 +1023,7 @@ typedef struct {
     vector_t *queue, *results;
     pthread_mutex_t q_lock;
     pthread_mutex_t r_lock;
+    size_t len;
 } work_t;
 
 static void *pool(void *work) {
@@ -1030,9 +1031,7 @@ static void *pool(void *work) {
     vector_t *queue = (vector_t *)w->queue;
     vector_t *results = (vector_t *)w->results;
 
-    pthread_mutex_lock(&w->q_lock);
-    size_t n = queue->len / 10;
-    pthread_mutex_unlock(&w->q_lock);
+    size_t n = w->len / 10;
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
         pthread_mutex_lock(&w->q_lock);
         vector_t *var_set = (vector_t *)vector_pop(queue);
@@ -1162,6 +1161,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     work_t *w = malloc(sizeof (work_t));
     w->queue = queue;
     w->results = results;
+    w->len = var_set->len;
 
     pthread_mutex_init(&w->q_lock, NULL);
     pthread_mutex_init(&w->r_lock, NULL);

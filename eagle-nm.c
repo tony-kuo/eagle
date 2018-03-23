@@ -109,6 +109,25 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             size_t i, j;
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
+            char *flag = bam_flag2str(aln->core.flag);
+            if (flag != NULL) read->flag = strdup(flag);
+            else read->flag = NULL;
+            free(flag); flag = NULL;
+
+            int n;
+            char *s, token[strlen(read->flag) + 1];
+            for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+                if (strcmp("UNMAP", token) == 0) read->is_unmap = 1;
+                else if (strcmp("DUP", token) == 0) read->is_dup = 1;
+                else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
+                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
+                if (*(s + n) != ',') break;
+            }
+            if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {
+                read_destroy(read);
+                continue;
+            }
+
             int start_align = 0;
             int s_offset = 0; // offset for softclip at start
             int e_offset = 0; // offset for softclip at end
@@ -159,12 +178,6 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
                 read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
-
-            char *s;
-            read->flag = NULL;
-            s = bam_flag2str(aln->core.flag);
-            if (s != NULL) read->flag = strdup(s);
-            free(s); s = NULL;
 
             read->multimapXA = NULL;
             if (bam_aux_get(aln, "XA")) read->multimapXA = strdup(bam_aux2Z(bam_aux_get(aln, "XA")));
@@ -449,23 +462,6 @@ static char *evaluate_nomutation(const region_t *g) {
         for (readi = 0; readi < read_list->len; readi++) {
             //if (read_data[readi]->pos < g->pos1 || read_data[readi]->pos > g->pos2) continue;
 
-            int is_unmap = 0;
-            int is_dup = 0;
-            int is_reverse = 0;
-            int is_secondary = 0;
-            int n;
-            char *s, token[strlen(read_data[readi]->flag) + 1];
-            for (s = read_data[readi]->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-                if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-                else if (strcmp("DUP", token) == 0) is_dup = 1;
-                else if (strcmp("REVERSE", token) == 0) is_reverse = 1;
-                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
-                if (*(s + n) != ',') break;
-            }
-            if (is_unmap) continue;
-            if (nodup && is_dup) continue;
-            if (pao && is_secondary) continue;
-
             double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
             for (i = 0; i < read_data[readi]->length; i++) {
                 is_match[i] = p_match[read_data[readi]->qual[i]];
@@ -482,7 +478,7 @@ static char *evaluate_nomutation(const region_t *g) {
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
             if (read_data[readi]->multimapXA != NULL) {
                 int xa_pos, n;
-                char xa_chr[strlen(read_data[readi]->multimapXA) + 1];
+                char *s, xa_chr[strlen(read_data[readi]->multimapXA) + 1];
                 for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                     if (strcmp(xa_chr, read_data[readi]->chr) != 0 && abs(xa_pos - read_data[readi]->pos) < read_data[readi]->length) { // if secondary alignment does not overlap primary aligment
                         fasta_t *f = refseq_fetch(xa_chr, fa_file);
@@ -492,7 +488,7 @@ static char *evaluate_nomutation(const region_t *g) {
 
                         double *p_readprobmatrix = readprobmatrix;
                         double *newreadprobmatrix = NULL;
-                        if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
+                        if ((xa_pos < 0 && !read_data[readi]->is_reverse) || (xa_pos > 0 && read_data[readi]->is_reverse)) { // opposite of primary alignment strand
                             newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * NT_CODES);
                             p_readprobmatrix = newreadprobmatrix;
                         }

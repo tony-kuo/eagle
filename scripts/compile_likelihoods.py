@@ -51,7 +51,7 @@ def readFiles(files, reads_seen, minrp):
         fh.close
     return(entry)
 
-def compileEntries(entry, likelihood, af, depth, isnegative):
+def compileEntries(entry, likelihood, af, mindepth, maxdepth, isnegative):
     new_entry = {}
     for key in entry:
         # Check LR
@@ -64,9 +64,12 @@ def compileEntries(entry, likelihood, af, depth, isnegative):
         current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0] # Max AF across files
         if isnegative and current[1] > af: continue
         elif not isnegative and current[1] < af: continue
-        # Check read depth
+        # Check read min depth
         current = sorted(entry[key].values(), key=lambda tup:tup[1])[0] # Min Read Depth across files
-        if depth > 0 and current[0] < depth: continue
+        if mindepth > 0 and current[0] < mindepth: continue
+        # Check read max depth
+        current = sorted(entry[key].values(), key=lambda tup:tup[1], reverse=True)[0] # Max Read Depth across files
+        if maxdepth > 0 and current[0] > maxdepth: continue
 
         # Positive samples require: LR >= threshold, AF <= threshold
         # Negative samples require: LR <= threshold, AF >= threshold
@@ -145,7 +148,8 @@ def main():
     parser.add_argument('-maxlr', type=float, default=-2, help='threshold for maximum log likelihood ratio for negative samples [default: -2]')
     parser.add_argument('-minaf', type=float, default=0.3, help='minimum allele frequency for positive samples [default: 0.3]')
     parser.add_argument('-maxaf', type=float, default=0.04, help='maximum allele frequency for negative samples [default: 0.04]')
-    parser.add_argument('-mindepth', type=int, default=10, help='minimum read depth [default: 10]')
+    parser.add_argument('-mindepth', type=int, default=0, help='minimum read depth [default: 0 off]')
+    parser.add_argument('-maxdepth', type=int, default=0, help='maximum read depth [default: 0 off]')
     parser.add_argument('-mincp', type=float, default=0.95, help='minimum combined probability: positive * (1-negative) [default: 0.95]')
     parser.add_argument('-minrp', type=float, default=0.5, help='minimum read proportion: reads seen that are unambiguously ref or alt [default: 0.5]')
     parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth [instead of: ref + alt]')
@@ -153,13 +157,13 @@ def main():
     args = parser.parse_args()
 
     pos = readFiles(args.p, args.seen, args.minrp) 
-    pos_entry = compileEntries(pos, args.minlr, args.minaf, args.mindepth, False)
+    pos_entry = compileEntries(pos, args.minlr, args.minaf, args.mindepth, args.maxdepth, False)
     neg_entry = {}
     pos_loh_entry = {}
     neg_loh_entry = {}
     if args.n:
         neg = readFiles(args.n, args.seen, args.minrp)
-        neg_entry = compileEntries(neg, args.maxlr, args.maxaf, args.mindepth, True)
+        neg_entry = compileEntries(neg, args.maxlr, args.maxaf, args.mindepth, args.maxdepth, True)
         if args.loh:
             (pos_loh_entry, neg_loh_entry) = compileLOH(pos, neg, args.minlr, args.maxlr, args.mindepth)
 

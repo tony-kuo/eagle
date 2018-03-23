@@ -200,6 +200,25 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             size_t i, j;
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
+            char *flag = bam_flag2str(aln->core.flag);
+            if (flag != NULL) read->flag = strdup(flag);
+            else read->flag = NULL;
+            free(flag); flag = NULL;
+
+            int n;
+            char *s, token[strlen(read->flag) + 1];
+            for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+                if (strcmp("UNMAP", token) == 0) read->is_unmap = 1;
+                else if (strcmp("DUP", token) == 0) read->is_dup = 1;
+                else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
+                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
+                if (*(s + n) != ',') break;
+            }
+            if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {
+                read_destroy(read);
+                continue;
+            }
+
             int start_align = 0;
             int s_offset = 0; // offset for softclip at start
             int e_offset = 0; // offset for softclip at end
@@ -250,12 +269,6 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
-
-            char *s;
-            read->flag = NULL;
-            s = bam_flag2str(aln->core.flag);
-            if (s != NULL) read->flag = strdup(s);
-            free(s); s = NULL;
 
             read->multimapXA = NULL;
             if (bam_aux_get(aln, "XA")) read->multimapXA = strdup(bam_aux2Z(bam_aux_get(aln, "XA")));
@@ -469,7 +482,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     prev[0] = 0;
     prev[1] = 0 - gap_op;
     for (j = 2; j < read_length + 1; j++) prev[j] = prev[j - 1] - gap_ex;
-    memset(b_gap_prev, min_value, sizeof(b_gap_prev));
+    for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = min_value;
 
     double max_score = min_value;
     double upleft, open, extend, row_max;
@@ -695,28 +708,6 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; readi++) {
-        /* Only consider reads that map to all in current combination
-        variant_t *first = (variant_t *)stat->combo->data[0];
-        variant_t *last = (variant_t *)stat->combo->data[stat->combo->len - 1];
-        if (read_data[readi]->pos > first->pos || read_data[readi]->pos + read_data[readi]->length < last->pos) continue;
-        */
-        int is_unmap = 0;
-        int is_dup = 0;
-        int is_reverse = 0;
-        int is_secondary = 0;
-        int n;
-        char *s, token[strlen(read_data[readi]->flag) + 1];
-        for (s = read_data[readi]->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-            if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-            else if (strcmp("DUP", token) == 0) is_dup = 1;
-            else if (strcmp("REVERSE", token) == 0) is_reverse = 1;
-            else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
-            if (*(s + n) != ',') break;
-        }
-        if (is_unmap) continue;
-        if (nodup && is_dup) continue;
-        if (pao && is_secondary) continue;
-
         double prgu, prgv;
         //for (i =0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
         //printf("\t%s\t%d\t%d\t%s\n", read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
@@ -733,7 +724,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
         if (read_data[readi]->multimapXA != NULL) {
             int xa_pos, n;
-            char xa_chr[strlen(read_data[readi]->multimapXA) + 1];
+            char *s, xa_chr[strlen(read_data[readi]->multimapXA) + 1];
             for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
                 pout = log_add_exp(pout, elsewhere[readi]); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
                 if (strcmp(xa_chr, read_data[readi]->chr) != 0 && abs(xa_pos - read_data[readi]->pos) < read_data[readi]->length) { // if secondary alignment does not overlap primary aligment
@@ -744,7 +735,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
 
                     double *p_readprobmatrix = readprobmatrix[readi]->data;
                     double *newreadprobmatrix = NULL;
-                    if ((xa_pos < 0 && !is_reverse) || (xa_pos > 0 && is_reverse)) { // opposite of primary alignment strand
+                    if ((xa_pos < 0 && !read_data[readi]->is_reverse) || (xa_pos > 0 && read_data[readi]->is_reverse)) { // opposite of primary alignment strand
                         newreadprobmatrix = reverse(readprobmatrix[readi]->data, read_data[readi]->length * NT_CODES);
                         p_readprobmatrix = newreadprobmatrix;
                     }
@@ -766,7 +757,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
             prgv = log_add_exp(prgv, readprobability);
         }
 
-        if (prgv > read_data[readi]->prgv && read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= ((variant_t *)var_data[stat->combo->data[0]])->pos && read_data[readi]->pos <= ((variant_t *)var_data[stat->combo->data[stat->combo->len - 1]])->pos) { // read crosses a variant in current combo
+        if (prgv > read_data[readi]->prgv && read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= var_data[stat->combo->data[0]]->pos && read_data[readi]->pos <= var_data[stat->combo->data[stat->combo->len - 1]]->pos) { // read crosses a variant in current combo
             read_data[readi]->index = seti;
             read_data[readi]->prgu = prgu;
             read_data[readi]->prgv = prgv;
@@ -919,7 +910,7 @@ static char *evaluate(const vector_t *var_set) {
 
     vector_int_t *haplotypes = vector_int_create(8);
     for (i = 0; i < stats->len; i++) {
-        if ((double)c[i] / read_list->len > 0.01) vector_int_add(haplotypes, i); // relevant combination if read count > 1%
+        if ((double)c[i] / (double)read_list->len > 0.01) vector_int_add(haplotypes, i); // relevant combination if read count > 1%
     }
     combo = vector_create(haplotypes->len, VOID_T);
     if (haplotypes->len > 1) combinations(combo, 2, haplotypes->len); // combination pairs

@@ -682,7 +682,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, vector_double_t **readprobmatrix, double *elsewhere, size_t seti) {
+static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, vector_t *readprobmatrix_list, vector_double_t *elsewhere, size_t seti) {
     size_t i, readi;
     *ref = 0;
     stat->alt = 0;
@@ -709,6 +709,8 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
     /* Aligned reads */
     for (readi = 0; readi < nreads; readi++) {
         double prgu, prgv;
+        vector_double_t **readprobmatrix = (vector_double_t **)readprobmatrix_list->data;
+
         //for (i =0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
         //printf("\t%s\t%d\t%d\t%s\n", read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
         if (has_indel || dp) {
@@ -719,14 +721,14 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
             calc_prob_snps(&prgu, &prgv, stat->combo, var_data, readprobmatrix[readi]->data, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
         }
         //printf("%f\t%f\n\n", prgv, prgu);
-        double pout = elsewhere[readi];
+        double pout = elsewhere->data[readi];
 
         /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
         if (read_data[readi]->multimapXA != NULL) {
             int xa_pos, n;
             char *s, xa_chr[strlen(read_data[readi]->multimapXA) + 1];
             for (s = read_data[readi]->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
-                pout = log_add_exp(pout, elsewhere[readi]); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
+                pout = log_add_exp(pout, elsewhere->data[readi]); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
                 if (strcmp(xa_chr, read_data[readi]->chr) != 0 && abs(xa_pos - read_data[readi]->pos) < read_data[readi]->length) { // if secondary alignment does not overlap primary aligment
                     fasta_t *f = refseq_fetch(xa_chr, fa_file);
                     if (f == NULL) continue;
@@ -752,7 +754,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, ch
         else if (read_data[readi]->multimapNH > 1) { // scale by the number of multimap positions
             double n = log(read_data[readi]->multimapNH - 1);
             double readprobability = prgu + n;
-            pout = log_add_exp(pout, elsewhere[readi] + n);
+            pout = log_add_exp(pout, elsewhere->data[readi] + n);
             prgu = log_add_exp(prgu, readprobability);
             prgv = log_add_exp(prgv, readprobability);
         }
@@ -830,8 +832,8 @@ static char *evaluate(const vector_t *var_set) {
     read_t **read_data = (read_t **)read_list->data;
 
     /* Read probability matrix and elsewhere probability pre-calculated for each read */
-    double elsewhere[read_list->len];
-    vector_double_t *readprobmatrix[read_list->len];
+    vector_t *readprobmatrix_list = vector_create(read_list->len, VOID_T);
+    vector_double_t *elsewhere = vector_double_create(read_list->len);
     for (readi = 0; readi < read_list->len; readi++) {
         double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
         for (i = 0; i < read_data[readi]->length; i++) {
@@ -842,6 +844,13 @@ static char *evaluate(const vector_t *var_set) {
                 no_match[i] += 1;
             }
         }
+        /* Read probability matrix */
+        int n = NT_CODES * read_data[readi]->length;
+        vector_double_t *rp = vector_double_create(n);
+        for (i = 0; i < n; i++) vector_double_add(rp, 0);
+        set_prob_matrix(rp->data, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
+        vector_add(readprobmatrix_list, rp);
+
         /* Outside Paralog Exact Formuation: Probability that read is from an outside the reference paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
            a) perfect match = prod[ (1-e) ]
            b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
@@ -850,14 +859,7 @@ static char *evaluate(const vector_t *var_set) {
         double delta[read_data[readi]->length];
         for (i = 0; i < read_data[readi]->length; i++) delta[i] = no_match[i] - is_match[i];
         double a = sum(is_match, read_data[readi]->length);
-        elsewhere[readi] = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
-
-        /* Read probability matrix */
-        int n = NT_CODES * read_data[readi]->length;
-        double rp[n];
-        set_prob_matrix(rp, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
-        readprobmatrix[readi] = vector_double_create(n);
-        for (i = 0; i < n; i++) vector_double_add(readprobmatrix[readi], rp[i]);
+        vector_double_add(elsewhere, log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length)));
     }
 
     /* Variant combinations as a vector of vectors */
@@ -876,7 +878,7 @@ static char *evaluate(const vector_t *var_set) {
     for (seti = 0; seti < combo->len; seti++) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti]);
         vector_add(stats, s);
-        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, read_list->len, readprobmatrix, elsewhere, seti);
+        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, read_list->len, readprobmatrix_list, elsewhere, seti);
     }
     if (var_set->len > 1) { // doubles and beyond
         heap_t *h = heap_create(STATS_T);
@@ -891,7 +893,7 @@ static char *evaluate(const vector_t *var_set) {
             for (i = 0; i < c->len; i++) {
                 stats_t *s_new = stats_create((vector_int_t *)c->data[i]);
                 vector_add(stats, s_new);
-                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, read_list->len, readprobmatrix, elsewhere, stats->len - 1);
+                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, read_list->len, readprobmatrix_list, elsewhere, stats->len - 1);
                 heap_push(h, s_new->mut, s_new);
             }
             vector_free(c);
@@ -899,7 +901,9 @@ static char *evaluate(const vector_t *var_set) {
         heap_free(h);
     }
     vector_free(combo);
-    for (readi = 0; readi < read_list->len; readi++) vector_double_free(readprobmatrix[readi]);
+    for (readi = 0; readi < read_list->len; readi++) vector_double_free((vector_double_t *)readprobmatrix_list->data[readi]);
+    vector_free(readprobmatrix_list);
+    vector_double_free(elsewhere);
 
     stats_t **stat = (stats_t **)stats->data;
 

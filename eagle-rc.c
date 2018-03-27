@@ -36,6 +36,9 @@ static struct tm *time_info;
 KHASH_MAP_INIT_STR(rh, vector_t) // hashmap: string key, vector value
 static khash_t(rh) *read_hash; // pointer to hashmap, read
 
+KHASH_MAP_INIT_STR(orh, vector_t) // hashmap: string key, vector value
+static khash_t(orh) *other_read_hash; // pointer to hashmap, reads from other_bam files
+
 KHASH_MAP_INIT_STR(vh, vector_t) // hashmap: string key, vector value
 static khash_t(vh) *var_hash;  // pointer to hashmap, variant
 
@@ -158,7 +161,61 @@ static int readinfo_read(const char* filename) {
     return nreads;
 }
 
-static void process_bam(const char *bam_file, const char *output_prefix) {
+static void process_bam(const char *bam_file, const char *output_prefix, char *other_bam) {
+    size_t i;
+    if (other_bam != NULL) {
+        int n;
+        char *f, fn[strlen(other_bam) + 1];
+        for (f = other_bam; sscanf(f, "%[^,]%n", fn, &n) == 1; f += n + 1) {
+            samFile *sam_in = sam_open(fn, "r"); // open bam file
+            if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", fn); }
+            bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
+            if (bam_header == 0) { exit_err("bad header %s\n", fn); }
+
+            bam1_t *aln = bam_init1(); // initialize an alignment
+            while (sam_read1(sam_in, bam_header, aln) >= 0) {
+                int is_unmap = 0;
+                char *flag = bam_flag2str(aln->core.flag);
+
+                int n2;
+                char *s, token[strlen(flag) + 1];
+                for (s = flag; sscanf(s, "%[^,]%n", token, &n2) == 1; s += n2 + 1) {
+                    if (strcmp("UNMAP", token) == 0) is_unmap = 1;
+                    if (*(s + n2) != ',') break;
+                }
+                free(flag); flag = NULL;
+                if (is_unmap) continue;
+
+                int found = 0;
+                char *name = strdup((char *)aln->data);
+
+                vector_t *node;
+                khiter_t k = kh_get(orh, other_read_hash, name);
+                if (k != kh_end(other_read_hash)) {
+                    node = &kh_val(other_read_hash, k);
+                }
+                else {
+                    int absent;
+                    k = kh_put(orh, other_read_hash, name, &absent);
+                    node = &kh_val(other_read_hash, k);
+                    if (absent) vector_init(node, 8, VOID_T);
+                }
+                for (i = 0; i < node->len; i++) {
+                    if (strcmp(node->data[i], name) == 0) {
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found) vector_add(node, name);
+            }
+            bam_destroy1(aln);
+            bam_hdr_destroy(bam_header);
+            sam_close(sam_in);
+            print_status("# Read other bam:\t%s\t%s", fn, asctime(time_info));
+            if (*(f + n) != ',') break;
+        }
+    }
+
     samFile *sam_in = sam_open(bam_file, "r"); // open bam file
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
@@ -183,10 +240,10 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
     if (mul_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
     if (sam_hdr_write(mul_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.com.bam", output_prefix);
-    samFile *com_out = sam_open(out_fn, "wb"); // write bam
-    if (com_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
-    if (sam_hdr_write(com_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
+    snprintf(out_fn, 999, "%s.unk.bam", output_prefix);
+    samFile *unk_out = sam_open(out_fn, "wb"); // write bam
+    if (unk_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
+    if (sam_hdr_write(unk_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
     bam1_t *aln = bam_init1(); // initialize an alignment
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
@@ -206,7 +263,6 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
 
         /* Write reads to appropriate file */
         out = NULL;
-        size_t i;
         char *name = (char *)aln->data;
 
         khiter_t k = kh_get(rh, read_hash, name);
@@ -219,14 +275,27 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
                     else if (!refonly && r[i]->index == 1) out = alt_out;
                     else if (!refonly && r[i]->index == 2) out = ref_out;
                     else if (!refonly && r[i]->index == 3) out = mul_out;
-                    else if (r[i]->index == 4) out = NULL;
+                    else if (r[i]->index == 4) out = unk_out;
                     break;
                 }
             }
             if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
-        else if (!refonly) {
-            out = com_out;
+
+        if (other_bam != NULL && out == NULL) {
+            int unique = 1;
+            khiter_t k = kh_get(orh, other_read_hash, name);
+            if (k != kh_end(other_read_hash)) {
+                vector_t *node = &kh_val(other_read_hash, k);
+                for (i = 0; i < node->len; i++) {
+                    if (strcmp(node->data[i], name) == 0) {
+                        unique = 0;
+                        break;
+                    }
+                }
+                if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }
+            }
+            if (unique) out = ref_out;
         }
 
         if (out != NULL) {
@@ -242,7 +311,7 @@ static void process_bam(const char *bam_file, const char *output_prefix) {
     sam_close(ref_out);
     sam_close(alt_out);
     sam_close(mul_out);
-    sam_close(com_out);
+    sam_close(unk_out);
 }
 
 static void classify_reads(const char *bam_file, const char *output_prefix) {
@@ -329,7 +398,7 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
     print_status("# Reads Classified:\t%s", asctime(time_info));
 
     if (!listonly) {
-        process_bam(bam_file, output_prefix);
+        process_bam(bam_file, output_prefix, NULL);
         print_status("# BAM Processed:\t%s", asctime(time_info));
     }
 }
@@ -343,7 +412,7 @@ static int type2ind(char *type) {
     return -1;
 }
 
-static void process_list(const char *filename, const char *bam_file, const char *output_prefix) {
+static void process_list(const char *filename, const char *bam_file, const char *output_prefix, char *other_bam) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open file %s\n", filename); }
 
@@ -400,7 +469,7 @@ static void process_list(const char *filename, const char *bam_file, const char 
     fclose(file);
     print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
 
-    process_bam(bam_file, output_prefix);
+    process_bam(bam_file, output_prefix, other_bam);
     print_status("# BAM Processed:\t%s", asctime(time_info));
 
     vector_destroy(ref); free(ref); ref = NULL;
@@ -415,11 +484,12 @@ static void print_usage() {
     printf("*  EAGLE with runtime options --omega=1e-40 --mvh --verbose\n");
     printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc --verbose 1> out.txt  2> readinfo.txt\n\n");
     printf("Options:\n");
-    printf("  -o --out=     String   prefix for output BAM files\n");
-    printf("  -a --bam=     FILE     alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
-    printf("     --listonly          print classified read list only (stdout) without processing BAM file\n");
-    printf("     --readlist          read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
-    printf("     --refonly           write REF classified reads only when processing BAM file\n");
+    printf("  -o --out=      String           prefix for output BAM files\n");
+    printf("  -a --bam=      FILE             alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
+    printf("  -u --unique=   FILE1,FILE2,...  optionally, also output reads that are unique against other BAM files (comma separated list)\n");
+    printf("     --listonly                   print classified read list only (stdout) without processing BAM file\n");
+    printf("     --readlist                   read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
+    printf("     --refonly                    write REF classified reads only when processing BAM file\n");
 }
 
 int main(int argc, char **argv) {
@@ -428,6 +498,7 @@ int main(int argc, char **argv) {
     char *var_file = NULL;
     char *bam_file = NULL;
     char *output_prefix = NULL;
+    char *other_bam = NULL;
     listonly = 0;
     readlist = 0;
     refonly = 0;
@@ -435,7 +506,8 @@ int main(int argc, char **argv) {
     static struct option long_options[] = {
         {"var", required_argument, NULL, 'v'},
         {"bam", required_argument, NULL, 'a'},
-        {"out", optional_argument, NULL, 'o'},
+        {"out", required_argument, NULL, 'o'},
+        {"unique", optional_argument, NULL, 'u'},
         {"listonly", no_argument, &listonly, 1},
         {"readlist", no_argument, &readlist, 1},
         {"refonly", no_argument, &refonly, 1},
@@ -443,7 +515,7 @@ int main(int argc, char **argv) {
     };
 
     int opt = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:o:", long_options, &opt)) != -1) {
+    while ((opt = getopt_long(argc, argv, "v:a:o:u:", long_options, &opt)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
@@ -451,6 +523,7 @@ int main(int argc, char **argv) {
             case 'v': var_file = optarg; break;
             case 'a': bam_file = optarg; break;
             case 'o': output_prefix = optarg; break;
+            case 'u': other_bam = optarg; break;
             default: exit_usage("Bad options");
         }
     }
@@ -463,6 +536,7 @@ int main(int argc, char **argv) {
 
     var_hash = kh_init(vh);
     read_hash = kh_init(rh);
+    other_read_hash = kh_init(orh);
 
     if (!readlist) {
         var_file = argv[optind++];
@@ -480,7 +554,7 @@ int main(int argc, char **argv) {
         classify_reads(bam_file, output_prefix);
     }
     else {
-        process_list(argv[optind], bam_file, output_prefix);
+        process_list(argv[optind], bam_file, output_prefix, other_bam);
     }
 
     khiter_t k;
@@ -493,6 +567,11 @@ int main(int argc, char **argv) {
         if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
     }
     kh_destroy(rh, read_hash);
+
+    for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
+        if (kh_exist(other_read_hash, k)) vector_destroy(&kh_val(other_read_hash, k));
+    }
+    kh_destroy(orh, other_read_hash);
 
     clock_t toc = clock();
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);

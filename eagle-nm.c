@@ -447,6 +447,23 @@ static char *evaluate_nomutation(const region_t *g) {
     }
     read_t **read_data = (read_t **)read_list->data;
 
+    /* Read probability matrix pre-calculated for each read */
+    vector_t *readprobmatrix_list = vector_create(read_list->len, VOID_T);
+    for (readi = 0; readi < read_list->len; readi++) {
+        double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
+        for (i = 0; i < read_data[readi]->length; i++) {
+            is_match[i] = p_match[read_data[readi]->qual[i]];
+            no_match[i] = p_mismatch[read_data[readi]->qual[i]];
+        }
+        /* Read probability matrix */
+        int n = NT_CODES * read_data[readi]->length;
+        vector_double_t *rp = vector_double_create(n);
+        for (i = 0; i < n; i++) vector_double_add(rp, 0);
+        set_prob_matrix(rp->data, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
+        vector_add(readprobmatrix_list, rp);
+    }
+    vector_double_t **readprobmatrix = (vector_double_t **)readprobmatrix_list->data;
+
     int g_pos;
     double alt_probability = -1e6;
     double ref_probability = 0;
@@ -462,17 +479,9 @@ static char *evaluate_nomutation(const region_t *g) {
         for (readi = 0; readi < read_list->len; readi++) {
             //if (read_data[readi]->pos < g->pos1 || read_data[readi]->pos > g->pos2) continue;
 
-            double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
-            for (i = 0; i < read_data[readi]->length; i++) {
-                is_match[i] = p_match[read_data[readi]->qual[i]];
-                no_match[i] = p_mismatch[read_data[readi]->qual[i]];
-            }
-            double readprobmatrix[NT_CODES * read_data[readi]->length];
-            set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
-
             double prgu, prgv;
             //printf("\t%d\t%s\t%d\t%d\t%s\n", g_pos, read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
-            calc_prob_snps(&prgu, &prgv, g_pos, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            calc_prob_snps(&prgu, &prgv, g_pos, readprobmatrix[readi]->data, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
             //printf("%f\t%f\n\n", prgu, prgv);
 
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
@@ -486,10 +495,10 @@ static char *evaluate_nomutation(const region_t *g) {
                         char *xa_refseq = f->seq;
                         int xa_refseq_length = f->seq_length;
 
-                        double *p_readprobmatrix = readprobmatrix;
+                        double *p_readprobmatrix = readprobmatrix[readi]->data;
                         double *newreadprobmatrix = NULL;
                         if ((xa_pos < 0 && !read_data[readi]->is_reverse) || (xa_pos > 0 && read_data[readi]->is_reverse)) { // opposite of primary alignment strand
-                            newreadprobmatrix = reverse(readprobmatrix, read_data[readi]->length * NT_CODES);
+                            newreadprobmatrix = reverse(readprobmatrix[readi]->data, read_data[readi]->length * NT_CODES);
                             p_readprobmatrix = newreadprobmatrix;
                         }
 
@@ -538,6 +547,8 @@ static char *evaluate_nomutation(const region_t *g) {
         }
         if (debug > 0) fprintf(stderr, "++\t%d\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\t%f\n", g->pos1, g->pos2, g_pos, (int)read_list->len, ref_count, alt_count, ref, alt, ref - alt, alt_probability);
     }
+    for (readi = 0; readi < read_list->len; readi++) vector_double_free((vector_double_t *)readprobmatrix_list->data[readi]);
+    vector_free(readprobmatrix_list);
 
     ref_probability += nomut_prior;
     alt_probability += mut_prior;

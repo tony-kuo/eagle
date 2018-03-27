@@ -95,7 +95,7 @@ typedef struct {
     int ref_count, alt_count;
 } stats_t;
 
-stats_t *stats_create(vector_int_t *combo);
+stats_t *stats_create(vector_int_t *combo, size_t nreads);
 void stats_destroy(stats_t *s);
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type);

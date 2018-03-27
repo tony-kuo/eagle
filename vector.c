@@ -264,10 +264,10 @@ void region_destroy(region_t *g) {
     free(g->chr); g->chr = NULL;      
 }
 
-stats_t *stats_create(vector_int_t *combo) {
+stats_t *stats_create(vector_int_t *combo, size_t nreads) {
     stats_t *s = malloc(sizeof (stats_t));
     s->combo = combo;
-    s->read_prgv = vector_double_create(8);
+    s->read_prgv = vector_double_create(nreads);
     s->het = 0;
     s->alt = 0;
     s->mut = 0;

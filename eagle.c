@@ -682,7 +682,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, char *refseq, int refseq_length, read_t **read_data, size_t nreads, vector_t *readprobmatrix_list, vector_double_t *elsewhere, size_t seti) {
+static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, const vector_t *readprobmatrix_list, const vector_double_t *elsewhere, size_t seti) {
     size_t i, readi;
     *ref = 0;
     stat->alt = 0;
@@ -876,7 +876,7 @@ static char *evaluate(const vector_t *var_set) {
     vector_t *stats = vector_create(var_set->len + 1, STATS_T);
 
     for (seti = 0; seti < combo->len; seti++) { // all, singles
-        stats_t *s = stats_create((vector_int_t *)combo->data[seti]);
+        stats_t *s = stats_create((vector_int_t *)combo->data[seti], read_list->len);
         vector_add(stats, s);
         calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, read_list->len, readprobmatrix_list, elsewhere, seti);
     }
@@ -891,7 +891,7 @@ static char *evaluate(const vector_t *var_set) {
             vector_t *c = vector_create(8, VOID_T);
             derive_combo(c, s->combo, var_set->len);
             for (i = 0; i < c->len; i++) {
-                stats_t *s_new = stats_create((vector_int_t *)c->data[i]);
+                stats_t *s_new = stats_create((vector_int_t *)c->data[i], read_list->len);
                 vector_add(stats, s_new);
                 calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, read_list->len, readprobmatrix_list, elsewhere, stats->len - 1);
                 heap_push(h, s_new->mut, s_new);
@@ -912,7 +912,7 @@ static char *evaluate(const vector_t *var_set) {
     memset(c, 0, sizeof(c));
     for (readi = 0; readi < read_list->len; readi++) c[read_data[readi]->index]++; // combinations, based on best combination in each read
 
-    vector_int_t *haplotypes = vector_int_create(8);
+    vector_int_t *haplotypes = vector_int_create(stats->len);
     for (i = 0; i < stats->len; i++) {
         if ((double)c[i] / (double)read_list->len > 0.01) vector_int_add(haplotypes, i); // relevant combination if read count > 1%
     }

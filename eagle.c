@@ -682,7 +682,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, const vector_t *readprobmatrix_list, const vector_double_t *elsewhere, size_t seti) {
+static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, vector_t *readprobmatrix_list, vector_double_t *elsewhere, size_t seti) {
     size_t i, readi;
     *ref = 0;
     stat->alt = 0;
@@ -708,9 +708,36 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, co
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; readi++) {
-        double prgu, prgv;
+        if (readprobmatrix_list->len < nreads) { // Store the readprobmatrix and elsewhere values the first time through
+            double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
+            for (i = 0; i < read_data[readi]->length; i++) {
+                is_match[i] = p_match[read_data[readi]->qual[i]];
+                no_match[i] = p_mismatch[read_data[readi]->qual[i]];
+                if (dp) {
+                    is_match[i] += 1;
+                    no_match[i] += 1;
+                }
+            }
+            /* Read probability matrix */
+            int n = NT_CODES * read_data[readi]->length;
+            vector_double_t *rp = vector_double_create(n);
+            for (i = 0; i < n; i++) vector_double_add(rp, 0);
+            set_prob_matrix(rp->data, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
+            vector_add(readprobmatrix_list, rp);
+
+            /* Outside Paralog Exact Formuation: Probability that read is from an outside the reference paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
+               a) perfect match = prod[ (1-e) ]
+               b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
+               c) lengthfactor = alpha ^ (read length - expected read length). Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
+            P(r|f) = (perfect + hamming_1) / lengthfactor */
+            double delta[read_data[readi]->length];
+            for (i = 0; i < read_data[readi]->length; i++) delta[i] = no_match[i] - is_match[i];
+            double a = sum(is_match, read_data[readi]->length);
+            vector_double_add(elsewhere, log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length)));
+        }
         vector_double_t **readprobmatrix = (vector_double_t **)readprobmatrix_list->data;
 
+        double prgu, prgv;
         //for (i =0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
         //printf("\t%s\t%d\t%d\t%s\n", read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
         if (has_indel || dp) {
@@ -831,36 +858,9 @@ static char *evaluate(const vector_t *var_set) {
     }
     read_t **read_data = (read_t **)read_list->data;
 
-    /* Read probability matrix and elsewhere probability pre-calculated for each read */
+    /* Read probability matrix and elsewhere probability calculated for each read */
     vector_t *readprobmatrix_list = vector_create(read_list->len, VOID_T);
     vector_double_t *elsewhere = vector_double_create(read_list->len);
-    for (readi = 0; readi < read_list->len; readi++) {
-        double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; i++) {
-            is_match[i] = p_match[read_data[readi]->qual[i]];
-            no_match[i] = p_mismatch[read_data[readi]->qual[i]];
-            if (dp) {
-                is_match[i] += 1;
-                no_match[i] += 1;
-            }
-        }
-        /* Read probability matrix */
-        int n = NT_CODES * read_data[readi]->length;
-        vector_double_t *rp = vector_double_create(n);
-        for (i = 0; i < n; i++) vector_double_add(rp, 0);
-        set_prob_matrix(rp->data, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
-        vector_add(readprobmatrix_list, rp);
-
-        /* Outside Paralog Exact Formuation: Probability that read is from an outside the reference paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
-           a) perfect match = prod[ (1-e) ]
-           b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
-           c) lengthfactor = alpha ^ (read length - expected read length). Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
-        P(r|f) = (perfect + hamming_1) / lengthfactor */
-        double delta[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; i++) delta[i] = no_match[i] - is_match[i];
-        double a = sum(is_match, read_data[readi]->length);
-        vector_double_add(elsewhere, log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length)));
-    }
 
     /* Variant combinations as a vector of vectors */
     vector_t *combo = powerset(var_set->len, maxh);

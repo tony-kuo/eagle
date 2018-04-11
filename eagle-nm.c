@@ -359,17 +359,14 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
 
     double prgu_n = 0;
     double prgv_n = 0;
-    double probability, p;
+    double r, a, probability, p;
 
     if (start < 0) start = 0;
-
-    vector_double_t *r = vector_double_create(abs(end - start)); // reference probability per position i
-    vector_double_t *a = vector_double_create(abs(end - start)); // alternative probability per position i
     for (i = start; i < end; i++) {
         if (i >= seq_length || g_pos >= seq_length) break;
         probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
-        vector_double_add(r, probability);
-        vector_double_add(a, probability);
+        r = probability;
+        a = probability;
 
         r_pos = g_pos - pos;
         if (r_pos >= 0 && r_pos < read_length) {
@@ -384,16 +381,14 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
                     //printf("%c %f\t", NT[k], p);
                 }
             }
-            a->data[i - start] = a->data[i - start] - matrix[NT_CODES * r_pos + seqnt_map[x]] + probability; // update alternative array
-            //printf("%d\t%d\t%c\t%d\t%f\t%f\t%f\t%f\n", i, g_pos, seq[g_pos], r_pos, r->data[i - start], a->data[i - start], matrix[NT_CODES * r_pos + seqnt_map[x]], probability);
+            a = a - matrix[NT_CODES * r_pos + seqnt_map[x]] + probability; // update alternative array
+            //printf("%d\t%d\t%c\t%d\t%f\t%f\t%f\t%f\n", i, g_pos, seq[g_pos], r_pos, r->data[i - start], a->data[i - start], (double)matrix[NT_CODES * r_pos + seqnt_map[x]], probability);
         }
-        prgu_n = (prgu_n == 0) ? r->data[i - start] : log_add_exp(prgu_n, r->data[i - start]);
-        prgv_n = (prgv_n == 0) ? a->data[i - start] : log_add_exp(prgv_n, a->data[i - start]);
+        prgu_n = (prgu_n == 0) ? r : log_add_exp(prgu_n, r);
+        prgv_n = (prgv_n == 0) ? a : log_add_exp(prgv_n, a);
     }
     *prgu += prgu_n;
     *prgv += prgv_n;
-    vector_double_free(r);
-    vector_double_free(a);
 }
 
 static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {

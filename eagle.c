@@ -726,9 +726,12 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, co
            b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
            c) lengthfactor = alpha ^ (read length - expected read length). Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
         P(r|f) = (perfect + hamming_1) / lengthfactor */
+        double a = 0;
         double delta[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; i++) delta[i] = no_match[i] - is_match[i];
-        double a = sum(is_match, read_data[readi]->length);
+        for (i = 0; i < read_data[readi]->length; i++) {
+            a += is_match[i];
+            delta[i] = no_match[i] - is_match[i];
+        }
         double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
 
         double prgu, prgv;
@@ -907,17 +910,17 @@ static char *evaluate(const vector_t *var_set) {
     if (haplotypes->len > 1) combinations(combo, 2, haplotypes->len); // combination pairs
 
     int x, y;
-    double prhap[combo->len];
+    vector_double_t *prhap = vector_double_create(combo->len);
     for (seti = 0; seti < combo->len; seti++) { // mixture model probabilities of combination pairs
-        prhap[seti] = 0;
         x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
         y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
-        for (readi = 0; readi < read_list->len; readi++) prhap[seti] += log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]) + LG50;
+        vector_double_add(prhap, 0);
+        for (readi = 0; readi < read_list->len; readi++) prhap->data[seti] += log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]) + LG50;
     }
 
     double total = ref;
     for (seti = 0; seti < stats->len; seti++) total = log_add_exp(total, stat[seti]->mut);
-    for (seti = 0; seti < combo->len; seti++) total = log_add_exp(total, prhap[seti]);
+    for (seti = 0; seti < combo->len; seti++) total = log_add_exp(total, prhap->data[seti]);
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
@@ -957,14 +960,14 @@ static char *evaluate(const vector_t *var_set) {
                 x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
                 y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
                 if (variant_find(stat[x]->combo, i) != -1 || variant_find(stat[y]->combo, i) != -1) {
-                    has_alt = log_add_exp(has_alt, prhap[seti]);
+                    has_alt = log_add_exp(has_alt, prhap->data[seti]);
                     if (stat[x]->alt_count + stat[y]->alt_count > acount) {
                         acount = stat[x]->alt_count + stat[y]->alt_count;
                         rcount = (stat[x]->ref_count > stat[y]->ref_count) ? stat[x]->ref_count : stat[y]->ref_count;
                     }
                 }
                 else {
-                    not_alt = log_add_exp(not_alt, prhap[seti]);
+                    not_alt = log_add_exp(not_alt, prhap->data[seti]);
                 }
             }
             variant_print(&output, var_set, i, (int)read_list->len, rcount, acount, total, has_alt, not_alt);
@@ -996,6 +999,7 @@ static char *evaluate(const vector_t *var_set) {
     for (i = 0; i < combo->len; i++) vector_int_free(combo->data[i]);
     vector_free(combo);
     vector_int_free(haplotypes);
+    vector_double_free(prhap);
     vector_destroy(read_list); free(read_list); read_list = NULL;
     vector_destroy(stats); free(stats); stats = NULL;
     return output;

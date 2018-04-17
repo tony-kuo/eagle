@@ -52,12 +52,6 @@ float parse_float(const char *str) {
     return num;
 }
 
-double sum(const double *a, int size) {
-    double s = 0;
-    while (--size >= 0) s += a[size];
-    return s;
-}
-
 int sum_i(const int *a, int size) {
     int s = 0;
     while (--size >= 0) s += a[size];

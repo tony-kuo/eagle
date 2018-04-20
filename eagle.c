@@ -961,10 +961,6 @@ static char *evaluate(const vector_t *var_set) {
                 y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
                 if (variant_find(stat[x]->combo, i) != -1 || variant_find(stat[y]->combo, i) != -1) {
                     has_alt = log_add_exp(has_alt, prhap->data[seti]);
-                    if (stat[x]->alt_count + stat[y]->alt_count > acount) {
-                        acount = stat[x]->alt_count + stat[y]->alt_count;
-                        rcount = (stat[x]->ref_count > stat[y]->ref_count) ? stat[x]->ref_count : stat[y]->ref_count;
-                    }
                 }
                 else {
                     not_alt = log_add_exp(not_alt, prhap->data[seti]);

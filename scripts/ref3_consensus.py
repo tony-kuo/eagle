@@ -57,7 +57,7 @@ def readFile(fn, entry, n):
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
 
-def writeTable(chrA, chrB, chrD, out_prefix):
+def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
     fhB = open(out_prefix + '.chrB.list', 'w')
     fhD = open(out_prefix + '.chrD.list', 'w')
@@ -83,6 +83,38 @@ def writeTable(chrA, chrB, chrD, out_prefix):
         if p[i] > threshold and min(d) > 0.01: c = "REF"
         else: c = "UNK"
         print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
+
+    if unique_reads:
+        for key in chrA:
+            if key in chrB or key in chrD: continue
+            x = chrA[key][0]
+            y = chrA[key][1]
+            if chrA[key][2] == 0:
+                y += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
+            if x - y > threshold: c = "REF"
+            else: c = "UNK"
+            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhA)
+
+        for key in chrB:
+            if key in chrA or key in chrD: continue
+            x = chrB[key][0]
+            y = chrB[key][1]
+            if chrB[key][2] == 0:
+                y += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
+            if x - y > threshold: c = "REF"
+            else: c = "UNK"
+            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhB)
+
+        for key in chrD:
+            if key in chrA or key in chrB: continue
+            x = chrD[key][0]
+            y = chrD[key][1]
+            if chrD[key][2] == 0:
+                y += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
+            if x - y > threshold: c = "REF"
+            else: c = "UNK"
+            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhD)
+
     fhA.close()
     fhB.close()
     fhD.close()
@@ -95,6 +127,7 @@ def main():
     parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')
     parser.add_argument('-D', nargs='+', required=True, help='2 list files: from readclassify with D as reference followed by mirror consensus')
     parser.add_argument('-o', type=str, required=True, help='output file prefix')
+    parser.add_argument('-u', action='store_true', help='include reads that map uniquely to one reference genome')
     args = parser.parse_args()
     if len(sys.argv) == 1:
         parser.print_help()
@@ -111,7 +144,7 @@ def main():
     chrD = {}
     chrD = readFile(args.D[0], chrD, 0) # file 1
     chrD = readFile(args.D[1], chrD, 1) # file 2
-    writeTable(chrA, chrB, chrD, args.o)
+    writeTable(chrA, chrB, chrD, args.u, args.o)
 
 if __name__ == '__main__':
     main()

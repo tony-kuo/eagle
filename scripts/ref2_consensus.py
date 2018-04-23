@@ -36,12 +36,11 @@ def readFile(fn, entry):
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
 
-def writeTable(chrA, chrB, out_prefix):
+def writeTable(chrA, chrB, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
     fhB = open(out_prefix + '.chrB.list', 'w')
     fh = [fhA, fhB]
 
-    l2 = np.log(2)
     threshold = np.log(0.5)
     for key in chrA:
         if key not in chrB: continue
@@ -57,6 +56,24 @@ def writeTable(chrA, chrB, out_prefix):
         if p[i] > threshold and min(d) > 0.01: c = "REF"
         else: c = "UNK"
         print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
+
+    if unique_reads:
+        for key in chrA:
+            if key in chrB: continue
+            x = chrA[key][0]
+            y = chrA[key][1]
+            if x - y > threshold: c = "REF"
+            else: c = "UNK"
+            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhA)
+
+        for key in chrB:
+            if key in chrA: continue
+            x = chrB[key][0]
+            y = chrB[key][1]
+            if x - y > threshold: c = "REF"
+            else: c = "UNK"
+            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhB)
+
     fhA.close()
     fhB.close()
     print("Done:\t{}".format(datetime.now()), file=sys.stderr)
@@ -67,6 +84,7 @@ def main():
     parser.add_argument('-A', nargs='+', required=True, help='2 list files: from readclassify with A as reference followed by mirror consensus')
     parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')
     parser.add_argument('-o', type=str, required=True, help='output file prefix')
+    parser.add_argument('-u', action='store_true', help='include reads that map uniquely to one reference genome')
     args = parser.parse_args()
     if len(sys.argv) == 1:
         parser.print_help()

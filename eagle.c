@@ -813,10 +813,9 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         if (phet90 > phet) phet = phet90;
 
         /* Priors */
-        double l = log(stat->combo->len);
         prgu += ref_prior;
-        prgv += (alt_prior - l);
-        phet += (het_prior - l);
+        prgv += alt_prior;
+        phet += het_prior;
         stat->ref += prgu;
         stat->alt += prgv;
         stat->het += phet;

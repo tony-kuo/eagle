@@ -96,7 +96,7 @@ def main():
     chrA = readFile(args.A[0], chrA)
     chrB = {}
     chrB = readFile(args.B[0], chrB)
-    writeTable(chrA, chrB, args.o)
+    writeTable(chrA, chrB, args.u, args.o)
 
 if __name__ == '__main__':
     main()

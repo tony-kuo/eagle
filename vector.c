@@ -196,6 +196,7 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
     r->tid = tid;
     r->chr = strdup(chr);
     r->pos = pos;
+    r->end = pos;
     r->prgu = -1.0e10;
     r->prgv = -1.0e10;
     r->pout = -1.0e10;
@@ -220,7 +221,7 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
 
 void read_destroy(read_t *r) {
     if (r == NULL) return;
-    r->tid = r->pos = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
+    r->tid = r->pos = r->end = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
     r->is_unmap = r->is_dup = r->is_reverse = r->is_secondary = 0;
     r->prgu = r->prgv = r->pout = 0;
     r->index = 0;
@@ -268,16 +269,18 @@ stats_t *stats_create(vector_int_t *combo, size_t nreads) {
     stats_t *s = malloc(sizeof (stats_t));
     s->combo = combo;
     s->read_prgv = vector_double_create(nreads);
+    s->ref = 0;
     s->het = 0;
     s->alt = 0;
     s->mut = 0;
     s->ref_count = 0;
     s->alt_count = 0;
+    s->seen = 0;
     return s;
 }
 
 void stats_destroy(stats_t *s) {
-    s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
+    s->ref = s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
     vector_int_free(s->combo);
     vector_double_free(s->read_prgv);
 }

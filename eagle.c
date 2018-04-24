@@ -239,6 +239,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 read->splice_offset[i] = 0;
 
                 if (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == '=' || read->cigar_opchr[i] == 'X') start_align = 1; 
+                if (read->cigar_opchr[i] != 'I') read->end += read->cigar_oplen[i]; 
                 else if (start_align == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i]; 
                 else if (start_align == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i]; 
 
@@ -682,13 +683,14 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti) {
+static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti) {
     size_t i, readi;
-    *ref = 0;
+    stat->ref = 0;
     stat->alt = 0;
     stat->het = 0;
     stat->ref_count = 0;
     stat->alt_count = 0;
+    stat->seen = 0;
 
     int has_indel = 0;
     if (!lowmem) {
@@ -708,6 +710,12 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, co
 
     /* Aligned reads */
     for (readi = 0; readi < nreads; readi++) {
+        if (read_data[readi]->pos > var_data[stat->combo->data[0]]->pos || read_data[readi]->end < var_data[stat->combo->data[stat->combo->len - 1]]->pos) { // read must cross all variants in current combo
+            vector_double_add(stat->read_prgv, -1e10);
+            continue; // read must cross all variants in current combo
+        }
+        stat->seen++;
+
         double is_match[read_data[readi]->length], no_match[read_data[readi]->length];
         for (i = 0; i < read_data[readi]->length; i++) {
             is_match[i] = p_match[read_data[readi]->qual[i]];
@@ -804,14 +812,18 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, co
         if (phet10 > phet) phet = phet10;
         if (phet90 > phet) phet = phet90;
 
+        /* Priors */
+        double l = log(stat->combo->len);
+        prgu += ref_prior;
+        prgv += (alt_prior - l);
+        phet += (het_prior - l);
+        stat->ref += prgu;
+        stat->alt += prgv;
+        stat->het += phet;
+
         /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference */
         if (prgv > prgu && prgv - prgu > 0.69) stat->alt_count += 1;
         else if (prgu > prgv && prgu - prgv > 0.69) stat->ref_count += 1;
-
-        /* Priors */
-        *ref += prgu + ref_prior;
-        stat->alt += prgv + alt_prior;
-        stat->het += phet + het_prior;
 
         if (debug >= 2) {
             fprintf(stderr, "::\t%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
@@ -831,7 +843,7 @@ static void calc_likelihood(double *ref, stats_t *stat, variant_t **var_data, co
     stat->mut = log_add_exp(stat->alt, stat->het);
     free(altseq); altseq = NULL;
     if (debug >= 1) {
-        fprintf(stderr, "==\t%f\t%f\t%f\t%d\t%d\t%d\t", *ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
+        fprintf(stderr, "==\t%f\t%f\t%f\t%d\t%d\t%d\t", stat->ref, stat->het, stat->alt, stat->ref_count, stat->alt_count, (int)nreads);
         for (i = 0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); } fprintf(stderr, "\n");
     }
 }
@@ -865,13 +877,12 @@ static char *evaluate(const vector_t *var_set) {
     }
     */
 
-    double ref = 0;
     vector_t *stats = vector_create(var_set->len + 1, STATS_T);
 
     for (seti = 0; seti < combo->len; seti++) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti], read_list->len);
         vector_add(stats, s);
-        calc_likelihood(&ref, s, var_data, refseq, refseq_length, read_data, read_list->len, seti);
+        calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, seti);
     }
     if (var_set->len > 1) { // doubles and beyond
         heap_t *h = heap_create(STATS_T);
@@ -884,10 +895,10 @@ static char *evaluate(const vector_t *var_set) {
             vector_t *c = vector_create(8, VOID_T);
             derive_combo(c, s->combo, var_set->len);
             for (i = 0; i < c->len; i++) {
-                stats_t *s_new = stats_create((vector_int_t *)c->data[i], read_list->len);
-                vector_add(stats, s_new);
-                calc_likelihood(&ref, s_new, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1);
-                heap_push(h, s_new->mut, s_new);
+                stats_t *s = stats_create((vector_int_t *)c->data[i], read_list->len);
+                vector_add(stats, s);
+                calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1);
+                heap_push(h, s->mut, s);
             }
             vector_free(c);
         }
@@ -918,8 +929,8 @@ static char *evaluate(const vector_t *var_set) {
         for (readi = 0; readi < read_list->len; readi++) prhap->data[seti] += log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]) + LG50;
     }
 
-    double total = ref;
-    for (seti = 0; seti < stats->len; seti++) total = log_add_exp(total, stat[seti]->mut);
+    double total = stat[0]->mut;
+    for (seti = 1; seti < stats->len; seti++) total = log_add_exp(total, stat[seti]->mut);
     for (seti = 0; seti < combo->len; seti++) total = log_add_exp(total, prhap->data[seti]);
 
     char *output = malloc(sizeof *output);
@@ -935,27 +946,32 @@ static char *evaluate(const vector_t *var_set) {
         }
         vector_t *v = vector_create(var_set->len, VARIANT_T);
         for (i = 0; i < stat[max_seti]->combo->len; i++) vector_add(v, var_data[stat[max_seti]->combo->data[i]]);
-        variant_print(&output, v, 0, (int)read_list->len, stat[max_seti]->ref_count, stat[max_seti]->alt_count, total, has_alt, ref);
+        variant_print(&output, v, 0, stat[max_seti]->seen, stat[max_seti]->ref_count, stat[max_seti]->alt_count, log_add_exp(total, stat[max_seti]->ref), has_alt, stat[max_seti]->ref);
         vector_free(v);
     }
     else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < var_set->len; i++) {
+            double ref = -1e10;
             double has_alt = 0;
-            double not_alt = ref;
+            double not_alt = 0;
             int acount = -1;
             int rcount = -1;
+            int seen = -1;
             for (seti = 0; seti < stats->len; seti++) {
                 if (variant_find(stat[seti]->combo, i) != -1) { // if variant is in this combination
                     has_alt = (has_alt == 0) ? stat[seti]->mut : log_add_exp(has_alt, stat[seti]->mut);
+                    if (stat[seti]->ref > ref) ref = stat[seti]->ref;
+                    if (stat[seti]->seen > seen) seen = stat[seti]->seen;
                     if (stat[seti]->alt_count > acount) {
                         acount = stat[seti]->alt_count;
                         rcount = stat[seti]->ref_count;
                     }
                 }
                 else {
-                    not_alt = log_add_exp(not_alt, stat[seti]->mut);
+                    not_alt = (not_alt == 0) ? stat[seti]->mut : log_add_exp(not_alt, stat[seti]->mut);
                 }
             }
+            not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
             for (seti = 0; seti < combo->len; seti++) {
                 x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
                 y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
@@ -966,7 +982,7 @@ static char *evaluate(const vector_t *var_set) {
                     not_alt = log_add_exp(not_alt, prhap->data[seti]);
                 }
             }
-            variant_print(&output, var_set, i, (int)read_list->len, rcount, acount, total, has_alt, not_alt);
+            variant_print(&output, var_set, i, seen, rcount, acount, log_add_exp(total, ref), has_alt, not_alt);
         }
     }
 

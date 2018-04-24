@@ -61,7 +61,7 @@ void variant_destroy(variant_t *v);
 
 typedef struct {
     int *qual, *cigar_oplen, *splice_pos, *splice_offset;
-    int tid, pos, length, inferred_length, n_cigar, n_splice, multimapNH;
+    int tid, pos, end, length, inferred_length, n_cigar, n_splice, multimapNH;
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
     int is_unmap, is_dup, is_reverse, is_secondary;
     double prgu, prgv, pout;
@@ -91,8 +91,8 @@ void region_destroy(region_t *g);
 typedef struct {
     vector_int_t *combo;
     vector_double_t *read_prgv;
-    double alt, het, mut;
-    int ref_count, alt_count;
+    double ref, alt, het, mut;
+    int ref_count, alt_count, seen;
 } stats_t;
 
 stats_t *stats_create(vector_int_t *combo, size_t nreads);

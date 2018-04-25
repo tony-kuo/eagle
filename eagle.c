@@ -820,9 +820,9 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         stat->alt += prgv;
         stat->het += phet;
 
-        /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference */
-        if (prgv > prgu && prgv - prgu > 0.69) stat->alt_count += 1;
-        else if (prgu > prgv && prgu - prgv > 0.69) stat->ref_count += 1;
+        /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference and more likely than pout */
+        if (prgv > prgu && prgv - prgu > 0.69 && prgv - pout > 0.69) stat->alt_count += 1;
+        else if (prgu > prgv && prgu - prgv > 0.69 && prgu - pout > 0.69) stat->ref_count += 1;
 
         if (debug >= 2) {
             fprintf(stderr, "::\t%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);

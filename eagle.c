@@ -9,6 +9,7 @@ This program is distributed under the terms of the GNU General Public License
 
 #include <stdlib.h>
 #include <ctype.h>
+#include <float.h>
 #include <math.h>
 #include <time.h>
 #include <getopt.h>
@@ -261,6 +262,9 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 s_offset = 0;
                 e_offset = 0;
             }
+            else {
+                read->end -= e_offset; // compensate for soft clip in mapped position
+            }
             read->length = aln->core.l_qseq - (s_offset + e_offset);
             read->qseq = malloc((read->length + 1) * sizeof read->qseq);
             read->qual = malloc(read->length  * sizeof read->qual);
@@ -474,7 +478,6 @@ static inline void set_prob_matrix(double *matrix, const char *seq, int read_len
 
 static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end) { /* short in long version */
     int i, j;
-    int min_value = -1e6;
 
     double prev[read_length + 1], curr[read_length + 1];
     double a_gap_curr[read_length + 1];
@@ -483,15 +486,15 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     prev[0] = 0;
     prev[1] = 0 - gap_op;
     for (j = 2; j < read_length + 1; j++) prev[j] = prev[j - 1] - gap_ex;
-    for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = min_value;
+    for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = -DBL_MAX;
 
-    double max_score = min_value;
+    double max_score = -DBL_MAX;
     double upleft, open, extend, row_max;
     for (i = start; i < end; i++) {
-        row_max = min_value;
+        row_max = -DBL_MAX;
         curr[0] = 0;
-        a_gap_curr[0] = min_value;
-        b_gap_curr[0] = min_value;
+        a_gap_curr[0] = -DBL_MAX;
+        b_gap_curr[0] = -DBL_MAX;
         for (j = 1; j <= read_length; j++) {
             int c = seq[i] - 'A';
             if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
@@ -544,7 +547,7 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
         probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
     }
     else {
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -1e6);
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -DBL_MAX);
         double baseline = probability;
 
         int i;
@@ -606,7 +609,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
 
     for (i = start; i < end; i++) {
         if (i >= seq_length) break;
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -DBL_MAX);
         r = probability; // reference probability per position i
         a = probability; // alternative probability per position i
 
@@ -711,7 +714,7 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
     /* Aligned reads */
     for (readi = 0; readi < nreads; readi++) {
         if (read_data[readi]->pos > var_data[stat->combo->data[0]]->pos || read_data[readi]->end < var_data[stat->combo->data[stat->combo->len - 1]]->pos) { // read must cross all variants in current combo
-            vector_double_add(stat->read_prgv, -1e10);
+            vector_double_add(stat->read_prgv, -DBL_MAX);
             continue; // read must cross all variants in current combo
         }
         stat->seen++;
@@ -826,7 +829,7 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
 
         if (debug >= 2) {
             fprintf(stderr, "::\t%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
-            fprintf(stderr, "%s\t%s\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos);
+            fprintf(stderr, "%s\t%s\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->end);
             for (i = 0; i < read_data[readi]->n_cigar; i++) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
             for (i = 0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; fprintf(stderr, "%s,%d,%s,%s;", v->chr, v->pos, v->ref, v->alt); }
@@ -925,7 +928,15 @@ static char *evaluate(const vector_t *var_set) {
         x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
         y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
         vector_double_add(prhap, 0);
-        for (readi = 0; readi < read_list->len; readi++) prhap->data[seti] += log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]) + LG50;
+        for (readi = 0; readi < read_list->len; readi++) {
+            if (stat[x]->read_prgv->data[readi] == -DBL_MAX && stat[y]->read_prgv->data[readi] == -DBL_MAX) continue;
+            double phet   = log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]);
+            double phet10 = log_add_exp(LG10 + stat[x]->read_prgv->data[readi], LG90 + stat[y]->read_prgv->data[readi]);
+            double phet90 = log_add_exp(LG90 + stat[x]->read_prgv->data[readi], LG10 + stat[y]->read_prgv->data[readi]);
+            if (phet10 > phet) phet = phet10;
+            if (phet90 > phet) phet = phet90;
+            prhap->data[seti] += phet + ref_prior; // equal prior probability to ref since this assumes heterozygous non-reference variant
+        }
     }
 
     double total = stat[0]->mut;
@@ -950,7 +961,7 @@ static char *evaluate(const vector_t *var_set) {
     }
     else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < var_set->len; i++) {
-            double ref = -1e10;
+            double ref = -DBL_MAX;
             double has_alt = 0;
             double not_alt = 0;
             int acount = -1;

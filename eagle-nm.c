@@ -286,7 +286,7 @@ void set_prob_matrix(double *matrix, const char *seq, int read_length, const dou
     }
 }
 
-static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
     int i, c; // array[width * row + col] = value
     double probability = 0;
     for (i = pos;  i < pos + read_length; i++) {

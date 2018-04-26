@@ -9,6 +9,7 @@ This program is distributed under the terms of the GNU General Public License
 
 #include <stdlib.h>
 #include <ctype.h>
+#include <float.h>
 
 #include "util.h"
 #include "vector.h"
@@ -197,9 +198,9 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
     r->chr = strdup(chr);
     r->pos = pos;
     r->end = pos;
-    r->prgu = -1.0e10;
-    r->prgv = -1.0e10;
-    r->pout = -1.0e10;
+    r->prgu = -DBL_MAX;
+    r->prgv = -DBL_MAX;
+    r->pout = -DBL_MAX;
     r->index = 0;
     r->var_list = vector_create(8, VOID_T);
 

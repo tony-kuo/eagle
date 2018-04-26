@@ -11,6 +11,7 @@ This program is distributed under the terms of the GNU General Public License
 
 #include <stdlib.h>
 #include <ctype.h>
+#include <float.h>
 #include <math.h>
 #include <time.h>
 #include <getopt.h>
@@ -305,7 +306,7 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
     double probability = 0;
     if (start < 0) start = 0;
 
-    probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -1e6);
+    probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -DBL_MAX);
     double baseline = probability;
 
     int i;
@@ -364,7 +365,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
     if (start < 0) start = 0;
     for (i = start; i < end; i++) {
         if (i >= seq_length || g_pos >= seq_length) break;
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -1e6);
+        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -DBL_MAX);
         r = probability;
         a = probability;
 
@@ -443,7 +444,7 @@ static char *evaluate_nomutation(const region_t *g) {
     read_t **read_data = (read_t **)read_list->data;
 
     int g_pos;
-    double alt_probability = -1e6;
+    double alt_probability = -DBL_MAX;
     double ref_probability = 0;
     int ref_count = 0;
     int alt_count = 0;

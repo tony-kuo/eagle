@@ -917,7 +917,7 @@ static char *evaluate(const vector_t *var_set) {
 
     vector_int_t *haplotypes = vector_int_create(stats->len);
     for (i = 0; i < stats->len; i++) {
-        if ((double)c[i] / (double)read_list->len > 0.01) vector_int_add(haplotypes, i); // relevant combination if read count > 1%
+        if ((double)c[i] / (double)read_list->len >= 0.1) vector_int_add(haplotypes, i); // relevant combination if read count >= 10% of reads seen
     }
     combo = vector_create(haplotypes->len, VOID_T);
     if (haplotypes->len > 1) combinations(combo, 2, haplotypes->len); // combination pairs

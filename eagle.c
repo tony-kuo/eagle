@@ -806,8 +806,6 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
 
-        vector_double_add(stat->read_prgv, prgv);
-
         /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
         double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
         double phet10 = log_add_exp(LG10 + prgv, LG90 + prgu);
@@ -823,12 +821,14 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         stat->alt += prgv;
         stat->het += phet;
 
+        vector_double_add(stat->read_prgv, log_add_exp(prgv, phet));
+
         /* Read count incremented only when the difference in probability is not ambiguous, > ~log(2) difference and more likely than pout */
         if (prgv > prgu && prgv - prgu > 0.69 && prgv - pout > 0.69) stat->alt_count += 1;
         else if (prgu > prgv && prgu - prgv > 0.69 && prgu - pout > 0.69) stat->ref_count += 1;
 
         if (debug >= 2) {
-            fprintf(stderr, "::\t%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
+            fprintf(stderr, "%f\t%f\t%f\t%f\t%d\t%d\t", prgu, phet, prgv, pout, stat->ref_count, stat->alt_count);
             fprintf(stderr, "%s\t%s\t%d\t%d\t", read_data[readi]->name, read_data[readi]->chr, read_data[readi]->pos, read_data[readi]->end);
             for (i = 0; i < read_data[readi]->n_cigar; i++) fprintf(stderr, "%d%c ", read_data[readi]->cigar_oplen[i], read_data[readi]->cigar_opchr[i]);
             fprintf(stderr, "\t");
@@ -935,7 +935,14 @@ static char *evaluate(const vector_t *var_set) {
             double phet90 = log_add_exp(LG90 + stat[x]->read_prgv->data[readi], LG10 + stat[y]->read_prgv->data[readi]);
             if (phet10 > phet) phet = phet10;
             if (phet90 > phet) phet = phet90;
-            prhap->data[seti] += phet + ref_prior; // equal prior probability to ref since this assumes heterozygous non-reference variant
+            prhap->data[seti] += phet; // equal prior probability to ref since this assumes heterozygous non-reference variant
+        }
+    }
+    if (debug >= 1) {
+        for (seti = 0; seti < combo->len; seti++) {
+            x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
+            y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
+            fprintf(stderr, "==\t%d, %d, %f\n", x, y, prhap->data[seti]);
         }
     }
 

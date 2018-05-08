@@ -794,17 +794,18 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
             prgv = log_add_exp(prgv, readprobability);
         }
 
+        /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
+        pout += lgomega;
+        prgu = log_add_exp(pout, prgu);
+        prgv = log_add_exp(pout, prgv);
+
+        /* Track combination with highest variant likelihood for verbose output */
         if (prgv > read_data[readi]->prgv && read_data[readi]->pos + sum_i(read_data[readi]->cigar_oplen, read_data[readi]->n_cigar) >= var_data[stat->combo->data[0]]->pos && read_data[readi]->pos <= var_data[stat->combo->data[stat->combo->len - 1]]->pos) { // read crosses a variant in current combo
             read_data[readi]->index = seti;
             read_data[readi]->prgu = prgu;
             read_data[readi]->prgv = prgv;
             read_data[readi]->pout = pout;
         }
-
-        /* Mixture model: probability that the read is from elsewhere, outside paralogous source */
-        pout += lgomega;
-        prgu = log_add_exp(pout, prgu);
-        prgv = log_add_exp(pout, prgv);
 
         /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
         double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);

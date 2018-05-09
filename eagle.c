@@ -240,7 +240,6 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 read->splice_offset[i] = 0;
 
                 if (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == '=' || read->cigar_opchr[i] == 'X') start_align = 1; 
-                if (read->cigar_opchr[i] != 'I') read->end += read->cigar_oplen[i]; 
                 else if (start_align == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i]; 
                 else if (start_align == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i]; 
 
@@ -252,6 +251,8 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 else if (splice && read->cigar_opchr[i] != 'D') {
                     splice_pos += read->cigar_oplen[i];
                 }
+
+                if (read->cigar_opchr[i] != 'I') read->end += read->cigar_oplen[i]; 
             }
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);

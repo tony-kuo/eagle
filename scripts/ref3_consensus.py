@@ -47,11 +47,11 @@ def readFile(fn, entry, n):
             key = t[0]
 
             if key not in entry: 
-                entry[key] = (float(t[4]), np.logaddexp(float(t[4]), float(t[5])), 0)
-            elif key in entry and n > 0:
+                entry[key] = (float(t[4]), np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])), 0) # prgu + prgv + pout
+            elif key in entry:
                 prgu = entry[key][0] + float(t[4]) # ref[N0] * ref[N1]
                 #prgv = entry[key][1] + float(t[5]) # alt[N0] * alt[N1]
-                total = entry[key][1] + np.logaddexp(float(t[4]), float(t[5])) # total[N0] * total[N1]
+                total = entry[key][1] + np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])) # total[N0] * total[N1]
                 entry[key] = (prgu, total, n)
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
@@ -64,7 +64,7 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
     fh = [fhA, fhB, fhD]
 
     l2 = np.log(2)
-    threshold = np.log(0.5)
+    threshold = np.log(0.95)
     for key in chrA:
         if key not in chrB or key not in chrD: continue
 
@@ -75,12 +75,11 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
         for i in range(len(z)):
             if z[i] == 0: y[i] += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
 
-        p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
-        i = max(range(len(p)), key=p.__getitem__)
-        
-        d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
+        i = max(range(len(x)), key=x.__getitem__)
+        #p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
+        #d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
 
-        if p[i] > threshold and min(d) > 0.01: c = "REF"
+        if x[i] - y[i] > threshold: c = "REF"
         else: c = "UNK"
         print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
 

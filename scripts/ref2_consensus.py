@@ -31,7 +31,7 @@ def readFile(fn, entry):
             if re.match('^#', line): continue
 
             t = line.strip().split('\t')
-            entry[t[0]] = (float(t[4]), np.logaddexp(float(t[4]), float(t[5])))
+            entry[t[0]] = (float(t[4]), np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])), 0) # prgu + prgv + pout
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
@@ -41,19 +41,15 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
     fhB = open(out_prefix + '.chrB.list', 'w')
     fh = [fhA, fhB]
 
-    threshold = np.log(0.5)
+    threshold = np.log(0.95)
     for key in chrA:
         if key not in chrB: continue
 
         x = [chrA[key][0], chrB[key][0]] # numerator
         y = [chrA[key][1], chrB[key][1]] # denominator
 
-        p = [x[0] - y[0], x[1] - y[1]]
-        i = max(range(len(p)), key=p.__getitem__)
-        
-        d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
-
-        if p[i] > threshold and min(d) > 0.01: c = "REF"
+        i = max(range(len(x)), key=x.__getitem__)
+        if x[i] > threshold: c = "REF"
         else: c = "UNK"
         print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
 

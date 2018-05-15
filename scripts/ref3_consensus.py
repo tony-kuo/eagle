@@ -75,11 +75,11 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
         for i in range(len(z)):
             if z[i] == 0: y[i] += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
 
-        i = max(range(len(x)), key=x.__getitem__)
-        #p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
-        #d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
+        p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
+        i = max(range(len(p)), key=p.__getitem__)
+        d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
 
-        if x[i] - y[i] > threshold: c = "REF"
+        if p[i] > threshold and min(d) > 0.01: c = "REF"
         else: c = "UNK"
         print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
 

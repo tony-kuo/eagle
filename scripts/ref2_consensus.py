@@ -48,8 +48,11 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
         x = [chrA[key][0], chrB[key][0]] # numerator
         y = [chrA[key][1], chrB[key][1]] # denominator
 
-        i = max(range(len(x)), key=x.__getitem__)
-        if x[i] > threshold: c = "REF"
+        p = [x[0] - y[0], x[1] - y[1]]
+        i = max(range(len(p)), key=p.__getitem__)
+        d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
+
+        if p[i] > threshold and min(d) > 0.01: c = "REF"
         else: c = "UNK"
         print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
 

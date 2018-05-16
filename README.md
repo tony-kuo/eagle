@@ -81,6 +81,8 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **--lowmem**  Low memory usage mode.  For SNPs, we use a method to quickly derive the alternative hypothesis probability from the reference hypothesis probability without constructing the alternative sequence in memory.  For indels, which can be treated as a series of SNPs, this method may not be faster depending on read depth due to the number of frameshifted bases to account for.  Though it will save memory which may allow for more threads without hitting some memory cap.
 
+**--phred64**  Reads quality scores are in phred64.  Default is phred33.
+
 **--hetbias** [FLOAT]  Prior probability bias towards heterozygous or homozygous mutations.  Value between [0,1] where 1 is towards heterozygosity.  Default is 0.5 (unbiased).
 
 **--omega** [FLOAT]  Prior probability of originating from outside paralogous source (i.e. not from reference genome and also not from the candidate variant genome).  Value between [0,1].  Default is 1e-5.
@@ -109,11 +111,19 @@ Usage, with more details in *example.sh*:
 
 ### Program Parameters
 
--o  prefix for output BAM files.
+**-o --out**  [String] Output file name prefix
 
---listonly  print classified read list only (stdout) without processing BAM files
+**-a --bam**  [FILE] BAM alignment data file to be processed, reference coordinated sorted with index
 
---readlist  read from classified read list instead of EAGLE outputs and process BAM files.  This is useful if you previously outputed with *listonly* and then performed post-processing on list files to obtain, for example, a consensus list.  This will allow the post-processed list to be used instead.
+**-u --unique**  [FILE1,FILE2,...] Optionally, also output reads that are unique against other BAM files (comma separated list)
 
---refonly  write REF classified reads only when processing BAM file.
+**--listonly**  Print classified read list only (stdout) without processing BAM files
 
+**--readlist**  Read from classified read list instead of EAGLE outputs and process BAM files.  This is useful if you previously outputed with *listonly* and then performed post-processing on list files to obtain, for example, a consensus list.  This will allow the post-processed list to be used instead.
+
+**--refonly**  Write REF classified reads only when processing BAM file.
+
+**--pao**  Use primary alignments only, based on SAM flag.
+
+## References
+Tony Kuo and Martin C Frith and Jun Sese and Paul Horton. EAGLE: Explicit Alternative Genome Likelihood Evaluator. BMC Medical Genomics. 11(Suppl 2):28. https://doi.org/10.1186/s12920-018-0342-1

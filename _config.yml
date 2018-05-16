@@ -1,9 +1,0 @@
-theme: jekyll-theme-minimal
-url: "http://tony-kuo.github.io/eagle"
-baseurl: "/eagle"
-title: EAGLE: Explicit Alternative Genome Likelihood Evaluator
-
-plugins:
-  - jekyll-seo-tag
-
-google_analytics: UA-119130822-1

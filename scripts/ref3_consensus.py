@@ -44,15 +44,14 @@ def readFile(fn, entry, n):
             if re.match('^#', line): continue
 
             t = line.strip().split('\t')
-            key = t[0]
+            key = "{}\t{}".format(t[0], t[7])
+            pos = "{}\t{}".format(t[2], t[3])
 
             if key not in entry: 
-                entry[key] = (float(t[4]), np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])), 0) # prgu + prgv + pout
+                entry[key] = (pos, float(t[4]), np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])), n) # total = prgu + prgv + pout
             elif key in entry:
-                prgu = entry[key][0] + float(t[4]) # ref[N0] * ref[N1]
-                #prgv = entry[key][1] + float(t[5]) # alt[N0] * alt[N1]
-                total = entry[key][1] + np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])) # total[N0] * total[N1]
-                entry[key] = (prgu, total, n)
+                total = np.logaddexp(entry[key][1], float(t[5])) # add prgv to total
+                entry[key] = (pos, entry[key][1], total, n)
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
@@ -63,56 +62,45 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
     fhD = open(out_prefix + '.chrD.list', 'w')
     fh = [fhA, fhB, fhD]
 
-    l2 = np.log(2)
     threshold = np.log(0.95)
     for key in chrA:
         if key not in chrB or key not in chrD: continue
 
-        x = [chrA[key][0], chrB[key][0], chrD[key][0]] # numerator
-        y = [chrA[key][1], chrB[key][1], chrD[key][1]] # denominator
-        z = [chrA[key][2], chrB[key][2], chrD[key][2]]
-
-        for i in range(len(z)):
-            if z[i] == 0: y[i] += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
+        pos = [chrA[key][0], chrB[key][0], chrD[key][0]]
+        x = [chrA[key][1], chrB[key][1], chrD[key][1]] # numerator
+        y = [chrA[key][2], chrB[key][2], chrD[key][2]] # denominator
+        z = [chrA[key][3], chrB[key][3], chrD[key][3]] # number of pair-wise analysis that cross variants
 
         p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
         i = max(range(len(p)), key=p.__getitem__)
         d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
 
-        if p[i] > threshold and min(d) > 0.01: c = "REF"
+        if z[i] > 1 and p[i] > threshold and min(d) > 0.01: c = "REF"
         else: c = "UNK"
-        print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
+        t = key.strip().split('\t')
+        print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], t[1]), file=fh[i])
 
     if unique_reads:
         for key in chrA:
             if key in chrB or key in chrD: continue
-            x = chrA[key][0]
-            y = chrA[key][1]
-            if chrA[key][2] == 0:
-                y += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
-            if x - y > threshold: c = "REF"
+            if chrA[key][3] > 1 and chrA[key][1] - chrA[key][2] > threshold: c = "REF"
             else: c = "UNK"
-            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhA)
+            t = key.strip().split('\t')
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], t[1]), file=fhA)
 
         for key in chrB:
             if key in chrA or key in chrD: continue
-            x = chrB[key][0]
-            y = chrB[key][1]
-            if chrB[key][2] == 0:
-                y += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
-            if x - y > threshold: c = "REF"
+            if chrB[key][3] > 1 and chrB[key][1] - chrB[key][2] > threshold: c = "REF"
             else: c = "UNK"
-            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhB)
+            t = key.strip().split('\t')
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], t[1]), file=fhB)
 
         for key in chrD:
             if key in chrA or key in chrB: continue
-            x = chrD[key][0]
-            y = chrD[key][1]
-            if chrD[key][2] == 0:
-                y += l2 # divide by 2 if a pair-wise analysis did not cross variants, ie. common between a pairing = ambiguous
-            if x - y > threshold: c = "REF"
+            if chrD[key][3] > 1 and chrD[key][1] - chrD[key][2] > threshold: c = "REF"
             else: c = "UNK"
-            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhD)
+            t = key.strip().split('\t')
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrD[key][0], chrD[key][1], chrD[key][2], t[1]), file=fhD)
 
     fhA.close()
     fhB.close()
@@ -120,7 +108,7 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
     print("Done:\t{}".format(datetime.now()), file=sys.stderr)
 
 def main():
-    #python ref_consensus.py -o $F.ref -A $F.A.vs.B.con.list $F.A.vs.D.con.list -B $F.B.vs.A.con.list $F.B.vs.D.con.list -D $F.D.vs.A.con.list $F.D.vs.A.con.list
+    #python ref3_consensus.py -o $F.ref -A $F.A.vs.B.list $F.A.vs.D.list -B $F.B.vs.A.list $F.B.vs.D.list -D $F.D.vs.A.list $F.D.vs.A.list
     parser = argparse.ArgumentParser(description='Determine read classification REF = A, B, D.  Classification is determined by log likelihood ratio')
     parser.add_argument('-A', nargs='+', required=True, help='2 list files: from readclassify with A as reference followed by mirror consensus')
     parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')
@@ -135,14 +123,14 @@ def main():
 
     print("Start:\t{0}".format(datetime.now()), file=sys.stderr)
     chrA = {}
-    chrA = readFile(args.A[0], chrA, 0) # file 1
-    chrA = readFile(args.A[1], chrA, 1) # file 2
+    chrA = readFile(args.A[0], chrA, 1) # file 1
+    chrA = readFile(args.A[1], chrA, 2) # file 2
     chrB = {}
-    chrB = readFile(args.B[0], chrB, 0) # file 1
-    chrB = readFile(args.B[1], chrB, 1) # file 2
+    chrB = readFile(args.B[0], chrB, 1) # file 1
+    chrB = readFile(args.B[1], chrB, 2) # file 2
     chrD = {}
-    chrD = readFile(args.D[0], chrD, 0) # file 1
-    chrD = readFile(args.D[1], chrD, 1) # file 2
+    chrD = readFile(args.D[0], chrD, 1) # file 1
+    chrD = readFile(args.D[1], chrD, 2) # file 2
     writeTable(chrA, chrB, chrD, args.u, args.o)
 
 if __name__ == '__main__':

@@ -31,7 +31,9 @@ def readFile(fn, entry):
             if re.match('^#', line): continue
 
             t = line.strip().split('\t')
-            entry[t[0]] = (float(t[4]), np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6])), 0) # prgu + prgv + pout
+            key = "{}\t{}".format(t[0], t[7])
+            pos = "{}\t{}".format(t[2], t[3])
+            entry[key] = (pos, float(t[4]), np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6]))) # total = prgu + prgv + pout
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
@@ -45,8 +47,9 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
     for key in chrA:
         if key not in chrB: continue
 
-        x = [chrA[key][0], chrB[key][0]] # numerator
-        y = [chrA[key][1], chrB[key][1]] # denominator
+        pos = [chrA[key][0], chrB[key][0]]
+        x = [chrA[key][1], chrB[key][1]] # numerator
+        y = [chrA[key][2], chrB[key][2]] # denominator
 
         p = [x[0] - y[0], x[1] - y[1]]
         i = max(range(len(p)), key=p.__getitem__)
@@ -54,32 +57,37 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
 
         if p[i] > threshold and min(d) > 0.01: c = "REF"
         else: c = "UNK"
-        print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x[i], y[i]), file=fh[i])
+        t = key.strip().split('\t')
+        print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], t[1]), file=fh[i])
 
     if unique_reads:
         for key in chrA:
             if key in chrB: continue
-            x = chrA[key][0]
-            y = chrA[key][1]
+            pos = chrA[key][0]
+            x = chrA[key][1]
+            y = chrA[key][2]
             if x - y > threshold: c = "REF"
             else: c = "UNK"
-            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhA)
+            t = key.strip().split('\t')
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos, x, y, t[1]), file=fhA)
 
         for key in chrB:
             if key in chrA: continue
-            x = chrB[key][0]
-            y = chrB[key][1]
+            pos = chrB[key][0]
+            x = chrB[key][1]
+            y = chrB[key][2]
             if x - y > threshold: c = "REF"
             else: c = "UNK"
-            print("{}\t{}\t-\t-\t{}\t{}\t-".format(key, c, x, y), file=fhB)
+            t = key.strip().split('\t')
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos, x, y, t[1]), file=fhB)
 
     fhA.close()
     fhB.close()
     print("Done:\t{}".format(datetime.now()), file=sys.stderr)
 
 def main():
-    #python ref_consensus.py -o $F.ref -A $F.A.vs.B.con.list $F.A.vs.D.con.list -B $F.B.vs.A.con.list $F.B.vs.D.con.list -D $F.D.vs.A.con.list $F.D.vs.A.con.list
-    parser = argparse.ArgumentParser(description='Determine read classification REF = A, B, D.  Classification is determined by log likelihood ratio')
+    #python ref2consensus.py -o $F.ref -A $F.A.vs.B.list -B $F.B.vs.A.list
+    parser = argparse.ArgumentParser(description='Determine read classification REF = A, B.  Classification is determined by log likelihood ratio')
     parser.add_argument('-A', nargs='+', required=True, help='2 list files: from readclassify with A as reference followed by mirror consensus')
     parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')
     parser.add_argument('-o', type=str, required=True, help='output file prefix')

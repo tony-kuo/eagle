@@ -63,23 +63,17 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
     if unique_reads:
         for key in chrA:
             if key in chrB: continue
-            pos = chrA[key][0]
-            x = chrA[key][1]
-            y = chrA[key][2]
-            if x - y > threshold: c = "REF"
+            if chrA[key][1] - chrA[key][2] > threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos, x, y, t[1]), file=fhA)
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], t[1]), file=fhA)
 
         for key in chrB:
             if key in chrA: continue
-            pos = chrB[key][0]
-            x = chrB[key][1]
-            y = chrB[key][2]
-            if x - y > threshold: c = "REF"
+            if chrB[key][1] - chrB[key][2] > threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos, x, y, t[1]), file=fhB)
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], t[1]), file=fhB)
 
     fhA.close()
     fhB.close()

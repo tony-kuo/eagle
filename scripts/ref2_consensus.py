@@ -53,9 +53,9 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
 
         p = [x[0] - y[0], x[1] - y[1]]
         i = max(range(len(p)), key=p.__getitem__)
-        d = [np.exp(p[i]) - np.exp(p[j]) for j in range(len(p)) if i != j]
+        d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
-        if p[i] > threshold and min(d) > 0.01: c = "REF"
+        if p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
         else: c = "UNK"
         t = key.strip().split('\t')
         print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], t[1]), file=fh[i])
@@ -63,14 +63,14 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
     if unique_reads:
         for key in chrA:
             if key in chrB: continue
-            if chrA[key][1] - chrA[key][2] > threshold: c = "REF"
+            if chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
             print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], t[1]), file=fhA)
 
         for key in chrB:
             if key in chrA: continue
-            if chrB[key][1] - chrB[key][2] > threshold: c = "REF"
+            if chrB[key][1] - chrB[key][2] >= threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
             print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], t[1]), file=fhB)

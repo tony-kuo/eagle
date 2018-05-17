@@ -469,10 +469,12 @@ static void process_list(const char *filename, const char *bam_file, const char 
             read_t **r = (read_t **)node->data;                                                                                                                          
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->flag, flag) == 0) {
-                    r[i]->prgu += prgu;
-                    r[i]->prgv += prgv;
-                    r[i]->index = type2ind(type);
-                    break;
+                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
+                        r[i]->prgu = prgu;
+                        r[i]->prgv = prgv;
+                        r[i]->index = type2ind(type);
+                        break;
+                    }
                 }
             }
             if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }

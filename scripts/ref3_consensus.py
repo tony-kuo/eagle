@@ -38,7 +38,7 @@ from datetime import datetime
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL) 
 
-def readFile(fn, entry, n):
+def readFile(fn, entry):
     with open(fn, 'r') as fh:
         for line in fh:
             if re.match('^#', line): continue
@@ -49,11 +49,21 @@ def readFile(fn, entry, n):
 
             total = np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6]))
             if key not in entry: # pos, prgu, total, n
-                entry[key] = (pos, float(t[4]), total, n)
+                entry[key] = (pos, float(t[4]), total, 0)
             elif key in entry:
-                entry[key] = (pos, entry[key][1] + float(t[4]), entry[key][2] + total, n)
+                entry[key] = (pos, entry[key][1] + float(t[4]), entry[key][2] + total, entry[key][3] + 1)
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
+    return(entry)
+
+def combinePE(data):
+    entry = {}
+    for key in data:
+        t = key.strip().split('\t')
+        if t[0] not in entry: # pos, prgu, total, n
+            entry[t[0]] = data[key]
+        elif t[0] in entry:
+            entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2], max(entry[t[0]][3], data[key][3]))
     return(entry)
 
 def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
@@ -62,7 +72,6 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
     fhD = open(out_prefix + '.chrD.list', 'w')
     fh = [fhA, fhB, fhD]
 
-    l2 = np.log(2)
     threshold = np.log(0.95)
     for key in chrA:
         if key not in chrB or key not in chrD: continue
@@ -76,32 +85,40 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
         i = max(range(len(p)), key=p.__getitem__)
         d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
-        if z[i] >= 2 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
+        if z[i] > 0 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
         else: c = "UNK"
         t = key.strip().split('\t')
-        print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], t[1]), file=fh[i])
+        if len(t) > 1: f = t[1]
+        else: f = "-"
+        print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], f), file=fh[i])
 
     if unique_reads:
         for key in chrA:
             if key in chrB or key in chrD: continue
-            if chrA[key][3] >= 2 and chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
+            if chrA[key][3] > 0 and chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], t[1]), file=fhA)
+            if len(t) > 1: f = t[1]
+            else: f = "-"
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], f), file=fhA)
 
         for key in chrB:
             if key in chrA or key in chrD: continue
-            if chrB[key][3] >= 2 and chrB[key][1] - chrB[key][2] >= threshold: c = "REF"
+            if chrB[key][3] > 0 and chrB[key][1] - chrB[key][2] >= threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], t[1]), file=fhB)
+            if len(t) > 1: f = t[1]
+            else: f = "-"
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], f), file=fhB)
 
         for key in chrD:
             if key in chrA or key in chrB: continue
-            if chrD[key][3] >= 2 and chrD[key][1] - chrD[key][2] >= threshold: c = "REF"
+            if chrD[key][3] > 0 and chrD[key][1] - chrD[key][2] >= threshold: c = "REF"
             else: c = "UNK"
             t = key.strip().split('\t')
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrD[key][0], chrD[key][1], chrD[key][2], t[1]), file=fhD)
+            if len(t) > 1: f = t[1]
+            else: f = "-"
+            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrD[key][0], chrD[key][1], chrD[key][2], f), file=fhD)
 
     fhA.close()
     fhB.close()
@@ -116,6 +133,7 @@ def main():
     parser.add_argument('-D', nargs='+', required=True, help='2 list files: from readclassify with D as reference followed by mirror consensus')
     parser.add_argument('-o', type=str, required=True, help='output file prefix')
     parser.add_argument('-u', action='store_true', help='include reads that map uniquely to one reference genome')
+    parser.add_argument('--pe', action='store_true', help='consider paired-end reads together')
     args = parser.parse_args()
     if len(sys.argv) == 1:
         parser.print_help()
@@ -124,14 +142,18 @@ def main():
 
     print("Start:\t{0}".format(datetime.now()), file=sys.stderr)
     chrA = {}
-    chrA = readFile(args.A[0], chrA, 1) # file 1
-    chrA = readFile(args.A[1], chrA, 2) # file 2
+    chrA = readFile(args.A[0], chrA) # file 1
+    chrA = readFile(args.A[1], chrA) # file 2
     chrB = {}
-    chrB = readFile(args.B[0], chrB, 1) # file 1
-    chrB = readFile(args.B[1], chrB, 2) # file 2
+    chrB = readFile(args.B[0], chrB) # file 1
+    chrB = readFile(args.B[1], chrB) # file 2
     chrD = {}
-    chrD = readFile(args.D[0], chrD, 1) # file 1
-    chrD = readFile(args.D[1], chrD, 2) # file 2
+    chrD = readFile(args.D[0], chrD) # file 1
+    chrD = readFile(args.D[1], chrD) # file 2
+    if args.pe:
+        chrA = combinePE(chrA)
+        chrB = combinePE(chrB)
+        chrD = combinePE(chrD)
     writeTable(chrA, chrB, chrD, args.u, args.o)
 
 if __name__ == '__main__':

@@ -27,6 +27,7 @@ This program is distributed under the terms of the GNU General Public License
 static int listonly;
 static int readlist;
 static int refonly;
+static int paired;
 static int pao;
 
 /* Time info */
@@ -128,9 +129,11 @@ static int readinfo_read(const char* filename) {
         int t = sscanf(line, "%s %s %d %lf %lf %lf %*[^\t] %*[^\t] %s %s", name, chr, &pos, &prgu, &prgv, &pout, flag, var);
         if (t < 8) { exit_err("bad fields in EAGLE read info file\n"); }
 
-        size_t n = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
-        char *key = malloc(n * sizeof *key);
-        snprintf(key, n, "%s\t%s", name, flag);
+        if (paired) snprintf(flag, 2, "-");
+
+        i = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
+        char key[i];
+        snprintf(key, i, "%s\t%s", name, flag);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
@@ -138,9 +141,8 @@ static int readinfo_read(const char* filename) {
             read_t **r = (read_t **)node->data;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->flag, flag) == 0) {
-                    //r[i]->prgu += prgu;
-                    //r[i]->prgv += prgv;
-                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
+                    r[i]->prgu += prgu;
+                    r[i]->prgv += prgv;
                     add2var_list(r[i]->var_list, var);
                     break;
                 }
@@ -163,7 +165,6 @@ static int readinfo_read(const char* filename) {
             vector_add(node, r);
             nreads++;
         }
-        free(key); key = NULL;
     }
     free(line); line = NULL;
     fclose(file);
@@ -277,9 +278,11 @@ static void process_bam(const char *bam_file, const char *output_prefix, char *o
         out = NULL;
         char *name = (char *)aln->data;
 
-        n = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
-        char *key = malloc(n * sizeof *key);
-        snprintf(key, n, "%s\t%s", name, flag);
+        if (paired) snprintf(flag, 2, "-");
+
+        i = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
+        char key[i];
+        snprintf(key, i, "%s\t%s", name, flag);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
@@ -298,7 +301,6 @@ static void process_bam(const char *bam_file, const char *output_prefix, char *o
             if (i == node->len) { exit_err("failed to find %s in hash key %d\n", name, k); }
         }
         free(flag); flag = NULL;
-        free(key); key = NULL;
 
         if (other_bam != NULL && out == NULL) {
             int unique = 1;
@@ -350,7 +352,7 @@ static void classify_reads(const char *bam_file, const char *output_prefix) {
             for (readi = 0; readi < node->len; readi++) {
                 char **v = (char **)r[readi]->var_list->data;
                 size_t nvariants = r[readi]->var_list->len;
- 
+
                 int multiallele;
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
                     multiallele = 1;
@@ -454,9 +456,11 @@ static void process_list(const char *filename, const char *bam_file, const char 
         int t = sscanf(line, "%s %s %*[^\t] %*[^\t] %lf %lf %*[^\t] %s %*[^\n]", name, type, &prgu, &prgv, flag);
         if (t < 5) { exit_err("bad fields in read classified list file\n"); }
 
-        size_t n = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
-        char *key = malloc(n * sizeof *key);
-        snprintf(key, n, "%s\t%s", name, flag);
+        if (paired) snprintf(flag, 2, "-");
+
+        size_t i = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
+        char key[i];
+        snprintf(key, i, "%s\t%s", name, flag);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
@@ -488,7 +492,6 @@ static void process_list(const char *filename, const char *bam_file, const char 
             vector_add(node, r);
             nreads++;
         }
-        free(key); key = NULL;
     }
     free(line); line = NULL;
     fclose(file);
@@ -505,16 +508,17 @@ static void process_list(const char *filename, const char *bam_file, const char 
 
 static void print_usage() {
     printf("\n");
-    printf("Usage: eagle-rc [options] eagle.out.txt eagle.readinfo.txt > classified_reads.list\n\n");
+    printf("Usage: eagle-rc [options] -v eagle.out.txt eagle.readinfo.txt > classified_reads.list\n\n");
     printf("*  EAGLE with runtime options --omega=1e-40 --mvh --verbose\n");
     printf("*  ex) eagle -t 2 -v var.vcf -a align.bam -r ref.fa --omega=1.0e-40 --mvh --pao --isc --verbose 1> out.txt  2> readinfo.txt\n\n");
     printf("Options:\n");
-    printf("  -o --out=      String           prefix for output BAM files\n");
-    printf("  -a --bam=      FILE             alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
-    printf("  -u --unique=   FILE1,FILE2,...  optionally, also output reads that are unique against other BAM files (comma separated list)\n");
-    printf("     --listonly                   print classified read list only (stdout) without processing BAM file\n");
-    printf("     --readlist                   read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
-    printf("     --refonly                    write REF classified reads only when processing BAM file\n");
+    printf("  -o --out=      String           Prefix for output BAM files\n");
+    printf("  -a --bam=      FILE             Alignment data BAM file corresponding to EAGLE output to be grouped into classes\n");
+    printf("  -u --unique=   FILE1,FILE2,...  Optionally, also output reads that are unique against other BAM files (comma separated list)\n");
+    printf("     --listonly                   Print classified read list only (stdout) without processing BAM file\n");
+    printf("     --readlist                   Read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
+    printf("     --refonly                    Write REF classified reads only when processing BAM file\n");
+    printf("     --paired                     Consider paired-end reads together.\n");
     printf("     --pao                        Primary alignments only.\n");
 }
 
@@ -528,6 +532,7 @@ int main(int argc, char **argv) {
     listonly = 0;
     readlist = 0;
     refonly = 0;
+    paired = 0;
     pao = 0;
 
     static struct option long_options[] = {
@@ -538,6 +543,7 @@ int main(int argc, char **argv) {
         {"listonly", no_argument, &listonly, 1},
         {"readlist", no_argument, &readlist, 1},
         {"refonly", no_argument, &refonly, 1},
+        {"paired", no_argument, &paired, 1},
         {"pao", no_argument, &pao, 1},
         {0, 0, 0, 0}
     };
@@ -559,7 +565,7 @@ int main(int argc, char **argv) {
 
     if (!listonly && bam_file == NULL) { exit_usage("Missing BAM file!"); } 
 
-    print_status("# Options: listonly=%d readlist=%d refonly=%d pao=%d\n", listonly, readlist, refonly, pao);
+    print_status("# Options: listonly=%d readlist=%d refonly=%d paired=%d pao=%d\n", listonly, readlist, refonly, paired, pao);
     print_status("# Start: \t%s", asctime(time_info));
 
     /* Start processing data */
@@ -570,10 +576,10 @@ int main(int argc, char **argv) {
     other_read_hash = kh_init(orh);
 
     if (!readlist) {
-        var_file = argv[optind++];
+        //var_file = argv[optind++];
         if (var_file == NULL) { exit_usage("Missing EAGLE output file!"); } 
 
-        readinfo_file = argv[optind];
+        readinfo_file = argv[optind++];
         if (readinfo_file == NULL) { exit_usage("Missing EAGLE read info file!"); } 
 
         int nvars = var_read(var_file);

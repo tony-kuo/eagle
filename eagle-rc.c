@@ -456,7 +456,8 @@ static void process_list(const char *filename, const char *bam_file, const char 
         int t = sscanf(line, "%s %s %*[^\t] %*[^\t] %lf %lf %*[^\t] %s %*[^\n]", name, type, &prgu, &prgv, flag);
         if (t < 5) { exit_err("bad fields in read classified list file\n"); }
 
-        if (paired) snprintf(flag, 2, "-");
+        if (strcmp(flag, "-") == 0) paired = 1;
+        else if (paired) snprintf(flag, 2, "-");
 
         size_t i = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
         char key[i];

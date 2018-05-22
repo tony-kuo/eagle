@@ -45,7 +45,7 @@ def combinePE(data):
         if t[0] not in entry: # pos, prgu, total, n
             entry[t[0]] = data[key]
         elif t[0] in entry:
-            entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2], max(entry[t[0]][3], data[key][3]))
+            entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2])
     return(entry)
 
 def writeTable(chrA, chrB, unique_reads, out_prefix):

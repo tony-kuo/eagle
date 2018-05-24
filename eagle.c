@@ -91,7 +91,7 @@ static vector_t *vcf_read(FILE *file) {
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];
         for (s1 = ref; sscanf(s1, "%[^, ]%n", ref_token, &n1) == 1 || sscanf(s1, "%[-]%n", ref_token, &n1) == 1; s1 += n1 + 1) { // heterogenenous non-reference (comma-delimited) as separate entries
             for (s2 = alt; sscanf(s2, "%[^, ]%n", alt_token, &n2) == 1 || sscanf(s2, "%[-]%n", alt_token, &n2) == 1; s2 += n2 + 1) {
-                if (alt_token[0] != '*' && strcmp("<*:DEL>", alt_token) != 0) {
+                if (alt_token[0] != '.' && alt_token[0] != '*' && strcmp("<*:DEL>", alt_token) != 0) {
                     variant_t *v = variant_create(chr, pos, ref_token, alt_token);
                     vector_add(var_list, v);
                 }

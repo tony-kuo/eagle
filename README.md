@@ -107,13 +107,15 @@ Usage, with more details in *example.sh*:
 
 `eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --omega=1e-40 --mvh --verbose 1> output.tab 2>readinfo.txt`
 
-`eagle-rc -a alignment.bam -o out_prefix output.tab readinfo.txt > classified_reads.list`
+`eagle-rc -a alignment.bam -o out_prefix -v output.tab readinfo.txt > classified_reads.list`
 
 ### Program Parameters
 
-**-o --out**  [String] Output file name prefix
+**-v --var**  [FILE] EAGLE output file, containing variant likelihoods
 
 **-a --bam**  [FILE] BAM alignment data file to be processed, reference coordinated sorted with index
+
+**-o --out**  [String] Output file name prefix
 
 **-u --unique**  [FILE1,FILE2,...] Optionally, also output reads that are unique against other BAM files (comma separated list)
 

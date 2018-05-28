@@ -66,7 +66,32 @@ def combinePE(data):
             entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2], max(entry[t[0]][3], data[key][3]))
     return(entry)
 
-def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
+def classifyDouble(key, chrA, chrB, idx, fh, threshold):
+    pos = [chrA[key][0], chrB[key][0]]
+    x = [chrA[key][1], chrB[key][1]] # numerator
+    y = [chrA[key][2], chrB[key][2]] # denominator
+    z = [chrA[key][3], chrB[key][3]] # number of pair-wise analysis that cross variants
+
+    p = [x[0] - y[0], x[1] - y[1]]
+    i = max(range(len(p)), key=p.__getitem__)
+    d = [p[i] - p[j] for j in range(len(p)) if i != j]
+
+    if z[i] > 0 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
+    else: c = "UNK"
+    t = key.strip().split('\t')
+    if len(t) > 1: f = t[1]
+    else: f = "-"
+    print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], f), file=fh[idx[i]])
+
+def classifySingle(key, chrA, fh, threshold):
+    if chrA[key][3] > 0 and chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
+    else: c = "UNK"
+    t = key.strip().split('\t')
+    if len(t) > 1: f = t[1]
+    else: f = "-"
+    print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], f), file=fh)
+
+def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
     fhB = open(out_prefix + '.chrB.list', 'w')
     fhD = open(out_prefix + '.chrD.list', 'w')
@@ -92,33 +117,20 @@ def writeTable(chrA, chrB, chrD, unique_reads, out_prefix):
         else: f = "-"
         print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], f), file=fh[i])
 
+    if doubles:
+        for key in chrA:
+            if key in chrB and key not in chrD: classifyDouble(key, chrA, chrB, (0, 1), fh, threshold)
+            elif key not in chrB and key in chrD: classifyDouble(key, chrA, chrD, (0, 2), fh, threshold)
+        for key in chrB:
+            if key not in chrA and key in chrD: classifyDouble(key, chrB, chrD, (1, 2), fh, threshold)
+
     if unique_reads:
         for key in chrA:
-            if key in chrB or key in chrD: continue
-            if chrA[key][3] > 0 and chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
-            else: c = "UNK"
-            t = key.strip().split('\t')
-            if len(t) > 1: f = t[1]
-            else: f = "-"
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], f), file=fhA)
-
+            if key not in chrB and key not in chrD: classifySingle(key, chrA, fhA, threshold)
         for key in chrB:
-            if key in chrA or key in chrD: continue
-            if chrB[key][3] > 0 and chrB[key][1] - chrB[key][2] >= threshold: c = "REF"
-            else: c = "UNK"
-            t = key.strip().split('\t')
-            if len(t) > 1: f = t[1]
-            else: f = "-"
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], f), file=fhB)
-
+            if key not in chrA and key not in chrD: classifySingle(key, chrB, fhB, threshold)
         for key in chrD:
-            if key in chrA or key in chrB: continue
-            if chrD[key][3] > 0 and chrD[key][1] - chrD[key][2] >= threshold: c = "REF"
-            else: c = "UNK"
-            t = key.strip().split('\t')
-            if len(t) > 1: f = t[1]
-            else: f = "-"
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrD[key][0], chrD[key][1], chrD[key][2], f), file=fhD)
+            if key not in chrA and key not in chrB: classifySingle(key, chrD, fhD, threshold)
 
     fhA.close()
     fhB.close()
@@ -132,7 +144,8 @@ def main():
     parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')
     parser.add_argument('-D', nargs='+', required=True, help='2 list files: from readclassify with D as reference followed by mirror consensus')
     parser.add_argument('-o', type=str, required=True, help='output file prefix')
-    parser.add_argument('-u', action='store_true', help='include reads that map uniquely to one reference genome')
+    parser.add_argument('-d', action='store_true', help='include reads that map uniquely to one subgenome')
+    parser.add_argument('-u', action='store_true', help='classify reads in double copy homeologs')
     parser.add_argument('--pe', action='store_true', help='consider paired-end reads together')
     args = parser.parse_args()
     if len(sys.argv) == 1:
@@ -154,7 +167,7 @@ def main():
         chrA = combinePE(chrA)
         chrB = combinePE(chrB)
         chrD = combinePE(chrD)
-    writeTable(chrA, chrB, chrD, args.u, args.o)
+    writeTable(chrA, chrB, chrD, args.d, args.u, args.o)
 
 if __name__ == '__main__':
     main()

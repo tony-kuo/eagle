@@ -55,6 +55,7 @@ static double hetbias;
 static double omega, lgomega;
 static int dp, gap_op, gap_ex;
 static int debug;
+static int rc;
 static double ref_prior, alt_prior, het_prior;
 
 /* Time info */
@@ -801,7 +802,7 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         prgv = log_add_exp(pout, prgv);
 
         /* Track combination with highest variant likelihood for verbose output */
-        if (verbose && prgv > read_data[readi]->prgv && read_data[readi]->pos <= var_data[stat->combo->data[0]]->pos && read_data[readi]->end >= var_data[stat->combo->data[stat->combo->len - 1]]->pos) { // read must cross all variants in current combo
+        if (verbose && prgv > read_data[readi]->prgv) {
             read_data[readi]->index = seti;
             read_data[readi]->prgu = prgu;
             read_data[readi]->prgv = prgv;
@@ -1227,6 +1228,7 @@ static void print_usage() {
     printf("     --phred64         Read quality scores are in phred64.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
+    printf("     --rc              Wrapper for read classification settings: --omega=1.0e-40 --isc --mvh --verbose --lowmem.\n");
 }
 
 int main(int argc, char **argv) {
@@ -1253,6 +1255,7 @@ int main(int argc, char **argv) {
     hetbias = 0.5;
     omega = 1.0e-5;
     debug = 0;
+    rc = 0;
 
     static struct option long_options[] = {
         {"vcf", required_argument, NULL, 'v'},
@@ -1278,6 +1281,7 @@ int main(int argc, char **argv) {
         {"hetbias", optional_argument, NULL, 990},
         {"omega", optional_argument, NULL, 991},
         {"debug", optional_argument, NULL, 'd'},
+        {"rc", no_argument, &rc, 1},
         {0, 0, 0, 0}
     };
 
@@ -1325,6 +1329,13 @@ int main(int argc, char **argv) {
     if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
     if (omega < 0 || omega > 1) omega = 1e-5;
+    if (rc) {
+        omega = 1e-40;
+        isc = 1;
+        mvh = 1;
+        verbose = 1;
+        lowmem = 1;
+    }
     lgomega = (log(omega) - log(1.0-omega));
 
     ref_prior = log(0.5);

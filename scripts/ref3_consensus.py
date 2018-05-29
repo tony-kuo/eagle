@@ -7,28 +7,28 @@
 # Compiles a consensus classification based on the results of readclassify, for hexaploid.
 # Classification is determined by the reference with the highest probability.
 # ex)
-#   eagle -t 8 -a chrA/refsort.bam -r A.fa -v AB.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> A.vs.B.txt 2> A.vs.B.readinfo.txt
-#   eagle-rc -a chrA/refsort.bam --listonly -o A.vs.B A.vs.B.txt A.vs.B.readinfo.txt > A.vs.B.list
+#   eagle -t 8 -a chrA/refsort.bam -r A.fa -v AB.vcf --rc --splice 1> A.vs.B.txt 2> A.vs.B.readinfo.txt
+#   eagle-rc --listonly -a chrA/refsort.bam -o A.vs.B -v A.vs.B.txt A.vs.B.readinfo.txt > A.vs.B.list
 #
-#   eagle -t 8 -a chrA/refsort.bam -r A.fa -v AD.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> A.vs.D.txt 2> A.vs.D.readinfo.txt
-#   eagle-rc -a chrA/refsort.bam --listonly -o A.vs.D A.vs.D.txt A.vs.D.readinfo.txt > A.vs.D.list
+#   eagle -t 8 -a chrA/refsort.bam -r A.fa -v AD.vcf --rc --splice 1> A.vs.D.txt 2> A.vs.D.readinfo.txt
+#   eagle-rc --listonly -a chrA/refsort.bam -o A.vs.D -v A.vs.D.txt A.vs.D.readinfo.txt > A.vs.D.list
 #
-#   eagle -t 8 -a chrB/refsort.bam -r B.fa -v BA.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> B.vs.A.txt 2> B.vs.A.readinfo.txt
-#   eagle-rc -a chrB/refsort.bam --listonly -o B.vs.A B.vs.A.txt B.vs.A.readinfo.txt > B.vs.A.list
+#   eagle -t 8 -a chrB/refsort.bam -r B.fa -v BA.vcf --rc --splice 1> B.vs.A.txt 2> B.vs.A.readinfo.txt
+#   eagle-rc --listonly -a chrB/refsort.bam -o B.vs.A -v B.vs.A.txt B.vs.A.readinfo.txt > B.vs.A.list
 #
-#   eagle -t 8 -a chrB/refsort.bam -r B.fa -v BD.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> B.vs.D.txt 2> B.vs.D.readinfo.txt
-#   eagle-rc -a chrB/refsort.bam --listonly -o B.vs.D B.vs.D.txt B.vs.D.readinfo.txt > B.vs.D.list
+#   eagle -t 8 -a chrB/refsort.bam -r B.fa -v BD.vcf --rc --splice 1> B.vs.D.txt 2> B.vs.D.readinfo.txt
+#   eagle-rc --listonly -a chrB/refsort.bam -o B.vs.D -v B.vs.D.txt B.vs.D.readinfo.txt > B.vs.D.list
 #
-#   eagle -t 8 -a chrD/refsort.bam -r D.fa -v DA.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> D.vs.A.txt 2> D.vs.A.readinfo.txt
-#   eagle-rc -a chrD/refsort.bam --listonly -o D.vs.A D.vs.A.txt D.vs.A.readinfo.txt > D.vs.A.list
+#   eagle -t 8 -a chrD/refsort.bam -r D.fa -v DA.vcf --rc --splice 1> D.vs.A.txt 2> D.vs.A.readinfo.txt
+#   eagle-rc --listonly -a chrD/refsort.bam -o D.vs.A -v D.vs.A.txt D.vs.A.readinfo.txt > D.vs.A.list
 #
-#   eagle -t 8 -a chrD/refsort.bam -r D.fa -v DB.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> D.vs.B.txt 2> D.vs.B.readinfo.txt
-#   eagle-rc -a chrD/refsort.bam --listonly -o D.vs.B D.vs.B.txt D.vs.B.readinfo.txt > D.vs.B.list
+#   eagle -t 8 -a chrD/refsort.bam -r D.fa -v DB.vcf --rc --splice 1> D.vs.B.txt 2> D.vs.B.readinfo.txt
+#   eagle-rc --listonly -a chrD/refsort.bam -o D.vs.B -v D.vs.B.txt D.vs.B.readinfo.txt > D.vs.B.list
 #
-#   python ref_consensus.py -o sample -A A.vs.B.list A.vs.D.list -B B.vs.A.list B.vs.D.list -D D.vs.A.list D.vs.B.list
-#   eagle-rc -a chrA/refsort.bam --refonly --readlist -o sample.chrA sample.chrA.list
-#   eagle-rc -a chrB/refsort.bam --refonly --readlist -o sample.chrB sample.chrB.list
-#   eagle-rc -a chrD/refsort.bam --refonly --readlist -o sample.chrD sample.chrD.list
+#   python ref_consensus.py --pe -u -d -o sample -A A.vs.B.list A.vs.D.list -B B.vs.A.list B.vs.D.list -D D.vs.A.list D.vs.B.list
+#   eagle-rc --refonly --readlist -a chrA/refsort.bam -o sample.chrA sample.chrA.list
+#   eagle-rc --refonly --readlist -a chrB/refsort.bam -o sample.chrB sample.chrB.list
+#   eagle-rc --refonly --readlist -a chrD/refsort.bam -o sample.chrD sample.chrD.list
 
 from __future__ import print_function
 import argparse
@@ -73,7 +73,7 @@ def classifyDouble(key, chrA, chrB, idx, fh, threshold):
     z = [chrA[key][3], chrB[key][3]] # number of pair-wise analysis that cross variants
 
     p = [x[0] - y[0], x[1] - y[1]]
-    i = max(range(len(p)), key=p.__getitem__)
+    i = max(range(len(x)), key=x.__getitem__)
     d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
     if z[i] > 0 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
@@ -107,7 +107,7 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
         z = [chrA[key][3], chrB[key][3], chrD[key][3]] # number of pair-wise analysis that cross variants
 
         p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
-        i = max(range(len(p)), key=p.__getitem__)
+        i = max(range(len(x)), key=x.__getitem__)
         d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
         if z[i] > 0 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
@@ -138,7 +138,6 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     print("Done:\t{}".format(datetime.now()), file=sys.stderr)
 
 def main():
-    #python ref3_consensus.py -o $F.ref -A $F.A.vs.B.list $F.A.vs.D.list -B $F.B.vs.A.list $F.B.vs.D.list -D $F.D.vs.A.list $F.D.vs.A.list
     parser = argparse.ArgumentParser(description='Determine read classification REF = A, B, D.  Classification is determined by log likelihood ratio')
     parser.add_argument('-A', nargs='+', required=True, help='2 list files: from readclassify with A as reference followed by mirror consensus')
     parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')

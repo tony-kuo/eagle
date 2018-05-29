@@ -7,15 +7,15 @@
 # Compiles a consensus classification based on the results of readclassify, for tetraploid.
 # Classification is determined by the reference with the highest probability.
 # ex)
-#   eagle -t 8 -a chrA/refsort.bam -r A.fa -v AB.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> A.vs.B.txt 2> A.vs.B.readinfo.txt
-#   eagle-rc -a chrA/refsort.bam --listonly -o A.vs.B A.vs.B.txt A.vs.B.readinfo.txt > A.vs.B.list
+#   eagle -t 8 -a chrA/refsort.bam -r A.fa -v AB.vcf --rc --splice 1> A.vs.B.txt 2> A.vs.B.readinfo.txt
+#   eagle-rc --listonly -a chrA/refsort.bam -o A.vs.B -v A.vs.B.txt A.vs.B.readinfo.txt > A.vs.B.list
 #
-#   eagle -t 8 -a chrB/refsort.bam -r B.fa -v BA.vcf --omega=1e-40 --mvh --isc --splice --verbose 1> B.vs.A.txt 2> B.vs.A.readinfo.txt
-#   eagle-rc -a chrB/refsort.bam --listonly -o B.vs.A B.vs.A.txt B.vs.A.readinfo.txt > B.vs.A.list
+#   eagle -t 8 -a chrB/refsort.bam -r B.fa -v BA.vcf --rc --splice 1> B.vs.A.txt 2> B.vs.A.readinfo.txt
+#   eagle-rc --listonly -a chrB/refsort.bam -o B.vs.A -v B.vs.A.txt B.vs.A.readinfo.txt > B.vs.A.list
 #
-#   python ref2_consensus.py -o sample -A A.vs.B.list -B B.vs.A.list
-#   eagle-rc -a chrA/refsort.bam --refonly --readlist -o sample.chrA sample.chrA.list
-#   eagle-rc -a chrB/refsort.bam --refonly --readlist -o sample.chrB sample.chrB.list
+#   python ref2_consensus.py --pe -u -o sample -A A.vs.B.list -B B.vs.A.list
+#   eagle-rc --refonly --readlist -a chrA/refsort.bam -o sample.chrA sample.chrA.list
+#   eagle-rc --refonly --readlist -a chrB/refsort.bam -o sample.chrB sample.chrB.list
 
 from __future__ import print_function
 import argparse
@@ -48,6 +48,14 @@ def combinePE(data):
             entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2])
     return(entry)
 
+def classifySingle(key, chrA, fh, threshold):
+    if chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
+    else: c = "UNK"
+    t = key.strip().split('\t')
+    if len(t) > 1: f = t[1]
+    else: f = "-"
+    print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], f), file=fh)
+
 def writeTable(chrA, chrB, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
     fhB = open(out_prefix + '.chrB.list', 'w')
@@ -62,7 +70,7 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
         y = [chrA[key][2], chrB[key][2]] # denominator
 
         p = [x[0] - y[0], x[1] - y[1]]
-        i = max(range(len(p)), key=p.__getitem__)
+        i = max(range(len(x)), key=x.__getitem__)
         d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
         if p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
@@ -74,22 +82,9 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
 
     if unique_reads:
         for key in chrA:
-            if key in chrB: continue
-            if chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
-            else: c = "UNK"
-            t = key.strip().split('\t')
-            if len(t) > 1: f = t[1]
-            else: f = "-"
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], f), file=fhA)
-
+            if key not in chrB: classifySingle(key, chrA, fhA, threshold)
         for key in chrB:
-            if key in chrA: continue
-            if chrB[key][1] - chrB[key][2] >= threshold: c = "REF"
-            else: c = "UNK"
-            t = key.strip().split('\t')
-            if len(t) > 1: f = t[1]
-            else: f = "-"
-            print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrB[key][0], chrB[key][1], chrB[key][2], f), file=fhB)
+            if key not in chrA: classifySingle(key, chrB, fhB, threshold)
 
     fhA.close()
     fhB.close()

@@ -524,17 +524,14 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, double baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, double baseline) {
     int i, c; // array[width * row + col] = value
     double probability = 0;
-    for (i = pos;  i < pos + read_length; i++) {
-        if (i < 0) continue;
-        if (i >= seq_length) break;
-
+    for (i = 0;  i < read_length; i++) {
         c = seq[i] - 'A';
         if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
-        probability += matrix[NT_CODES * (i - pos) + seqnt_map[c]]; 
+        probability += matrix[NT_CODES * i + seqnt_map[c]]; 
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
     }
     return probability;
@@ -549,14 +546,16 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
         probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
     }
     else {
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, pos, -DBL_MAX);
+        int rl = (pos + read_length < seq_length) ? read_length : seq_length - pos;
+        probability = calc_read_prob(matrix, rl, &seq[pos], seq_length, -DBL_MAX);
         double baseline = probability;
 
         int i;
+        if (end >= seq_length) end = seq_length - 1;
         for (i = start; i < end; i++) {
-            if (i >= seq_length) break;
             if (i != pos) {
-                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, seq, seq_length, i, baseline));
+                rl = (i + read_length < seq_length) ? read_length : seq_length - i;
+                probability = log_add_exp(probability, calc_read_prob(matrix, rl, &seq[i], seq_length, baseline));
                 if (probability > baseline) baseline = probability;
             }
         }
@@ -582,7 +581,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
         double *submatrix;
         for (i = 0; i <= n_splice; i++) {
             if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
-            else r_len = read_length -  1 - r_pos + 1;
+            else r_len = read_length - r_pos;
             n = r_len / 2;
             start = g_pos - n;
             end = g_pos + n;
@@ -608,10 +607,11 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
     double r, a, probability;
 
     if (start < 0) start = 0;
+    if (end >= seq_length) end = seq_length;
 
     for (i = start; i < end; i++) {
-        if (i >= seq_length) break;
-        probability = calc_read_prob(matrix, read_length, seq, seq_length, i, -DBL_MAX);
+        int rl = (i + read_length < seq_length) ? read_length : seq_length - i;
+        probability = calc_read_prob(matrix, rl, &seq[i], seq_length, -DBL_MAX);
         r = probability; // reference probability per position i
         a = probability; // alternative probability per position i
 
@@ -673,7 +673,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
         double *submatrix;
         for (i = 0; i <= n_splice; i++) {
             if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
-            else r_len = read_length -  1 - r_pos + 1;
+            else r_len = read_length - r_pos;
             start = g_pos - (r_len / 2);
             end = g_pos + (r_len / 2);
 

@@ -53,7 +53,7 @@ for i in `ls *_R1.fastq.gz`; do
     STAR --genomeDir $HALGENDIR --readFilesCommand zcat --readFilesIn $F\_R1.fastq.gz $F\_R2.fastq.gz \
         --outFileNamePrefix star_$F- --runThreadN $CPU --genomeLoad NoSharedMemory \
         --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonicalUnannotated \
-        --outSJfilterCountUniqueMin 3 2 2 2 --outFilterMismatchNoverLmax 0.4 --outMultimapperOrder Random \
+        --outSJfilterCountUniqueMin 3 2 2 2 --outMultimapperOrder Random \
         --outFilterType BySJout --outStd SAM | samtools view -Shb - > ./hal/$F.bam
     samtools sort -o ./hal/$F.refsort.bam ./hal/$F.bam 
     samtools index -c ./hal/$F.refsort.bam
@@ -62,7 +62,7 @@ for i in `ls *_R1.fastq.gz`; do
     STAR --genomeDir $LYRGENDIR --readFilesCommand zcat --readFilesIn $F\_R1.fastq.gz $F\_R2.fastq.gz \
         --outFileNamePrefix star_$F- --runThreadN $CPU --genomeLoad NoSharedMemory \
         --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonicalUnannotated \
-        --outSJfilterCountUniqueMin 3 2 2 2 --outFilterMismatchNoverLmax 0.4 --outMultimapperOrder Random \
+        --outSJfilterCountUniqueMin 3 2 2 2 --outMultimapperOrder Random \
         --outFilterType BySJout --outStd SAM | samtools view -Shb - > ./lyr/$F.bam
     samtools sort -o ./lyr/$F.refsort.bam ./lyr/$F.bam 
     samtools index -c ./lyr/$F.refsort.bam

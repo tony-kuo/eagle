@@ -59,6 +59,7 @@ for i in `ls *_R1.fastq.gz`; do
     samtools index -c ./hal/$F.refsort.bam
     mv star_$F-* ./hal/star_$F
 
+    mkdir -p ./lyr/star_$F
     STAR --genomeDir $LYRGENDIR --readFilesCommand zcat --readFilesIn $F\_R1.fastq.gz $F\_R2.fastq.gz \
         --outFileNamePrefix star_$F- --runThreadN $CPU --genomeLoad NoSharedMemory \
         --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonicalUnannotated \
@@ -74,15 +75,15 @@ done
 cd hal
 for i in `ls *.refsort.bam`; do 
     F=`basename $i .refsort.bam`
-    eagle -t 8 -a $F.refsort.bam -r $HALREF.fa -v ../H.vs.L.gtf.vcf --splice --rc 1> $F.H.vs.L.txt 2> $F.H.vs.L.readinfo.txt
-    eagle-rc -a $F.refsort.bam --listonly -o $F.H.vs.L $F.H.vs.L.txt $F.H.vs.L.readinfo.txt > $F.H.vs.L.list
+    eagle -t 8 -a $F.refsort.bam -r ../$HALREF.fa -v ../H.vs.L.gtf.vcf --splice --rc 1> $F.H.vs.L.txt 2> $F.H.vs.L.readinfo.txt
+    eagle-rc -a $F.refsort.bam --listonly -o $F.H.vs.L -v $F.H.vs.L.txt $F.H.vs.L.readinfo.txt > $F.H.vs.L.list
 done
 cd ..
 cd lyr
 for i in `ls *.refsort.bam`; do 
     F=`basename $i .refsort.bam`
     eagle -t 8 -a $F.refsort.bam -r $LYRREF.fa -v ../L.vs.H.gtf.vcf --splice --rc 1> $F.L.vs.H.txt 2> $F.L.vs.H.readinfo.txt
-    eagle-rc -a $F.refsort.bam --listonly -o $F.L.vs.H $F.L.vs.H.txt $F.L.vs.H.readinfo.txt > $F.L.vs.H.list
+    eagle-rc -a $F.refsort.bam --listonly -o $F.L.vs.H -v $F.L.vs.H.txt $F.L.vs.H.readinfo.txt > $F.L.vs.H.list
 done
 cd ..
 
@@ -90,12 +91,12 @@ mkdir -p eagle
 for i in `ls *_R1.fastq.gz`; do
     F=`basename $i _R1.fastq.gz`
     python scripts/ref2_consensus.py --pe -u -o eagle/$F.ref \
-        -A chrA/$F.H.vs.L.list \
-        -B chrB/$F.L.vs.H.list
+        -A hal/$F.H.vs.L.list \
+        -B lyr/$F.L.vs.H.list
     eagle-rc --refonly --readlist -a hal/$F.refsort.bam -o eagle/$F.H eagle/$F.ref.chrA.list
     eagle-rc --refonly --readlist -a lyr/$F.refsort.bam -o eagle/$F.L eagle/$F.ref.chrB.list
-    featureCounts -T 8 -t exon -g transcript_id -a $HALGTF.gtf -o eagle/F.H.counts.txt eagle/F.H.ref.bam 
-    featureCounts -T 8 -t exon -g transcript_id -a $LYRGTF.gtf -o eagle/F.L.counts.txt eagle/F.L.ref.bam 
+    featureCounts -T 8 -t exon -g transcript_id -a $HALGTF.gtf -o eagle/$F.H.counts.txt eagle/$F.H.ref.bam 
+    featureCounts -T 8 -t exon -g transcript_id -a $LYRGTF.gtf -o eagle/$F.L.counts.txt eagle/$F.L.ref.bam 
 done
 
 python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.H.counts.txt > eagle.H.tsv

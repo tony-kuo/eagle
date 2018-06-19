@@ -88,8 +88,8 @@ for n in $CHR; do
         F=`basename $i .refsort.bam`
         for j in `ls *.gtf.vcf`; do
             V=`basename $j .gtf.vcf`
-            eagle -t 8 -a $F.refsort.bam -r $REF.$n.fa -v $V.gtf.vcf --splice --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
-            eagle-rc -a $F.refsort.bam --listonly -o $F.$V $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
+            eagle -t 8 -a $F.refsort.bam -r ../$REF.$n.fa -v $V.gtf.vcf --splice --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
+            eagle-rc -a $F.refsort.bam --listonly -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
         done
     done
     cd ..
@@ -105,9 +105,9 @@ for i in `ls *_R1.fastq.gz`; do
     eagle-rc --refonly --readlist -a chrA/$F.refsort.bam -o eagle/$F.chrA eagle/$F.ref.chrA.list
     eagle-rc --refonly --readlist -a chrB/$F.refsort.bam -o eagle/$F.chrB eagle/$F.ref.chrB.list
     eagle-rc --refonly --readlist -a chrD/$F.refsort.bam -o eagle/$F.chrD eagle/$F.ref.chrD.list
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrA.gtf -o eagle/F.chrA.counts.txt eagle/F.chrA.ref.bam 
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrB.gtf -o eagle/F.chrB.counts.txt eagle/F.chrB.ref.bam 
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrD.gtf -o eagle/F.chrD.counts.txt eagle/F.chrD.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrA.gtf -o eagle/$F.chrA.counts.txt eagle/$F.chrA.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrB.gtf -o eagle/$F.chrB.counts.txt eagle/$F.chrB.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrD.gtf -o eagle/$F.chrD.counts.txt eagle/$F.chrD.ref.bam
 done
 
 # Double and triple homeolog counts

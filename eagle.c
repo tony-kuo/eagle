@@ -145,6 +145,10 @@ void fasta_read(const char *fa_file) {
         char *s;
         for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
 
+        //u_int32_t hval = fnv_32a_str(name);
+        //fprintf(stdout, "%s\t%u\n", name, hval);
+        //continue;
+
         int absent;
         khiter_t k = kh_put(rsh, refseq_hash, f->name, &absent);
         vector_t *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
@@ -225,7 +229,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             int s_offset = 0; // offset for softclip at start
             int e_offset = 0; // offset for softclip at end
 
-            uint32_t *cigar = bam_get_cigar(aln);
+            u_int32_t *cigar = bam_get_cigar(aln);
             read->n_cigar = aln->core.n_cigar;
             read->cigar_oplen = malloc(read->n_cigar * sizeof read->cigar_oplen);
             read->cigar_opchr = malloc((read->n_cigar + 1) * sizeof read->cigar_opchr);
@@ -433,46 +437,46 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
 }
 
 static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
-    int i, b; // array[width * row + col] = value
+    int i, b; // array[row * width + col] = value
     for (b = 0; b < read_length; b++) {
-        for (i = 0; i < NT_CODES; i++) matrix[NT_CODES * b + i] = no_match[b];
-        matrix[NT_CODES * b + seqnt_map[seq[b] - 'A']] = is_match[b];
+        for (i = 0; i < NT_CODES; i++) matrix[read_length * i + b] = no_match[b];
+        matrix[read_length * seqnt_map[seq[b] - 'A'] + b] = is_match[b];
         switch (seq[b]) {
         case 'A':
-            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 9] = is_match[b]; // also W
+            matrix[read_length * seqnt_map['M' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['R' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['W' - 'A'] + b] = is_match[b];
+            matrix[read_length * 9 + b] = is_match[b]; // also W
             break;
         case 'T':
-            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['W' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 9] = is_match[b]; // also W
+            matrix[read_length * seqnt_map['K' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['Y' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['W' - 'A'] + b] = is_match[b];
+            matrix[read_length * 9 + b] = is_match[b]; // also W
             break;
         case 'C':
-            matrix[NT_CODES * b + seqnt_map['M' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['Y' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['H' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 10] = is_match[b]; // also S
+            matrix[read_length * seqnt_map['M' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['Y' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['S' - 'A'] + b] = is_match[b];
+            matrix[read_length * 10 + b] = is_match[b]; // also S
             break;
         case 'G':
-            matrix[NT_CODES * b + seqnt_map['K' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['R' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['B' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['V' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['D' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + seqnt_map['S' - 'A']] = is_match[b];
-            matrix[NT_CODES * b + 10] = is_match[b]; // also S
+            matrix[read_length * seqnt_map['K' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['R' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
+            matrix[read_length * seqnt_map['S' - 'A'] + b] = is_match[b];
+            matrix[read_length * 10 + b] = is_match[b]; // also S
             break;
         }
     }
@@ -501,7 +505,7 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
             int c = seq[i] - 'A';
             if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
-            upleft = prev[j - 1] + matrix[NT_CODES * (j - 1) + seqnt_map[c]];
+            upleft = prev[j - 1] + matrix[read_length * seqnt_map[c] + (j - 1)];
 
             open = curr[j - 1] - gap_op;
             extend = a_gap_curr[j - 1] - gap_ex;
@@ -524,14 +528,16 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, double baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, int pos, const char *seq, int seq_length, double baseline) {
     int i, c; // array[width * row + col] = value
+    int end = (pos + read_length < seq_length) ? pos + read_length : seq_length - pos;
+
     double probability = 0;
-    for (i = 0;  i < read_length; i++) {
+    for (i = pos;  i < end; i++) {
         c = seq[i] - 'A';
         if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
-        probability += matrix[NT_CODES * i + seqnt_map[c]]; 
+        probability += matrix[read_length * seqnt_map[c] + (i - pos)];
         if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
     }
     return probability;
@@ -546,16 +552,14 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
         probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
     }
     else {
-        int rl = (pos + read_length < seq_length) ? read_length : seq_length - pos;
-        probability = calc_read_prob(matrix, rl, &seq[pos], seq_length, -DBL_MAX);
+        probability = calc_read_prob(matrix, read_length, pos, seq, seq_length, -DBL_MAX);
         double baseline = probability;
 
         int i;
         if (end >= seq_length) end = seq_length - 1;
         for (i = start; i < end; i++) {
             if (i != pos) {
-                rl = (i + read_length < seq_length) ? read_length : seq_length - i;
-                probability = log_add_exp(probability, calc_read_prob(matrix, rl, &seq[i], seq_length, baseline));
+                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, i, seq, seq_length, baseline));
                 if (probability > baseline) baseline = probability;
             }
         }
@@ -569,7 +573,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
     int start = pos - n;
     int end = pos + n;
 
-    int i;
+    int i, j;
     double probability = 0;
     if (n_splice == 0) {
         probability = calc_prob_region(matrix, read_length, seq, seq_length, pos, start, end);
@@ -587,7 +591,7 @@ static inline double calc_prob(const double *matrix, int read_length, const char
             end = g_pos + n;
 
             submatrix = malloc(NT_CODES * r_len * sizeof(double));
-            memcpy(submatrix, &matrix[NT_CODES * r_pos], NT_CODES * r_len * sizeof(double));
+            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
             probability += calc_prob_region(submatrix, r_len, seq, seq_length, pos, start, end);
             free(submatrix); submatrix = NULL;
 
@@ -610,8 +614,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
     if (end >= seq_length) end = seq_length;
 
     for (i = start; i < end; i++) {
-        int rl = (i + read_length < seq_length) ? read_length : seq_length - i;
-        probability = calc_read_prob(matrix, rl, &seq[i], seq_length, -DBL_MAX);
+        probability = calc_read_prob(matrix, read_length, i, seq, seq_length, -DBL_MAX);
         r = probability; // reference probability per position i
         a = probability; // alternative probability per position i
 
@@ -643,7 +646,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
                 if (x < 0 || x >= 26) { exit_err("Ref character %c at gpos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
                 if (y < 0 || y >= 26) { exit_err("Alt character %c at rpos %d for %s;%d;%s;%s not in valid alphabet\n", v->alt[m], m, v->chr, v->pos, v->ref, v->alt); }
 
-                a = a - matrix[NT_CODES * r_pos + seqnt_map[x]] + matrix[NT_CODES * r_pos + seqnt_map[y]]; // update alternative array
+                a = a - matrix[read_length * seqnt_map[x] + r_pos] + matrix[read_length * seqnt_map[y] + r_pos]; // update alternative array
             }
             offset += alt_len - ref_len;
         }
@@ -662,7 +665,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     *prgu = 0;
     *prgv = 0;
 
-    int i;
+    int i, j;
     if (n_splice == 0) {
         calc_prob_snps_region(prgu, prgv, combo, var_data, matrix, read_length, seq, seq_length, pos, start, end);
     }
@@ -678,7 +681,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
             end = g_pos + (r_len / 2);
 
             submatrix = malloc(NT_CODES * r_len * sizeof(double));
-            memcpy(submatrix, &matrix[NT_CODES * r_pos], NT_CODES * r_len * sizeof(double));
+            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
             calc_prob_snps_region(prgu, prgv, combo, var_data, submatrix, r_len, seq, seq_length, pos, start, end);
             free(submatrix); submatrix = NULL;
 

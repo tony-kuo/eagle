@@ -13,6 +13,8 @@ This program is distributed under the terms of the GNU General Public License
 #include "vector.h"
 #include "util.h"
 
+#include <immintrin.h>
+
 #define M_1_LOG10E (1.0/M_LOG10E)
 #define LG3 (log(3.0))
 
@@ -54,7 +56,44 @@ float parse_float(const char *str) {
 
 int sum_i(const int *a, int size) {
     int s = 0;
+#ifdef __AVX__
+    size_t i;
+    int n8 = size - (size % 8);
+    __m256i v = _mm256_set1_epi32(0);
+    for (i = 0; i < n8; i += 8) {
+        __m256i t = _mm256_load_si256((__m256i*)&a[i]); // load vector of 8 x 32bit ints
+        v = _mm256_add_epi32(v, t);     // accumulate partial sum vector
+    }
+    // horizontal add of 8 partials
+    v = _mm256_hadd_epi32(v, _mm256_permute2f128_si256(v, v, 1)); 
+    v = _mm256_hadd_epi32(v, v); 
+    v = _mm256_hadd_epi32(v, v); 
+    s = (int)_mm256_extract_epi32(v, 0);
+    for (i = n8; i < size; i++) s += a[i]; // non-vectorized loop for remainder
+#else
     while (--size >= 0) s += a[size];
+#endif
+    return s;
+}
+
+double sum_d(const double *a, int size) {
+    double s = 0;
+#ifdef __AVX__
+    size_t i;
+    int n4 = size - (size % 4);
+    __m256d v = _mm256_set1_pd(0);
+    for (i = 0; i < n4; i += 4) {
+        __m256d t = _mm256_load_pd(&a[i]); // load vector of 4 x double
+        v = _mm256_add_pd(v, t);           // accumulate partial sum vector
+    }
+    // horizontal add of four partials
+    v = _mm256_hadd_pd(v, _mm256_permute2f128_pd(v, v, 1));
+    v = _mm256_hadd_pd(v, v);
+    s = _mm_cvtsd_f64(_mm256_castpd256_pd128(v));
+    for (i = n4; i < size; i++) s += a[i]; // non-vectorized loop for remainder
+#else
+    while (--size >= 0) s += a[size];
+#endif
     return s;
 }
 
@@ -72,13 +111,50 @@ double log_add_exp(double a, double b) {
 
 double log_sum_exp(const double *a, size_t size) {
     int i;
-    double max_exp = a[0]; 
+    double max_exp; 
+#ifdef __AVX__
+    int n4 = size - (size % 4);
+    __m256d v = _mm256_set1_pd(a[0]);
+    for (i = 0; i < n4; i += 4) {
+        __m256d t = _mm256_load_pd(&a[i]); // load vector of 4 x double
+        v = _mm256_max_pd(v, t);           // max
+    }
+    // horizontal max of four partials
+    v = _mm256_max_pd(v, _mm256_permute2f128_pd(v, v, 1));
+    v = _mm256_max_pd(v, _mm256_permute_pd(v, 5));
+    max_exp = _mm_cvtsd_f64(_mm256_castpd256_pd128(v));
+    for (i = n4; i < size; i++) { // non-vectorized loop for remainder
+        if (a[i] > max_exp) max_exp = a[i]; 
+    }
+
+    /*
+    v = _mm256_set1_pd(0);
+    __m256d me = _mm256_set1_pd(max_exp);
+    for (i = 0; i < n4; i += 4) {
+        __m256d t = _mm256_load_pd(&a[i]); // load vector of 4 x double
+        t = _mm256_sub_pd(t, me);          // subtract max_exp
+        t = _mm256_exp_pd(t);              // exponential
+        v = _mm256_add_pd(v, t);           // accumulate partial sum vector
+    }
+    // horizontal add of four partials
+    v = _mm256_hadd_pd(v, _mm256_permute2f128_pd(v, v, 1));
+    v = _mm256_hadd_pd(v, v);
+    double s = _mm_cvtsd_f64(_mm256_castpd256_pd128(v));
+    for (i = n4; i < size; i++) s += a[i]; // non-vectorized loop for remainder
+    return log(s) + max_exp;
+    */
+    double s[size];
+    for (i = 0; i < size; i++) s[i] = exp(a[i] - max_exp);
+    return log(sum_d(s, size)) + max_exp;
+#else
+    max_exp = a[0]; 
     for (i = 1; i < size; i++) { 
         if (a[i] > max_exp) max_exp = a[i]; 
     }
-    double s = 0;
-    for (i = 0; i < size; i++) s += exp(a[i] - max_exp);
-    return log(s) + max_exp;
+    double s[size];
+    for (i = 0; i < size; i++) s[i] = exp(a[i] - max_exp);
+    return log(sum_d(s, size)) + max_exp;
+#endif
 }
 
 void init_seqnt_map(int *seqnt_map) {
@@ -203,3 +279,20 @@ int is_subset (int *arr1, int *arr2, int m, int n) { // Check if arr2 is a subse
     }
     return (i < n) ? 0 : 1;
 } 
+
+/* From http://isthe.com/chongo/tech/comp/fnv/#FNV-reference-source */
+u_int32_t fnv_32a_str(char *str) {
+    u_int32_t hash = FNV1_32_INIT;
+    unsigned char *s = (unsigned char *)str;    /* unsigned string */
+    while (*s != '\0') { /* FNV-1a hash each octet in the buffer */
+        hash ^= (u_int32_t)*s++; /* xor the bottom with the current octet */
+#ifdef NO_FNV_GCC_OPTIMIZATION
+        hash *= FNV_32_PRIME; /* multiply by the 32 bit FNV magic prime mod 2^32 */
+#else
+        hash += (hash<<1) + (hash<<4) + (hash<<7) + (hash<<8) + (hash<<24);
+#endif
+    }
+    //hash = (hash>>16) ^ (hash & MASK_16); /* xor-fold fold a 32 bit FNV-1 hash down to 16 bits */
+    //hash = (hash>>24) ^ (hash & MASK_24); /* xor-fold fold a 32 bit FNV-1 hash down to 24 bits */
+    return hash;
+}

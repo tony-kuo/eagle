@@ -145,8 +145,8 @@ void fasta_read(const char *fa_file) {
         char *s;
         for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
 
-        //u_int32_t hval = fnv_32a_str(name);
-        //fprintf(stdout, "%s\t%u\n", name, hval);
+        //u_int32_t hash = fnv_32a_str(name);
+        //fprintf(stdout, "%s\t%u\n", name, hash);
         //continue;
 
         int absent;
@@ -528,19 +528,18 @@ static double smith_waterman_gotoh(const double *matrix, int read_length, const 
     return max_score;
 }
 
-static inline double calc_read_prob(const double *matrix, int read_length, int pos, const char *seq, int seq_length, double baseline) {
+static inline double calc_read_prob(const double *matrix, int read_length, int pos, const char *seq, int seq_length) {
     int i, c; // array[width * row + col] = value
-    int end = (pos + read_length < seq_length) ? pos + read_length : seq_length - pos;
+    int end = (pos + read_length < seq_length) ? pos + read_length : seq_length;
 
-    double probability = 0;
+    double probability[end - pos];
     for (i = pos;  i < end; i++) {
         c = seq[i] - 'A';
         if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
-        probability += matrix[read_length * seqnt_map[c] + (i - pos)];
-        if (probability < baseline - 10) break; // stop if less than 1% contribution to baseline (best/highest) probability mass
+        probability[i - pos] = matrix[read_length * seqnt_map[c] + (i - pos)];
     }
-    return probability;
+    return sum_d(probability, end - pos);
 }
 
 static inline double calc_prob_region(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end) {
@@ -552,17 +551,14 @@ static inline double calc_prob_region(const double *matrix, int read_length, con
         probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
     }
     else {
-        probability = calc_read_prob(matrix, read_length, pos, seq, seq_length, -DBL_MAX);
-        double baseline = probability;
-
         int i;
         if (end >= seq_length) end = seq_length - 1;
+
+        double p[end - start];
         for (i = start; i < end; i++) {
-            if (i != pos) {
-                probability = log_add_exp(probability, calc_read_prob(matrix, read_length, i, seq, seq_length, baseline));
-                if (probability > baseline) baseline = probability;
-            }
+            p[i - start] = calc_read_prob(matrix, read_length, i, seq, seq_length);
         }
+        probability = sum_d(p, end - start);
     }
     return probability;
 }
@@ -606,15 +602,14 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
     int i, j, m, x, y;
     int v_pos, g_pos, r_pos, l, ref_len, alt_len, offset;
 
-    double prgu_n = 0;
-    double prgv_n = 0;
-    double r, a, probability;
-
     if (start < 0) start = 0;
     if (end >= seq_length) end = seq_length;
 
+    double r, a, probability;
+    double prgu_i[end - start], prgv_i[end - start];
+
     for (i = start; i < end; i++) {
-        probability = calc_read_prob(matrix, read_length, i, seq, seq_length, -DBL_MAX);
+        probability = calc_read_prob(matrix, read_length, i, seq, seq_length);
         r = probability; // reference probability per position i
         a = probability; // alternative probability per position i
 
@@ -650,11 +645,11 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
             }
             offset += alt_len - ref_len;
         }
-        prgu_n = (prgu_n == 0) ? r : log_add_exp(prgu_n, r);
-        prgv_n = (prgv_n == 0) ? a : log_add_exp(prgv_n, a);
+        prgu_i[i - start] = r;
+        prgv_i[i - start] = a;
     }
-    *prgu += prgu_n;
-    *prgv += prgv_n;
+    *prgu += log_sum_exp(prgu_i, end - start);
+    *prgv += log_sum_exp(prgv_i, end - start);
 }
 
 static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
@@ -1173,6 +1168,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d lowmem=%d phred64=%d\n", maxh, mvh, pao, isc, nodup, splice, lowmem, phred64);
     print_status("#          dp=%d gap_op=%d gap_ex=%d\n", dp, gap_op, gap_ex);
     print_status("#          hetbias=%g omega=%g\n", hetbias, omega);
+    print_status("#          verbose=%d\n", verbose);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
     vector_t *queue = vector_create(var_set->len, VOID_T);

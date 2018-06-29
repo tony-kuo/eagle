@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-g -Wall -O2 -pthread
+CFLAGS=-g -Wall -O2 -pthread -march=native
 
 HTSDIR=htslib
 INCLUDES=-I$(HTSDIR)
@@ -9,7 +9,7 @@ LIBS=$(HTSDIR)/libhts.a
 LDLIBS=-lm -lz -llzma -lbz2 -lpthread
 
 MAIN = eagle
-AUX = util.o vector.o heap.o
+AUX = vector.o util.o calc.o heap.o
 
 all: UTIL HTSLIB READCLASSIFY NOMUTATION
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(AUX) $(LIBS) $(LDLIBS)
@@ -18,7 +18,7 @@ HTSLIB:
 	$(MAKE) -C $(HTSDIR)/
 
 UTIL:
-	$(CC) $(CFLAGS) -c util.c vector.c heap.c $(LDLIBS)
+	$(CC) $(CFLAGS) -c vector.c util.c calc.c heap.c $(LDLIBS)
 
 READCLASSIFY:
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)

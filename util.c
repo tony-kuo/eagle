@@ -15,9 +15,6 @@ This program is distributed under the terms of the GNU General Public License
 
 #include <immintrin.h>
 
-#define M_1_LOG10E (1.0/M_LOG10E)
-#define LG3 (log(3.0))
-
 char *strdup1(const char *src) {
     size_t n = strlen(src) + 1;
     char *des = malloc(n * sizeof *des);
@@ -133,16 +130,18 @@ double log_sum_exp(const double *a, size_t size) {
     for (i = 0; i < n4; i += 4) {
         __m256d t = _mm256_load_pd(&a[i]); // load vector of 4 x double
         t = _mm256_sub_pd(t, me);          // subtract max_exp
-        t = _mm256_exp_pd(t);              // exponential
+        t = _mm256_exp_pd(t);              // exponential, *not in gcc*
+        t = _mm256_set_pd(*d1, *d2, *d3, *d4);
         v = _mm256_add_pd(v, t);           // accumulate partial sum vector
     }
     // horizontal add of four partials
     v = _mm256_hadd_pd(v, _mm256_permute2f128_pd(v, v, 1));
     v = _mm256_hadd_pd(v, v);
     double s = _mm_cvtsd_f64(_mm256_castpd256_pd128(v));
-    for (i = n4; i < size; i++) s += a[i]; // non-vectorized loop for remainder
+    for (i = n4; i < size; i++) s += exp(a[i] - max_exp); // non-vectorized loop for remainder
     return log(s) + max_exp;
     */
+
     double s[size];
     for (i = 0; i < size; i++) s[i] = exp(a[i] - max_exp);
     return log(sum_d(s, size)) + max_exp;
@@ -155,47 +154,6 @@ double log_sum_exp(const double *a, size_t size) {
     for (i = 0; i < size; i++) s[i] = exp(a[i] - max_exp);
     return log(sum_d(s, size)) + max_exp;
 #endif
-}
-
-void init_seqnt_map(int *seqnt_map) {
-    /* Mapping table, symmetrical according to complement */
-    memset(seqnt_map, 0, sizeof(int) * 26);
-
-    seqnt_map['A'-'A'] = 0;
-    seqnt_map['C'-'A'] = 1;
-
-    /* Ambiguous codes */
-    seqnt_map['H'-'A'] = 2; // A, C, T
-    seqnt_map['B'-'A'] = 3; // C, G, T
-    seqnt_map['R'-'A'] = 4; // A, G
-    seqnt_map['K'-'A'] = 5; // G, T
-    seqnt_map['S'-'A'] = 6; // G, C
-    seqnt_map['W'-'A'] = 7; // A, T
-
-    seqnt_map['N'-'A'] = 8;
-    seqnt_map['X'-'A'] = 8;
-
-    // W also in 9, S also in 10
-    seqnt_map['M'-'A'] = 11; // A, C
-    seqnt_map['Y'-'A'] = 12; // C, T
-    seqnt_map['V'-'A'] = 13; // A, C, G
-    seqnt_map['D'-'A'] = 14; // A, G, T
-
-    seqnt_map['G'-'A'] = 15;
-    seqnt_map['T'-'A'] = 16;
-    seqnt_map['U'-'A'] = 16;
-}
-
-void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
-    /* FastQ quality score to ln probability lookup table */
-    int i;
-    double a;
-    for (i = 0; i < size; i++) { 
-        if (i == 0) a = -0.01;
-        else a = (double)i / -10 * M_1_LOG10E; //convert to ln
-        p_match[i] = log(1 - exp(a)); // log(1-err)
-        p_mismatch[i] = a - LG3; // log(err/3)
-     }
 }
 
 void combinations(vector_t *combo, int k, int n) {

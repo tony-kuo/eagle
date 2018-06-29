@@ -26,6 +26,11 @@ This program is distributed under the terms of the GNU General Public License
 #define exit_err(M, ...) fprintf(stderr, "ERROR: (%s:%d: errno: %s) " M "\n", __FILE__, __LINE__, clean_errno(), ##__VA_ARGS__); exit(EXIT_FAILURE)
 #define exit_usage(M, ...) print_usage(); fprintf(stderr, "\n" M "\n"); exit(EXIT_FAILURE)
 
+#define FNV_32_PRIME ((u_int32_t)0x01000193)
+#define FNV1_32_INIT ((u_int32_t)0x811c9dc5)
+#define MASK_16 (((u_int32_t)1<<16)-1) /* i.e., (u_int32_t)0xffff */
+#define MASK_24 (((u_int32_t)1<<24)-1) /* i.e., (u_int32_t)0xffff */
+
 char *strdup1(const char *src);
 void str_resize(char **str, size_t size);
 
@@ -34,17 +39,17 @@ int parse_int(const char *str);
 float parse_float(const char *str);
 
 int sum_i(const int *a, int size);
+double sum_d(const double *a, int size);
 double *reverse(double *a, int size);
 
 double log_add_exp(double a, double b);
 double log_sum_exp(const double *a, size_t size);
 
-void init_seqnt_map(int *seqnt_map);
-void init_q2p_table(double *p_match, double *p_mismatch, size_t size);
-
 void combinations(vector_t *combo, int k, int n);
 void derive_combo(vector_t *combo, vector_int_t *prev, int n);
 vector_t *powerset(int n, int maxh);
 int is_subset (int arr1[], int arr2[], int m, int n);
+
+u_int32_t fnv_32a_str(char *str);
 
 #endif

@@ -17,13 +17,13 @@ This program is distributed under the terms of the GNU General Public License
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
-#include "util.h"
 #include "vector.h"
+#include "util.h"
+#include "calc.h"
 #include "heap.h"
 
 /* Constants */
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-#define NT_CODES 17   // Size of nucleotide code table
 
 /* Precalculated log values */
 #define M_1_LOG10E (1.0/M_LOG10E)
@@ -107,7 +107,8 @@ static vector_t *vcf_read(FILE *file) {
     return var_list;
 }
 
-void fasta_read(const char *fa_file) {
+/*
+static void fasta_read(const char *fa_file) {
     faidx_t *fai = fai_load(fa_file);
     if (fai == NULL) { 
         errno = fai_build(fa_file);
@@ -160,6 +161,7 @@ void fasta_read(const char *fa_file) {
     fai_destroy(fai);
     print_status("# Read reference genome: %s\t%s", fa_file, asctime(time_info));
 }
+*/
 
 static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant j = i + 1 region coordinates */
@@ -436,169 +438,7 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
     strcat(*output, "]\n");
 }
 
-static inline void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match) {
-    int i, b; // array[row * width + col] = value
-    for (b = 0; b < read_length; b++) {
-        for (i = 0; i < NT_CODES; i++) matrix[read_length * i + b] = no_match[b];
-        matrix[read_length * seqnt_map[seq[b] - 'A'] + b] = is_match[b];
-        switch (seq[b]) {
-        case 'A':
-            matrix[read_length * seqnt_map['M' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['R' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['W' - 'A'] + b] = is_match[b];
-            matrix[read_length * 9 + b] = is_match[b]; // also W
-            break;
-        case 'T':
-            matrix[read_length * seqnt_map['K' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['Y' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['W' - 'A'] + b] = is_match[b];
-            matrix[read_length * 9 + b] = is_match[b]; // also W
-            break;
-        case 'C':
-            matrix[read_length * seqnt_map['M' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['Y' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['S' - 'A'] + b] = is_match[b];
-            matrix[read_length * 10 + b] = is_match[b]; // also S
-            break;
-        case 'G':
-            matrix[read_length * seqnt_map['K' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['R' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['S' - 'A'] + b] = is_match[b];
-            matrix[read_length * 10 + b] = is_match[b]; // also S
-            break;
-        }
-    }
-}
-
-static double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end) { /* short in long version */
-    int i, j;
-
-    double prev[read_length + 1], curr[read_length + 1];
-    double a_gap_curr[read_length + 1];
-    double b_gap_prev[read_length + 1], b_gap_curr[read_length + 1];
-
-    prev[0] = 0;
-    prev[1] = 0 - gap_op;
-    for (j = 2; j < read_length + 1; j++) prev[j] = prev[j - 1] - gap_ex;
-    for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = -DBL_MAX;
-
-    double max_score = -DBL_MAX;
-    double upleft, open, extend, row_max;
-    for (i = start; i < end; i++) {
-        row_max = -DBL_MAX;
-        curr[0] = 0;
-        a_gap_curr[0] = -DBL_MAX;
-        b_gap_curr[0] = -DBL_MAX;
-        for (j = 1; j <= read_length; j++) {
-            int c = seq[i] - 'A';
-            if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
-
-            upleft = prev[j - 1] + matrix[read_length * seqnt_map[c] + (j - 1)];
-
-            open = curr[j - 1] - gap_op;
-            extend = a_gap_curr[j - 1] - gap_ex;
-            a_gap_curr[j] = (open >= extend) ? open : extend;
-
-            open = prev[j] - gap_op;
-            extend = b_gap_prev[j] - gap_ex;
-            b_gap_curr[j] = (open >= extend) ? open : extend;
-
-            curr[j] = upleft;
-            if (a_gap_curr[j] >= curr[j]) curr[j] = a_gap_curr[j];
-            if (b_gap_curr[j] >= curr[j]) curr[j] = b_gap_curr[j];
-            if (curr[j] > row_max) row_max = curr[j];
-        }
-        if (row_max > max_score) max_score = row_max;
-
-        memcpy(prev, curr, sizeof(prev));
-        memcpy(b_gap_prev, b_gap_curr, sizeof(b_gap_prev));
-    }
-    return max_score;
-}
-
-static inline double calc_read_prob(const double *matrix, int read_length, int pos, const char *seq, int seq_length) {
-    int i, c; // array[width * row + col] = value
-    int end = (pos + read_length < seq_length) ? pos + read_length : seq_length;
-
-    double probability[end - pos];
-    for (i = pos;  i < end; i++) {
-        c = seq[i] - 'A';
-        if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
-
-        probability[i - pos] = matrix[read_length * seqnt_map[c] + (i - pos)];
-    }
-    return sum_d(probability, end - pos);
-}
-
-static inline double calc_prob_region(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end) {
-    double probability = 0;
-    if (start < 0) start = 0;
-    if (dp) {
-        end += read_length;
-        if (end >= seq_length) end = seq_length - 1;
-        probability = smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end);
-    }
-    else {
-        int i;
-        if (end >= seq_length) end = seq_length - 1;
-
-        double p[end - start];
-        for (i = start; i < end; i++) {
-            p[i - start] = calc_read_prob(matrix, read_length, i, seq, seq_length);
-        }
-        probability = sum_d(p, end - start);
-    }
-    return probability;
-}
-
-static inline double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
-    /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
-    int n = read_length / 2;
-    int start = pos - n;
-    int end = pos + n;
-
-    int i, j;
-    double probability = 0;
-    if (n_splice == 0) {
-        probability = calc_prob_region(matrix, read_length, seq, seq_length, pos, start, end);
-    }
-    else { // calculate the probability for each splice section separately
-        int r_pos = 0;
-        int g_pos = pos;
-        int r_len;
-        double *submatrix;
-        for (i = 0; i <= n_splice; i++) {
-            if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
-            else r_len = read_length - r_pos;
-            n = r_len / 2;
-            start = g_pos - n;
-            end = g_pos + n;
-
-            submatrix = malloc(NT_CODES * r_len * sizeof(double));
-            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
-            probability += calc_prob_region(submatrix, r_len, seq, seq_length, pos, start, end);
-            free(submatrix); submatrix = NULL;
-
-            g_pos += r_len + splice_offset[i];
-            r_pos = splice_pos[i] + 1;
-        }
-    }
-    return probability;
-}
-
-static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end) {
+static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
     int i, j, m, x, y;
     int v_pos, g_pos, r_pos, l, ref_len, alt_len, offset;
 
@@ -609,7 +449,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
     double prgu_i[end - start], prgv_i[end - start];
 
     for (i = start; i < end; i++) {
-        probability = calc_read_prob(matrix, read_length, i, seq, seq_length);
+        probability = calc_read_prob(matrix, read_length, i, seq, seq_length, seqnt_map);
         r = probability; // reference probability per position i
         a = probability; // alternative probability per position i
 
@@ -652,7 +492,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
     *prgv += log_sum_exp(prgv_i, end - start);
 }
 
-static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice) {
+static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int start = pos - (read_length / 2);
     int end = pos + (read_length / 2);
@@ -662,7 +502,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
 
     int i, j;
     if (n_splice == 0) {
-        calc_prob_snps_region(prgu, prgv, combo, var_data, matrix, read_length, seq, seq_length, pos, start, end);
+        calc_prob_snps_region(prgu, prgv, combo, var_data, matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
     }
     else { // calculate the probability for each splice section separately
         int r_pos = 0;
@@ -677,7 +517,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
 
             submatrix = malloc(NT_CODES * r_len * sizeof(double));
             for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
-            calc_prob_snps_region(prgu, prgv, combo, var_data, submatrix, r_len, seq, seq_length, pos, start, end);
+            calc_prob_snps_region(prgu, prgv, combo, var_data, submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
             free(submatrix); submatrix = NULL;
 
             g_pos += r_len + splice_offset[i];
@@ -686,7 +526,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     }
 }
 
-static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti) {
+static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti, int *seqnt_map) {
     size_t i, readi;
     stat->ref = 0;
     stat->alt = 0;
@@ -724,13 +564,14 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
             is_match[i] = p_match[read_data[readi]->qual[i]];
             no_match[i] = p_mismatch[read_data[readi]->qual[i]];
             if (dp) {
-                is_match[i] += 1;
-                no_match[i] += 1;
+                double n = is_match[i] - 1;
+                is_match[i] += 1 - n;
+                no_match[i] += 1 - n;
             }
         }
         /* Read probability matrix */
         double readprobmatrix[NT_CODES * read_data[readi]->length];
-        set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match);
+        set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match, seqnt_map);
 
         /* Outside Paralog Exact Formuation: Probability that read is from an outside the reference paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
            a) perfect match = prod[ (1-e) ]
@@ -748,12 +589,16 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         double prgu, prgv;
         //for (i =0; i < stat->combo->len; i++) { variant_t *v = var_data[stat->combo->data[i]]; printf("%d;%s;%s;", v->pos, v->ref, v->alt); }
         //printf("\t%s\t%d\t%d\t%s\n", read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
-        if (has_indel || dp) {
-            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
-            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+        if (has_indel) {
+            prgu = calc_prob(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, seqnt_map);
+            prgv = calc_prob(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, seqnt_map);
+        }
+        else if (dp) {
+            prgu = calc_prob_dp(readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, gap_op, gap_ex, seqnt_map);
+            prgv = calc_prob_dp(readprobmatrix, read_data[readi]->length, altseq, altseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, gap_op, gap_ex, seqnt_map);
         }
         else {
-            calc_prob_snps(&prgu, &prgv, stat->combo, var_data, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+            calc_prob_snps(&prgu, &prgv, stat->combo, var_data, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, seqnt_map);
         }
         //printf("%f\t%f\n\n", prgv, prgu);
         double pout = elsewhere;
@@ -778,7 +623,7 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
                     }
 
                     xa_pos = abs(xa_pos);
-                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice);
+                    double readprobability = calc_prob(p_readprobmatrix, read_data[readi]->length, xa_refseq, xa_refseq_length, xa_pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, seqnt_map);
                     prgu = log_add_exp(prgu, readprobability);
                     prgv = log_add_exp(prgv, readprobability);
                     free(newreadprobmatrix); newreadprobmatrix = NULL;
@@ -885,7 +730,7 @@ static char *evaluate(const vector_t *var_set) {
     for (seti = 0; seti < combo->len; seti++) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti], read_list->len);
         vector_add(stats, s);
-        calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, seti);
+        calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, seti, seqnt_map);
     }
     if (var_set->len > 1) { // doubles and beyond
         heap_t *h = heap_create(STATS_T);
@@ -900,7 +745,7 @@ static char *evaluate(const vector_t *var_set) {
             for (i = 0; i < c->len; i++) {
                 stats_t *s = stats_create((vector_int_t *)c->data[i], read_list->len);
                 vector_add(stats, s);
-                calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1);
+                calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1, seqnt_map);
                 heap_push(h, s->mut, s);
             }
             vector_free(c);
@@ -947,17 +792,22 @@ static char *evaluate(const vector_t *var_set) {
         }
     }
 
-    double total = stat[0]->mut;
-    for (seti = 1; seti < stats->len; seti++) total = log_add_exp(total, stat[seti]->mut);
+    double total = log_add_exp(stat[0]->mut, stat[0]->ref);
+    for (seti = 1; seti < stats->len; seti++) {
+        total = log_add_exp(total, stat[seti]->mut);
+        total = log_add_exp(total, stat[seti]->ref);
+    }
     for (seti = 0; seti < combo->len; seti++) total = log_add_exp(total, prhap->data[seti]);
 
     char *output = malloc(sizeof *output);
     output[0] = '\0';
     if (mvh) { /* Max likelihood variant hypothesis */
         int max_seti = 0;
+        double r = stat[0]->mut - stat[0]->ref;
         double has_alt = stat[0]->mut;
         for (seti = 1; seti < stats->len; seti++) { 
-            if (stat[seti]->mut > has_alt) {
+            if (stat[seti]->mut - stat[seti]->ref > r) {
+                r = stat[seti]->mut - stat[seti]->ref;
                 has_alt = stat[seti]->mut;
                 max_seti = seti;
             }
@@ -969,7 +819,6 @@ static char *evaluate(const vector_t *var_set) {
     }
     else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < var_set->len; i++) {
-            double ref = -DBL_MAX;
             double has_alt = 0;
             double not_alt = 0;
             int acount = -1;
@@ -977,8 +826,7 @@ static char *evaluate(const vector_t *var_set) {
             int seen = -1;
             for (seti = 0; seti < stats->len; seti++) {
                 if (variant_find(stat[seti]->combo, i) != -1) { // if variant is in this combination
-                    has_alt = (has_alt == 0) ? stat[seti]->mut : log_add_exp(has_alt, stat[seti]->mut);
-                    if (stat[seti]->ref > ref) ref = stat[seti]->ref;
+                    has_alt = (has_alt == 0) ? stat[seti]->mut - stat[seti]->ref : log_add_exp(has_alt, stat[seti]->mut - stat[seti]->ref);
                     if (stat[seti]->seen > seen) seen = stat[seti]->seen;
                     if (stat[seti]->alt_count > acount) {
                         acount = stat[seti]->alt_count;
@@ -986,10 +834,9 @@ static char *evaluate(const vector_t *var_set) {
                     }
                 }
                 else {
-                    not_alt = (not_alt == 0) ? stat[seti]->mut : log_add_exp(not_alt, stat[seti]->mut);
+                    not_alt = (not_alt == 0) ? stat[seti]->mut - stat[seti]->ref : log_add_exp(not_alt, stat[seti]->mut - stat[seti]->ref);
                 }
             }
-            not_alt = (not_alt == 0) ? ref : log_add_exp(not_alt, ref);
             for (seti = 0; seti < combo->len; seti++) {
                 x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
                 y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
@@ -1000,7 +847,7 @@ static char *evaluate(const vector_t *var_set) {
                     not_alt = log_add_exp(not_alt, prhap->data[seti]);
                 }
             }
-            variant_print(&output, var_set, i, seen, rcount, acount, log_add_exp(total, ref), has_alt, not_alt);
+            variant_print(&output, var_set, i, seen, rcount, acount, total, has_alt, not_alt);
         }
     }
 

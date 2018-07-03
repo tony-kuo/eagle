@@ -28,35 +28,39 @@ vector_t *vector_create(size_t initial_size, enum type var_type) {
 }
 
 void vector_free(vector_t *a) {
-    a->len = 0;
-    free(a->data); a->data = NULL;
-    free(a); a = NULL;
+    if (a) {
+        a->len = 0;
+        free(a->data); a->data = NULL;
+        free(a); a = NULL;
+    }
 }
 
 void vector_destroy(vector_t *a) {
-    size_t i;
-    enum type var_type = a->type;
-    for (i = 0; i < a->len; i++) {
-        switch (var_type) {
-            case STATS_T:
-                stats_destroy((stats_t *)a->data[i]);
-                break;
-            case VARIANT_T:
-                variant_destroy((variant_t *)a->data[i]);
-                break;
-            case READ_T:
-                read_destroy((read_t *)a->data[i]);
-                break;
-            case FASTA_T:
-                fasta_destroy((fasta_t *)a->data[i]);
-                break;
-            default:
-                break;
+    if (a) {
+        size_t i;
+        enum type var_type = a->type;
+        for (i = 0; i < a->len; i++) {
+            switch (var_type) {
+                case STATS_T:
+                    stats_destroy((stats_t *)a->data[i]);
+                    break;
+                case VARIANT_T:
+                    variant_destroy((variant_t *)a->data[i]);
+                    break;
+                case READ_T:
+                    read_destroy((read_t *)a->data[i]);
+                    break;
+                case FASTA_T:
+                    fasta_destroy((fasta_t *)a->data[i]);
+                    break;
+                default:
+                    break;
+            }
+            free(a->data[i]); a->data[i] = NULL;
         }
-        free(a->data[i]); a->data[i] = NULL;
+        a->len = a->size = 0;
+        free(a->data); a->data = NULL;
     }
-    a->len = a->size = 0;
-    free(a->data); a->data = NULL;
 }
 
 void vector_add(vector_t *a, void *entry) {
@@ -103,9 +107,11 @@ vector_int_t *vector_int_create(size_t initial_size) {
 }
 
 void vector_int_free(vector_int_t *a) {
-    a->len = 0;
-    free(a->data); a->data = NULL;
-    free(a); a = NULL;
+    if (a) {
+        a->len = 0;
+        free(a->data); a->data = NULL;
+        free(a); a = NULL;
+    }
 }
 
 void vector_int_add(vector_int_t *a, int entry) {
@@ -145,9 +151,11 @@ vector_double_t *vector_double_create(size_t initial_size) {
 }
 
 void vector_double_free(vector_double_t *a) {
-    a->len = 0;
-    free(a->data); a->data = NULL;
-    free(a); a = NULL;
+    if (a) {
+        a->len = 0;
+        free(a->data); a->data = NULL;
+        free(a); a = NULL;
+    }
 }
 
 void vector_double_add(vector_double_t *a, double entry) {
@@ -184,11 +192,12 @@ variant_t *variant_create(char *chr, int pos, char *ref, char *alt) {
 }
 
 void variant_destroy(variant_t *v) {
-    if (v == NULL) return;
-    v->pos = 0;
-    free(v->chr); v->chr = NULL;      
-    free(v->ref); v->ref = NULL;
-    free(v->alt); v->alt = NULL;
+    if (v) {
+        v->pos = 0;
+        free(v->chr); v->chr = NULL;      
+        free(v->ref); v->ref = NULL;
+        free(v->alt); v->alt = NULL;
+    }
 }
 
 read_t *read_create(char *name, int tid, char *chr, int pos) {
@@ -221,22 +230,23 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
 }
 
 void read_destroy(read_t *r) {
-    if (r == NULL) return;
-    r->tid = r->pos = r->end = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
-    r->is_unmap = r->is_dup = r->is_reverse = r->is_secondary = 0;
-    r->prgu = r->prgv = r->pout = 0;
-    r->index = 0;
-    free(r->name); r->name = NULL;
-    free(r->chr); r->chr = NULL;
-    free(r->qseq); r->qseq = NULL;
-    free(r->qual); r->qual = NULL;
-    free(r->flag); r->flag = NULL;
-    free(r->cigar_opchr); r->cigar_opchr = NULL;
-    free(r->cigar_oplen); r->cigar_oplen = NULL;
-    free(r->splice_pos); r->splice_pos = NULL;
-    free(r->splice_offset); r->splice_offset = NULL;
-    free(r->multimapXA); r->multimapXA = NULL;
-    vector_destroy(r->var_list); free(r->var_list); r->var_list = NULL;
+    if (r) {
+        r->tid = r->pos = r->end = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
+        r->is_unmap = r->is_dup = r->is_reverse = r->is_secondary = 0;
+        r->prgu = r->prgv = r->pout = 0;
+        r->index = 0;
+        free(r->name); r->name = NULL;
+        free(r->chr); r->chr = NULL;
+        free(r->qseq); r->qseq = NULL;
+        free(r->qual); r->qual = NULL;
+        free(r->flag); r->flag = NULL;
+        free(r->cigar_opchr); r->cigar_opchr = NULL;
+        free(r->cigar_oplen); r->cigar_oplen = NULL;
+        free(r->splice_pos); r->splice_pos = NULL;
+        free(r->splice_offset); r->splice_offset = NULL;
+        free(r->multimapXA); r->multimapXA = NULL;
+        vector_destroy(r->var_list); free(r->var_list); r->var_list = NULL;
+    }
 }
 
 fasta_t *fasta_create(char *name) {
@@ -246,10 +256,11 @@ fasta_t *fasta_create(char *name) {
 }
 
 void fasta_destroy(fasta_t *f) {
-    if (f == NULL) return;
-    f->seq_length = 0;
-    free(f->seq); f->seq = NULL;      
-    free(f->name); f->name = NULL;
+    if (f){
+        f->seq_length = 0;
+        free(f->seq); f->seq = NULL;      
+        free(f->name); f->name = NULL;
+    }
 }
 
 region_t *region_create(char *chr, int pos1, int pos2) {
@@ -261,9 +272,10 @@ region_t *region_create(char *chr, int pos1, int pos2) {
 }
 
 void region_destroy(region_t *g) {
-    if (g == NULL) return;
-    g->pos1 = g->pos2 = 0;
-    free(g->chr); g->chr = NULL;      
+    if (g) {
+        g->pos1 = g->pos2 = 0;
+        free(g->chr); g->chr = NULL;      
+    }
 }
 
 stats_t *stats_create(vector_int_t *combo, size_t nreads) {
@@ -281,9 +293,11 @@ stats_t *stats_create(vector_int_t *combo, size_t nreads) {
 }
 
 void stats_destroy(stats_t *s) {
-    s->ref = s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
-    vector_int_free(s->combo);
-    vector_double_free(s->read_prgv);
+    if (s) {
+        s->ref = s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
+        vector_int_free(s->combo);
+        vector_double_free(s->read_prgv);
+    }
 }
 
 int nat_sort_cmp(const void *a, const void *b, enum type var_type) {

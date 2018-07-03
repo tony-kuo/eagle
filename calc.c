@@ -19,10 +19,8 @@ This program is distributed under the terms of the GNU General Public License
 void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
     /* FastQ quality score to ln probability lookup table */
     int i;
-    double a;
     for (i = 0; i < size; i++) { 
-        if (i == 0) a = -0.01;
-        else a = (double)i / -10 * M_1_LOG10E; //convert to ln
+        double a = (i == 0) ? -0.01 : (double)i / -10 * M_1_LOG10E; //convert to ln
         p_match[i] = log(1 - exp(a)); // log(1-err)
         p_mismatch[i] = a - LG3; // log(err/3)
      }
@@ -30,7 +28,7 @@ void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
 
 void init_seqnt_map(int *seqnt_map) {
     /* Mapping table, symmetrical according to complement */
-    memset(seqnt_map, 0, sizeof(int) * 26);
+    memset(seqnt_map, 0, sizeof (int) * 26);
 
     seqnt_map['A'-'A'] = 0;
     seqnt_map['C'-'A'] = 1;
@@ -103,13 +101,13 @@ void set_prob_matrix(double *matrix, const char *seq, int read_length, const dou
     }
 }
 
-double calc_read_prob(const double *matrix, int read_length, int pos, const char *seq, int seq_length, int *seqnt_map) {
-    int i, c; // array[width * row + col] = value
+double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *seqnt_map) {
+    int i; // array[width * row + col] = value
     int end = (pos + read_length < seq_length) ? pos + read_length : seq_length;
 
     double probability[end - pos];
     for (i = pos;  i < end; i++) {
-        c = seq[i] - 'A';
+        int c = seq[i] - 'A';
         if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
         probability[i - pos] = matrix[read_length * seqnt_map[c] + (i - pos)];
@@ -117,44 +115,40 @@ double calc_read_prob(const double *matrix, int read_length, int pos, const char
     return sum_d(probability, end - pos);
 }
 
-double calc_prob_region(const double *matrix, int read_length, int pos, const char *seq, int seq_length, int start, int end, int *seqnt_map) {
+double calc_prob_region(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
     if (start < 0) start = 0;
     if (end >= seq_length) end = seq_length - 1;
 
     int i;
     double p[end - start];
     for (i = start; i < end; i++) {
-        p[i - start] = calc_read_prob(matrix, read_length, i, seq, seq_length, seqnt_map);
+        p[i - start] = calc_read_prob(matrix, read_length, seq, seq_length, i, seqnt_map);
     }
     return sum_d(p, end - start);
 }
 
 double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
-    int n = read_length / 2;
-    int start = pos - n;
-    int end = pos + n;
+    int start = pos - (read_length / 2);
+    int end = pos + (read_length / 2);
 
     int i, j;
     double probability = 0;
     if (n_splice == 0) {
-        probability = calc_prob_region(matrix, read_length, pos, seq, seq_length, start, end, seqnt_map);
+        probability = calc_prob_region(matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
     }
     else { // calculate the probability for each splice section separately
         int r_pos = 0;
         int g_pos = pos;
-        int r_len;
-        double *submatrix;
         for (i = 0; i <= n_splice; i++) {
-            if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
-            else r_len = read_length - r_pos;
-            n = r_len / 2;
+            int r_len = (i < n_splice) ? splice_pos[i] - r_pos + 1 : read_length - r_pos;
+            int n = r_len / 2;
             start = g_pos - n;
             end = g_pos + n;
 
-            submatrix = malloc(NT_CODES * r_len * sizeof(double));
-            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
-            probability += calc_prob_region(submatrix, r_len, pos, seq, seq_length, start, end, seqnt_map);
+            double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
+            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
+            probability += calc_prob_region(submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
             free(submatrix); submatrix = NULL;
 
             g_pos += r_len + splice_offset[i];
@@ -177,9 +171,10 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
     for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = -DBL_MAX;
 
     double max_score = -DBL_MAX;
-    double upleft, open, extend, row_max;
     for (i = start; i < end; i++) {
-        row_max = -DBL_MAX;
+        double row_max = -DBL_MAX;
+        double upleft, open, extend;
+
         curr[0] = 0;
         a_gap_curr[0] = -DBL_MAX;
         b_gap_curr[0] = -DBL_MAX;
@@ -204,13 +199,13 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
         }
         if (row_max > max_score) max_score = row_max;
 
-        memcpy(prev, curr, sizeof(prev));
-        memcpy(b_gap_prev, b_gap_curr, sizeof(b_gap_prev));
+        memcpy(prev, curr, sizeof (prev));
+        memcpy(b_gap_prev, b_gap_curr, sizeof (b_gap_prev));
     }
     return max_score;
 }
 
-double calc_prob_region_dp(const double *matrix, int read_length, int pos, const char *seq, int seq_length, int start, int end, int gap_op, int gap_ex, int *seqnt_map) {
+double calc_prob_region_dp(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int gap_op, int gap_ex, int *seqnt_map) {
     if (start < 0) start = 0;
     end += read_length;
     if (end >= seq_length) end = seq_length - 1;
@@ -219,30 +214,26 @@ double calc_prob_region_dp(const double *matrix, int read_length, int pos, const
 
 double calc_prob_dp(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int gap_op, int gap_ex, int *seqnt_map) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
-    int n = read_length / 2;
-    int start = pos - n;
-    int end = pos + n;
+    int start = pos - (read_length / 2);
+    int end = pos + (read_length / 2);
 
     int i, j;
     double probability = 0;
     if (n_splice == 0) {
-        probability = calc_prob_region_dp(matrix, read_length, pos, seq, seq_length, start, end, gap_op, gap_ex, seqnt_map);
+        probability = calc_prob_region_dp(matrix, read_length, seq, seq_length, pos, start, end, gap_op, gap_ex, seqnt_map);
     }
     else { // calculate the probability for each splice section separately
         int r_pos = 0;
         int g_pos = pos;
-        int r_len;
-        double *submatrix;
         for (i = 0; i <= n_splice; i++) {
-            if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
-            else r_len = read_length - r_pos;
-            n = r_len / 2;
+            int r_len = (i < n_splice) ? splice_pos[i] - r_pos + 1 : read_length - r_pos;
+            int n = r_len / 2;
             start = g_pos - n;
             end = g_pos + n;
 
-            submatrix = malloc(NT_CODES * r_len * sizeof(double));
-            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
-            probability += calc_prob_region_dp(submatrix, r_len, pos, seq, seq_length, start, end, gap_op, gap_ex, seqnt_map);
+            double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
+            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
+            probability += calc_prob_region_dp(submatrix, r_len, seq, seq_length, pos, start, end, gap_op, gap_ex, seqnt_map);
             free(submatrix); submatrix = NULL;
 
             g_pos += r_len + splice_offset[i];

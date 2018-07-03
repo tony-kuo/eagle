@@ -47,6 +47,7 @@ static int isc;
 static int nodup;
 static int splice;
 static int verbose;
+static int phred64;
 static int debug;
 static double ref_prior, alt_prior, het_prior;
 static double mut_prior, nomut_prior;
@@ -91,7 +92,7 @@ vector_t *bed_read(FILE *file) {
     return reg_list;
 }
 
-vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
+static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in region coordinates */
     vector_t *read_list = vector_create(64, READ_T);
 
@@ -133,12 +134,12 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
             int s_offset = 0; // offset for softclip at start
             int e_offset = 0; // offset for softclip at end
 
-            uint32_t *cigar = bam_get_cigar(aln);
+            u_int32_t *cigar = bam_get_cigar(aln);
             read->n_cigar = aln->core.n_cigar;
-            read->cigar_oplen = malloc(read->n_cigar * sizeof read->cigar_oplen);
-            read->cigar_opchr = malloc((read->n_cigar + 1) * sizeof read->cigar_opchr);
-            read->splice_pos = malloc(read->n_cigar * sizeof read->splice_pos);
-            read->splice_offset = malloc(read->n_cigar * sizeof read->splice_offset);
+            read->cigar_oplen = malloc(read->n_cigar * sizeof (read->cigar_oplen));
+            read->cigar_opchr = malloc((read->n_cigar + 1) * sizeof (read->cigar_opchr));
+            read->splice_pos = malloc(read->n_cigar * sizeof (read->splice_pos));
+            read->splice_offset = malloc(read->n_cigar * sizeof (read->splice_offset));
 
             j = 0;
             int splice_pos = 0; // track splice position in reads
@@ -160,6 +161,8 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
                 else if (splice && read->cigar_opchr[i] != 'D') {
                     splice_pos += read->cigar_oplen[i];
                 }
+
+                if (read->cigar_opchr[i] != 'I') read->end += read->cigar_oplen[i]; 
             }
             read->cigar_opchr[read->n_cigar] = '\0';
             read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
@@ -170,13 +173,16 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
                 s_offset = 0;
                 e_offset = 0;
             }
+            else {
+                read->end -= e_offset; // compensate for soft clip in mapped position
+            }
             read->length = aln->core.l_qseq - (s_offset + e_offset);
-            read->qseq = malloc((read->length + 1) * sizeof read->qseq);
-            read->qual = malloc(read->length  * sizeof read->qual);
+            read->qseq = malloc((read->length + 1) * sizeof (read->qseq));
+            read->qual = malloc(read->length  * sizeof (read->qual));
             uint8_t *qual = bam_get_qual(aln);
             for (i = 0; i < read->length; i++) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = (qual[i] > 41) ? qual[i] - 31 : qual[i]; // account for phred64
+                read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
 
@@ -197,7 +203,7 @@ vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1, const
     return read_list;
 }
 
-fasta_t *refseq_fetch(char *name, const char *fa_file) {
+static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
     size_t i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
@@ -241,46 +247,40 @@ fasta_t *refseq_fetch(char *name, const char *fa_file) {
 }
 
 static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
-    int i, r_pos, k, x;
-
-    double prgu_n = 0;
-    double prgv_n = 0;
-    double r, a, probability, p;
-
-    if (start < 0) start = 0;
+    int i, k;
+    double prgu_i[end - start], prgv_i[end - start];
     for (i = start; i < end; i++) {
-        if (g_pos >= seq_length) break;
-        probability = calc_read_prob(matrix, read_length, i, seq, seq_length, seqnt_map);
-        r = probability;
-        a = probability;
+        int n = i - start;
+        prgu_i[n] = calc_read_prob(matrix, read_length, seq, seq_length, i, seqnt_map); // reference probability per position i
+        prgv_i[n] = prgu_i[n]; // alternative probability per position i
 
-        r_pos = g_pos - pos;
+        int r_pos = g_pos - pos;
         if (r_pos >= 0 && r_pos < read_length) {
-            x = seq[g_pos] - 'A';
+            int x = seq[g_pos] - 'A';
             if (x < 0 || x >= 26) { exit_err("Ref character %c at pos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
 
-            probability = 0;
+            double probability = 0;
             for (k = 0; k < 4; k++) {
                 if (NT[k] != seq[g_pos]) {
-                    p = matrix[NT_CODES * r_pos + seqnt_map[NT[k] - 'A']];
+                    double p = matrix[NT_CODES * r_pos + seqnt_map[NT[k] - 'A']];
                     probability = (probability == 0) ? p : log_add_exp(probability, p);
                     //printf("%c %f\t", NT[k], p);
                 }
             }
-            a = a - matrix[NT_CODES * r_pos + seqnt_map[x]] + probability; // update alternative array
+            prgv_i[n] = prgv_i[n] - matrix[NT_CODES * r_pos + seqnt_map[x]] + probability; // update alternative array
             //printf("%d\t%d\t%c\t%d\t%f\t%f\t%f\t%f\n", i, g_pos, seq[g_pos], r_pos, r->data[i - start], a->data[i - start], (double)matrix[NT_CODES * r_pos + seqnt_map[x]], probability);
         }
-        prgu_n = (prgu_n == 0) ? r : log_add_exp(prgu_n, r);
-        prgv_n = (prgv_n == 0) ? a : log_add_exp(prgv_n, a);
     }
-    *prgu += prgu_n;
-    *prgv += prgv_n;
+    *prgu += log_sum_exp(prgu_i, end - start);
+    *prgv += log_sum_exp(prgv_i, end - start);
 }
 
 static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int start = pos; // - (read_length / 2);
     int end = pos + 1; //(read_length / 2);
+    if (start < 0) start = 0;
+    if (end >= seq_length) end = seq_length;
 
     *prgu = 0;
     *prgv = 0;
@@ -292,16 +292,13 @@ static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const d
     else { // calculate the probability for each splice section separately
         int r_pos = 0;
         int g_pos = pos;
-        int r_len;
-        double *submatrix;
         for (i = 0; i <= n_splice; i++) {
-            if (i < n_splice) r_len = splice_pos[i] - r_pos + 1;
-            else r_len = read_length -  1 - r_pos + 1;
+            int r_len = (i < n_splice) ? splice_pos[i] - r_pos + 1 : read_length - r_pos;
             start = g_pos - (r_len / 2);
             end = g_pos + (r_len / 2);
 
-            submatrix = malloc(NT_CODES * r_len * sizeof(double));
-            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof(double));
+            double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
+            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
             calc_prob_snps_region(prgu, prgv, g_pos, submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
             free(submatrix); submatrix = NULL;
 
@@ -333,7 +330,11 @@ static char *evaluate_nomutation(const region_t *g) {
     double ref_probability = 0;
     int ref_count = 0;
     int alt_count = 0;
-    for (g_pos = g->pos1; g_pos <= g->pos2; g_pos++) {
+    int start = g->pos1;
+    int end = g->pos2;
+    if (start < 0) start = 0;
+    if (end >= refseq_length) end = refseq_length;
+    for (g_pos = start; g_pos <= end; g_pos++) {
         double ref = 0;
         double alt = 0;
         int r_count = 0;
@@ -424,7 +425,7 @@ static char *evaluate_nomutation(const region_t *g) {
     alt_probability += mut_prior;
     double odds = (ref_probability - alt_probability) * M_1_LN10;
     size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds) + 1;
-    char *output = malloc(n * sizeof *output);
+    char *output = malloc(n * sizeof (*output));
     snprintf(output, n, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds);
 
     vector_destroy(read_list); free(read_list); read_list = NULL;
@@ -442,7 +443,7 @@ static void *pool(void *work) {
     vector_t *queue = (vector_t *)w->queue;
     vector_t *results = (vector_t *)w->results;
 
-    while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof(threadid), sizeof(ptid)));
+    while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof (threadid), sizeof (ptid)));
         pthread_mutex_lock(&w->q_lock);
         region_t *g = (region_t *)vector_pop(queue);
         pthread_mutex_unlock(&w->q_lock);
@@ -464,7 +465,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     region_t **reg_data = (region_t **)reg_list->data;
     size_t nregions = reg_list->len;
 
-    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d\n", pao, isc, nodup, splice);
+    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d phred64=%d\n", pao, isc, nodup, splice, phred64);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
     vector_t *queue = vector_create(nregions, VOID_T);
@@ -511,6 +512,7 @@ static void print_usage() {
     printf("     --splice            Allow spliced reads.\n");
     printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
+    printf("     --phred64           Read quality scores are in phred64.\n");
 }
 
 int main(int argc, char **argv) {
@@ -524,6 +526,7 @@ int main(int argc, char **argv) {
     isc = 0;
     nodup = 0;
     verbose = 0;
+    phred64 = 0;
     debug = 0;
 
     mut_prior = 0.001;
@@ -539,6 +542,7 @@ int main(int argc, char **argv) {
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
         {"verbose", no_argument, &verbose, 1},
+        {"phred64", no_argument, &phred64, 1},
         {"debug", optional_argument, NULL, 'd'},
         {"mut_prior", optional_argument, NULL, 990},
         {0, 0, 0, 0}

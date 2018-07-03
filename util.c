@@ -17,13 +17,13 @@ This program is distributed under the terms of the GNU General Public License
 
 char *strdup1(const char *src) {
     size_t n = strlen(src) + 1;
-    char *des = malloc(n * sizeof *des);
+    char *des = malloc(n * sizeof (*des));
     des[n] = '\0';
     return des ? memcpy(des, src, n) : NULL;
 }
 
 void str_resize(char **str, size_t size) {
-    char *p = realloc(*str, size * sizeof *str);
+    char *p = realloc(*str, size * sizeof (*str));
     if (p == NULL) { exit_err("failed to realloc in str_resize\n"); }
     else { *str = p; }
 }
@@ -96,7 +96,7 @@ double sum_d(const double *a, int size) {
 
 double *reverse(double *a, int size) {
     int i = 0;
-    double *b = malloc(size * sizeof *b);
+    double *b = malloc(size * sizeof (*b));
     while (--size >= 0) b[i++] = a[size];
     return b;
 }

@@ -89,7 +89,7 @@ for n in $CHR; do
         for j in `ls *.gtf.vcf`; do
             V=`basename $j .gtf.vcf`
             eagle -t 8 -a $F.refsort.bam -r ../$REF.$n.fa -v $V.gtf.vcf --splice --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
-            eagle-rc -a $F.refsort.bam --listonly -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
+            eagle-rc --listonly -a $F.refsort.bam -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
         done
     done
     cd ..

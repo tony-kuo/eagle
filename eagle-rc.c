@@ -129,6 +129,8 @@ static int readinfo_read(const char* filename) {
         int t = sscanf(line, "%s %s %d %lf %lf %lf %*[^\t] %*[^\t] %s %s", name, chr, &pos, &prgu, &prgv, &pout, flag, var);
         if (t < 8) { exit_err("bad fields in EAGLE read info file\n"); }
 
+        if (prgu == prgv) continue; // if ref and alt probabilities are equal, it didn't "align" and was in a splice zone
+
         if (paired) snprintf(flag, 2, "-");
 
         i = snprintf(NULL, 0, "%s\t%s", name, flag) + 1;
@@ -141,8 +143,7 @@ static int readinfo_read(const char* filename) {
             read_t **r = (read_t **)node->data;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->flag, flag) == 0) {
-                    r[i]->prgu += prgu;
-                    r[i]->prgv += prgv;
+                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
                     add2var_list(r[i]->var_list, var);
                     break;
                 }

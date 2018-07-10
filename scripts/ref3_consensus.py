@@ -34,6 +34,7 @@ from __future__ import print_function
 import argparse
 import re, os, sys
 import numpy as np
+from scipy.special import logsumexp
 from datetime import datetime
 from signal import signal, SIGPIPE, SIG_DFL
 signal(SIGPIPE,SIG_DFL) 
@@ -47,11 +48,11 @@ def readFile(fn, entry):
             key = "{}\t{}".format(t[0], t[7])
             pos = "{}\t{}".format(t[2], t[3])
 
-            total = np.logaddexp(np.logaddexp(float(t[4]), float(t[5])), float(t[6]))
-            if key not in entry: # pos, prgu, total, n
-                entry[key] = (pos, float(t[4]), total, 0)
+            if key not in entry: # pos, prgu, total, pout, n
+                total = logsumexp([float(t[4]), float(t[5]), float(t[6])])
+                entry[key] = (pos, float(t[4]), total, float(t[6]), 0)
             elif key in entry:
-                entry[key] = (pos, entry[key][1] + float(t[4]), entry[key][2] + total, entry[key][3] + 1)
+                entry[key] = (pos, entry[key][1], np.logaddexp(entry[key][2], float(t[5])), entry[key][3], entry[key][4] + 1)
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
@@ -60,36 +61,38 @@ def combinePE(data):
     entry = {}
     for key in data:
         t = key.strip().split('\t')
-        if t[0] not in entry: # pos, prgu, total, n
+        if t[0] not in entry:
             entry[t[0]] = data[key]
         elif t[0] in entry:
-            entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2], max(entry[t[0]][3], data[key][3]))
+            entry[t[0]] = (entry[t[0]][0], entry[t[0]][1] + data[key][1], entry[t[0]][2] + data[key][2], entry[t[0]][3] + data[key][3], max(entry[t[0]][4], data[key][4]))
     return(entry)
 
-def classifyDouble(key, chrA, chrB, idx, fh, threshold):
+def classifySingle(key, chrA, fh, p_threshold):
+    if chrA[key][4] > 0 and chrA[key][1] - chrA[key][2] >= p_threshold: c = "REF"
+    else: c = "UNK"
+    t = key.strip().split('\t')
+    if len(t) > 1: f = t[1]
+    else: f = "-"
+    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], chrA[key][3], f), file=fh)
+
+def classifyDouble(key, chrA, chrB, idx, fh, p_threshold, m_threshold):
     pos = [chrA[key][0], chrB[key][0]]
-    x = [chrA[key][1], chrB[key][1]] # numerator
-    y = [chrA[key][2], chrB[key][2]] # denominator
-    z = [chrA[key][3], chrB[key][3]] # number of pair-wise analysis that cross variants
+    x = [chrA[key][1], chrB[key][1]]
+    y = [chrA[key][2], chrB[key][2]]
+    z = [chrA[key][3], chrB[key][3]] 
+    n = [chrA[key][4], chrB[key][4]] # number of pair-wise analysis that cross variants
 
-    p = [x[0] - y[0], x[1] - y[1]]
+    p = [x[i] - y[i] for i in range(len(x))]
+    total = logsumexp(p)
+    m = [p[i] - total for i in range(len(p))]
     i = max(range(len(x)), key=x.__getitem__)
-    d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
-    if z[i] > 0 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
+    if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = "REF"
     else: c = "UNK"
     t = key.strip().split('\t')
     if len(t) > 1: f = t[1]
     else: f = "-"
-    print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], f), file=fh[idx[i]])
-
-def classifySingle(key, chrA, fh, threshold):
-    if chrA[key][3] > 0 and chrA[key][1] - chrA[key][2] >= threshold: c = "REF"
-    else: c = "UNK"
-    t = key.strip().split('\t')
-    if len(t) > 1: f = t[1]
-    else: f = "-"
-    print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], f), file=fh)
+    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t-".format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[idx[i]])
 
 def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
@@ -97,40 +100,43 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhD = open(out_prefix + '.chrD.list', 'w')
     fh = [fhA, fhB, fhD]
 
-    threshold = np.log(0.95)
+    p_threshold = np.log(0.95)
+    m_threshold = np.log(0.51)
     for key in chrA:
         if key not in chrB or key not in chrD: continue
 
         pos = [chrA[key][0], chrB[key][0], chrD[key][0]]
-        x = [chrA[key][1], chrB[key][1], chrD[key][1]] # numerator
-        y = [chrA[key][2], chrB[key][2], chrD[key][2]] # denominator
-        z = [chrA[key][3], chrB[key][3], chrD[key][3]] # number of pair-wise analysis that cross variants
+        x = [chrA[key][1], chrB[key][1], chrD[key][1]]
+        y = [chrA[key][2], chrB[key][2], chrD[key][2]]
+        z = [chrA[key][3], chrB[key][3], chrD[key][3]]
+        n = [chrA[key][4], chrB[key][4], chrD[key][4]] # number of pair-wise analysis that cross variants
 
-        p = [x[0] - y[0], x[1] - y[1], x[2] - y[2]]
+        p = [x[i] - y[i] for i in range(len(x))]
+        total = logsumexp(p)
+        m = [p[i] - total for i in range(len(p))]
         i = max(range(len(x)), key=x.__getitem__)
-        d = [p[i] - p[j] for j in range(len(p)) if i != j]
 
-        if z[i] > 0 and p[i] >= threshold and min(d) >= np.log(0.01): c = "REF"
+        if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = "REF"
         else: c = "UNK"
         t = key.strip().split('\t')
         if len(t) > 1: f = t[1]
         else: f = "-"
-        print("{}\t{}\t{}\t{}\t{}\t-\t{}\t-".format(t[0], c, pos[i], x[i], y[i], f), file=fh[i])
+        print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t-".format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[i])
 
     if doubles:
         for key in chrA:
-            if key in chrB and key not in chrD: classifyDouble(key, chrA, chrB, (0, 1), fh, threshold)
-            elif key not in chrB and key in chrD: classifyDouble(key, chrA, chrD, (0, 2), fh, threshold)
+            if key in chrB and key not in chrD: classifyDouble(key, chrA, chrB, (0, 1), fh, p_threshold, m_threshold)
+            elif key not in chrB and key in chrD: classifyDouble(key, chrA, chrD, (0, 2), fh, p_threshold, m_threshold)
         for key in chrB:
-            if key not in chrA and key in chrD: classifyDouble(key, chrB, chrD, (1, 2), fh, threshold)
+            if key not in chrA and key in chrD: classifyDouble(key, chrB, chrD, (1, 2), fh, p_threshold, m_threshold)
 
     if unique_reads:
         for key in chrA:
-            if key not in chrB and key not in chrD: classifySingle(key, chrA, fhA, threshold)
+            if key not in chrB and key not in chrD: classifySingle(key, chrA, fhA, p_threshold)
         for key in chrB:
-            if key not in chrA and key not in chrD: classifySingle(key, chrB, fhB, threshold)
+            if key not in chrA and key not in chrD: classifySingle(key, chrB, fhB, p_threshold)
         for key in chrD:
-            if key not in chrA and key not in chrB: classifySingle(key, chrD, fhD, threshold)
+            if key not in chrA and key not in chrB: classifySingle(key, chrD, fhD, p_threshold)
 
     fhA.close()
     fhB.close()
@@ -138,13 +144,13 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     print("Done:\t{}".format(datetime.now()), file=sys.stderr)
 
 def main():
-    parser = argparse.ArgumentParser(description='Determine read classification REF = A, B, D.  Classification is determined by log likelihood ratio')
-    parser.add_argument('-A', nargs='+', required=True, help='2 list files: from readclassify with A as reference followed by mirror consensus')
-    parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference followed by mirror consensus')
-    parser.add_argument('-D', nargs='+', required=True, help='2 list files: from readclassify with D as reference followed by mirror consensus')
+    parser = argparse.ArgumentParser(description='Determine read classification REF = A, B, D.')
+    parser.add_argument('-A', nargs='+', required=True, help='2 list files: from readclassify with A as reference')
+    parser.add_argument('-B', nargs='+', required=True, help='2 list files: from readclassify with B as reference')
+    parser.add_argument('-D', nargs='+', required=True, help='2 list files: from readclassify with D as reference')
     parser.add_argument('-o', type=str, required=True, help='output file prefix')
-    parser.add_argument('-d', action='store_true', help='include reads that map uniquely to one subgenome')
-    parser.add_argument('-u', action='store_true', help='classify reads in double copy homeologs')
+    parser.add_argument('-u', action='store_true', help='include reads that map uniquely to one subgenome')
+    parser.add_argument('-d', action='store_true', help='classify reads that map to double copy homeologs')
     parser.add_argument('--pe', action='store_true', help='consider paired-end reads together')
     args = parser.parse_args()
     if len(sys.argv) == 1:

@@ -13,7 +13,9 @@ This program is distributed under the terms of the GNU General Public License
 #include "vector.h"
 #include "util.h"
 
+#if defined (__AVX__)
 #include <immintrin.h>
+#endif
 
 char *strdup1(const char *src) {
     size_t n = strlen(src) + 1;
@@ -53,7 +55,7 @@ float parse_float(const char *str) {
 
 int sum_i(const int *a, int size) {
     int s = 0;
-#ifdef __AVX__
+#if defined (__AVX2__)
     size_t i;
     int n8 = size - (size % 8);
     __m256i v = _mm256_set1_epi32(0);
@@ -65,7 +67,8 @@ int sum_i(const int *a, int size) {
     v = _mm256_hadd_epi32(v, _mm256_permute2f128_si256(v, v, 1)); 
     v = _mm256_hadd_epi32(v, v); 
     v = _mm256_hadd_epi32(v, v); 
-    s = (int)_mm256_extract_epi32(v, 0);
+    int32_t *r = (int32_t *)&v;
+    s = r[0];
     for (i = n8; i < size; i++) s += a[i]; // non-vectorized loop for remainder
 #else
     while (--size >= 0) s += a[size];
@@ -75,7 +78,7 @@ int sum_i(const int *a, int size) {
 
 double sum_d(const double *a, int size) {
     double s = 0;
-#ifdef __AVX__
+#if defined (__AVX__)
     size_t i;
     int n4 = size - (size % 4);
     __m256d v = _mm256_set1_pd(0);
@@ -109,7 +112,7 @@ double log_add_exp(double a, double b) {
 double log_sum_exp(const double *a, size_t size) {
     int i;
     double max_exp; 
-#ifdef __AVX__
+#if defined (__AVX__)
     int n4 = size - (size % 4);
     __m256d v = _mm256_set1_pd(a[0]);
     for (i = 0; i < n4; i += 4) {
@@ -119,7 +122,8 @@ double log_sum_exp(const double *a, size_t size) {
     // horizontal max of four partials
     v = _mm256_max_pd(v, _mm256_permute2f128_pd(v, v, 1));
     v = _mm256_max_pd(v, _mm256_permute_pd(v, 5));
-    max_exp = _mm_cvtsd_f64(_mm256_castpd256_pd128(v));
+    double *r = (double *)&v;
+    max_exp = r[0];
     for (i = n4; i < size; i++) { // non-vectorized loop for remainder
         if (a[i] > max_exp) max_exp = a[i]; 
     }
@@ -130,14 +134,15 @@ double log_sum_exp(const double *a, size_t size) {
     for (i = 0; i < n4; i += 4) {
         __m256d t = _mm256_load_pd(&a[i]); // load vector of 4 x double
         t = _mm256_sub_pd(t, me);          // subtract max_exp
-        t = _mm256_exp_pd(t);              // exponential, *not in gcc*
+        t = _mm256_exp_pd(t);              // exponential, *not in gcc* unfortunately
         t = _mm256_set_pd(*d1, *d2, *d3, *d4);
         v = _mm256_add_pd(v, t);           // accumulate partial sum vector
     }
     // horizontal add of four partials
     v = _mm256_hadd_pd(v, _mm256_permute2f128_pd(v, v, 1));
     v = _mm256_hadd_pd(v, v);
-    double s = _mm_cvtsd_f64(_mm256_castpd256_pd128(v));
+    double *r = (double *)&v;
+    double s = r[0];
     for (i = n4; i < size; i++) s += exp(a[i] - max_exp); // non-vectorized loop for remainder
     return log(s) + max_exp;
     */

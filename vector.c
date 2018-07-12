@@ -28,7 +28,7 @@ vector_t *vector_create(size_t initial_size, enum type var_type) {
 }
 
 void vector_free(vector_t *a) {
-    if (a) {
+    if (a != NULL) {
         a->len = 0;
         free(a->data); a->data = NULL;
         free(a); a = NULL;
@@ -36,7 +36,7 @@ void vector_free(vector_t *a) {
 }
 
 void vector_destroy(vector_t *a) {
-    if (a) {
+    if (a != NULL) {
         size_t i;
         enum type var_type = a->type;
         for (i = 0; i < a->len; i++) {
@@ -107,7 +107,7 @@ vector_int_t *vector_int_create(size_t initial_size) {
 }
 
 void vector_int_free(vector_int_t *a) {
-    if (a) {
+    if (a != NULL) {
         a->len = 0;
         free(a->data); a->data = NULL;
         free(a); a = NULL;
@@ -151,7 +151,7 @@ vector_double_t *vector_double_create(size_t initial_size) {
 }
 
 void vector_double_free(vector_double_t *a) {
-    if (a) {
+    if (a != NULL) {
         a->len = 0;
         free(a->data); a->data = NULL;
         free(a); a = NULL;
@@ -230,7 +230,7 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
 }
 
 void read_destroy(read_t *r) {
-    if (r) {
+    if (r != NULL) {
         r->tid = r->pos = r->end = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
         r->is_unmap = r->is_dup = r->is_reverse = r->is_secondary = 0;
         r->prgu = r->prgv = r->pout = 0;
@@ -256,7 +256,7 @@ fasta_t *fasta_create(char *name) {
 }
 
 void fasta_destroy(fasta_t *f) {
-    if (f){
+    if (f != NULL) {
         f->seq_length = 0;
         free(f->seq); f->seq = NULL;      
         free(f->name); f->name = NULL;
@@ -272,7 +272,7 @@ region_t *region_create(char *chr, int pos1, int pos2) {
 }
 
 void region_destroy(region_t *g) {
-    if (g) {
+    if (g != NULL) {
         g->pos1 = g->pos2 = 0;
         free(g->chr); g->chr = NULL;      
     }
@@ -293,7 +293,7 @@ stats_t *stats_create(vector_int_t *combo, size_t nreads) {
 }
 
 void stats_destroy(stats_t *s) {
-    if (s) {
+    if (s != NULL) {
         s->ref = s->het = s->alt = s->mut = s->ref_count = s->alt_count = 0;
         vector_int_free(s->combo);
         vector_double_free(s->read_prgv);

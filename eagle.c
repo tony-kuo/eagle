@@ -481,7 +481,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_
                 if (x < 0 || x >= 26) { exit_err("Ref character %c at gpos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
                 if (y < 0 || y >= 26) { exit_err("Alt character %c at rpos %d for %s;%d;%s;%s not in valid alphabet\n", v->alt[m], m, v->chr, v->pos, v->ref, v->alt); }
 
-                prgu_i[n] = prgu_i[n] - matrix[read_length * seqnt_map[x] + r_pos] + matrix[read_length * seqnt_map[y] + r_pos]; // update alternative array
+                prgv_i[n] = prgv_i[n] - matrix[read_length * seqnt_map[x] + r_pos] + matrix[read_length * seqnt_map[y] + r_pos]; // update alternative array
             }
             offset += alt_len - ref_len;
         }

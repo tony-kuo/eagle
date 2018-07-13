@@ -441,9 +441,11 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
 }
 
 static inline void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
+    if (start < 0) start = 0;
+    if (end >= seq_length) end = seq_length;
+
     int i, j, m;
     double prgu_i[end - start], prgv_i[end - start];
-
     //ALIGN_t *a = ALIGN_create(0, 0, matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
     //calc_read_prob_cpu(a, prgu_i);
     //ALIGN_destroy(a);
@@ -494,8 +496,6 @@ static inline void calc_prob_snps(double *prgu, double *prgv, vector_int_t *comb
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int start = pos - (read_length / 2);
     int end = pos + (read_length / 2);
-    if (start < 0) start = 0;
-    if (end >= seq_length) end = seq_length;
 
     *prgu = 0;
     *prgv = 0;
@@ -870,7 +870,7 @@ static char *evaluate(const vector_t *var_set) {
     }
 
     for (i = 0; i < combo->len; i++) vector_int_free(combo->data[i]);
-    vector_free(combo);
+    vector_destroy(combo); free(combo); combo = NULL;
     vector_int_free(haplotypes);
     vector_double_free(prhap);
     vector_destroy(read_list); free(read_list); read_list = NULL;

@@ -247,6 +247,9 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
 }
 
 static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
+    if (start < 0) start = 0;
+    if (end >= seq_length) end = seq_length;
+
     int i, k;
     double prgu_i[end - start], prgv_i[end - start];
     for (i = start; i < end; i++) {
@@ -279,8 +282,6 @@ static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const d
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int start = pos; // - (read_length / 2);
     int end = pos + 1; //(read_length / 2);
-    if (start < 0) start = 0;
-    if (end >= seq_length) end = seq_length;
 
     *prgu = 0;
     *prgv = 0;

@@ -870,7 +870,7 @@ static char *evaluate(const vector_t *var_set) {
     }
 
     for (i = 0; i < combo->len; i++) vector_int_free(combo->data[i]);
-    vector_destroy(combo); free(combo); combo = NULL;
+    vector_free(combo);
     vector_int_free(haplotypes);
     vector_double_free(prhap);
     vector_destroy(read_list); free(read_list); read_list = NULL;

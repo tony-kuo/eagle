@@ -745,11 +745,11 @@ static char *evaluate(const vector_t *var_set) {
                 calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1, seqnt_map);
                 heap_push(h, s->mut, s);
             }
-            vector_free(c);
+            vector_free(c); //combos in stat so don't destroy
         }
         heap_free(h);
     }
-    vector_free(combo);
+    vector_free(combo); //combos in stat so don't destroy
 
     stats_t **stat = (stats_t **)stats->data;
 
@@ -811,7 +811,7 @@ static char *evaluate(const vector_t *var_set) {
         vector_t *v = vector_create(var_set->len, VARIANT_T);
         for (i = 0; i < stat[max_seti]->combo->len; i++) vector_add(v, var_data[stat[max_seti]->combo->data[i]]);
         variant_print(&output, v, 0, stat[max_seti]->seen, stat[max_seti]->ref_count, stat[max_seti]->alt_count, log_add_exp(total, stat[max_seti]->ref), has_alt, stat[max_seti]->ref);
-        vector_free(v);
+        vector_free(v); //variants in var_list so don't destroy
     }
     else { /* Marginal probabilities & likelihood ratios*/
         for (i = 0; i < var_set->len; i++) {
@@ -870,7 +870,7 @@ static char *evaluate(const vector_t *var_set) {
     }
 
     for (i = 0; i < combo->len; i++) vector_int_free(combo->data[i]);
-    vector_free(combo);
+    vector_free(combo); //not destroyed because previously vector_int_free all elements
     vector_int_free(haplotypes);
     vector_double_free(prhap);
     vector_destroy(read_list); free(read_list); read_list = NULL;
@@ -906,7 +906,7 @@ static void *pool(void *work) {
             vector_add(results, outstr);
             pthread_mutex_unlock(&w->r_lock);
         }
-        vector_free(var_set);
+        vector_free(var_set); //variants in var_list so don't destroy
     }
     return NULL;
 }
@@ -1034,7 +1034,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     pthread_mutex_destroy(&w->r_lock);
 
     free(w); w = NULL;
-    vector_free(var_set);
+    vector_free(var_set); //variants in var_list so don't destroy
 
     qsort(results->data, results->len, sizeof (void *), nat_sort_vector);
     fprintf(out_fh, "# SEQ\tPOS\tREF\tALT\tReads\tRefReads\tAltReads\tProb\tOdds\tSet\n");

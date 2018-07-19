@@ -87,6 +87,8 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **--omega** [FLOAT]  Prior probability of originating from outside paralogous source (i.e. not from reference genome and also not from the candidate variant genome).  Value between [0,1].  Default is 1e-5.
 
+**--rc**  Wrapper for read classification settings: --omega=1.0e-40 --isc --mvh --verbose --lowmem.
+
 ### Usage Notes
 
 *compare2TruthData.py*: Separate false positives and true positives based on truth data given as a VCF. 
@@ -124,6 +126,8 @@ Usage, with more details in *example.sh*:
 **--readlist**  Read from classified read list instead of EAGLE outputs and process BAM files.  This is useful if you previously outputed with *listonly* and then performed post-processing on list files to obtain, for example, a consensus list.  This will allow the post-processed list to be used instead.
 
 **--refonly**  Write REF classified reads only when processing BAM file.
+
+**--paired**  Consider paired-end reads together.
 
 **--pao**  Use primary alignments only, based on SAM flag.
 

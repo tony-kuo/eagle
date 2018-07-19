@@ -265,13 +265,13 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
             double probability = 0;
             for (k = 0; k < 4; k++) {
                 if (NT[k] != seq[g_pos]) {
-                    double p = matrix[NT_CODES * r_pos + seqnt_map[NT[k] - 'A']];
+                    double p = matrix[read_length * seqnt_map[NT[k] - 'A'] + r_pos];
                     probability = (probability == 0) ? p : log_add_exp(probability, p);
                     //printf("%c %f\t", NT[k], p);
                 }
             }
-            prgv_i[n] = prgv_i[n] - matrix[NT_CODES * r_pos + seqnt_map[x]] + probability; // update alternative array
-            //printf("%d\t%d\t%c\t%d\t%f\t%f\t%f\t%f\n", i, g_pos, seq[g_pos], r_pos, r->data[i - start], a->data[i - start], (double)matrix[NT_CODES * r_pos + seqnt_map[x]], probability);
+            prgv_i[n] = prgv_i[n] - matrix[read_length * seqnt_map[x] + r_pos] + probability; // update alternative array
+            //printf("%d\t%d\t%c\t%d\t%f\t%f\t%f\t%f\n", i, g_pos, seq[g_pos], r_pos, prgu_i[n], prgv_i[n], (double)matrix[read_length * seqnt_map[x] + r_pos], probability);
         }
     }
     *prgu += log_sum_exp(prgu_i, end - start);

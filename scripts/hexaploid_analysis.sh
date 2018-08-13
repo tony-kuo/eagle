@@ -115,13 +115,21 @@ python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.chrA.counts.txt > eagle.c
 python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.chrB.counts.txt > eagle.chrB.tsv
 python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.chrD.counts.txt > eagle.chrD.tsv
 
-# Triple homeologs counts in terms of chrA gene id
+# Triple homeologs counts in terms of chrA gene id, transcript level
 cut -f 1 homeolog.ABD.list > homeolog.A.list
 python scripts/tablize.py -a homeolog.A.list eagle.chrA.tsv | sort -k1 > eagle.chrA.homeolog.tsv
 awk '{print $2"\t"$1;}' homeolog.ABD.list > homeolog.B.list
 python scripts/tablize.py -a homeolog.B.list eagle.chrB.tsv | cut -f 2,3- | sort -k1 > eagle.chrB.homeolog.tsv
 awk '{print $3"\t"$1;}' homeolog.ABD.list > homeolog.D.list
 python scripts/tablize.py -a homeolog.D.list eagle.chrD.tsv | cut -f 2,3- | sort -k1 > eagle.chrD.homeolog.tsv
+
+# Homeolog counts in terms of halleri gene id, gene level by summation of transcript counts
+perl -ne 'chomp; @t=split(/\s+/); @i=split(/\./, $t[0]); $a=join("\t", @t[1..$#t]); print "$i[0]\t$a\n";' eagle.chrA.homeolog.tsv > temp.txt
+python scripts/tablize.py -add temp.txt > eagle.chrA.homeolog.genelevel.tsv
+perl -ne 'chomp; @t=split(/\s+/); @i=split(/\./, $t[0]); $a=join("\t", @t[1..$#t]); print "$i[0]\t$a\n";' eagle.chrB.homeolog.tsv > temp.txt
+python scripts/tablize.py -add temp.txt > eagle.chrB.homeolog.genelevel.tsv
+perl -ne 'chomp; @t=split(/\s+/); @i=split(/\./, $t[0]); $a=join("\t", @t[1..$#t]); print "$i[0]\t$a\n";' eagle.chrD.homeolog.tsv > temp.txt
+python scripts/tablize.py -add temp.txt > eagle.chrD.homeolog.genelevel.tsv
 
 # Subgenome unique mapped reads
 for i in `ls *_R1.fastq.gz`; do

@@ -102,9 +102,15 @@ done
 python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.H.counts.txt > eagle.H.tsv
 python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.L.counts.txt > eagle.L.tsv
 
-# Homeolog counts in terms of halleri gene id
+# Homeolog counts in terms of halleri gene id, transcript level
 python scripts/tablize.py -a H.vs.L.reciprocal_best eagle.H.tsv | cut -f 1,3- | sort -k1 > eagle.H.homeolog.tsv
 python scripts/tablize.py -a L.vs.H.reciprocal_best eagle.L.tsv | cut -f 2,3- | sort -k1 > eagle.L.homeolog.tsv
+
+# Homeolog counts in terms of halleri gene id, gene level by summation of transcript counts
+perl -ne 'chomp; @t=split(/\s+/); @i=split(/\./, $t[0]); $a=join("\t", @t[1..$#t]); print "$i[0]\t$a\n";' eagle.H.homeolog.tsv > temp.txt
+python scripts/tablize.py -add temp.txt > eagle.H.homeolog.genelevel.tsv
+perl -ne 'chomp; @t=split(/\s+/); @i=split(/\./, $t[0]); $a=join("\t", @t[1..$#t]); print "$i[0]\t$a\n";' eagle.L.homeolog.tsv > temp.txt
+python scripts/tablize.py -add temp.txt > eagle.L.homeolog.genelevel.tsv
 
 # Subgenome unique mapped reads
 for i in `ls *_R1.fastq.gz`; do

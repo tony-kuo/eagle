@@ -101,13 +101,15 @@ Heterozygous non-reference variants (VCF: comma separated multiple alternative s
 
 ## EAGLE-RC
 
-EAGLE-RC is a method for classifying whether a read belongs to one genomic hypothesis or another, given a set of genotype differences between them.  This can be applicable for determining if reads originate from a specific allele or from a specific homeolog in allopolyploids.
+EAGLE-RC is a method for classifying whether a read belongs to one genomic hypothesis or another, given a set of genotype differences between them.  This can be applicable for determining if reads originate from a specific allele or from a specific homeolog in allopolyploids.  
 
-First, use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants likelihoods (--mvh) as output.  Then the program *eagle-rc* can take these two inputs to classify reads and optionally split reads into bam files for each class.  We also use a lower omega to be more tolerant to sequence differences outside the tested hypotheses.  Other options (such as --dp for long reads, --splice for RNA-seq, --isc to ignore soft clipped bases, etc.) may or may not be applicable depending on the use case.
+EAGLE-RC can also classify reads directly via calculating the likelihood of the read given two alignments to different (sub)genome references, without knowing the genotype differences explicitly, implemented as *no genotype info* (--ngi) mode.
+
+First with explicit genotype difference information, use EAGLE to calculate likelihoods for each read and for each hypothesis (--verbose) as well as phased variants likelihoods (--mvh) as output.  Then the program *eagle-rc* can take these two inputs to classify reads and optionally split reads into bam files for each class.  We also use a lower omega to be more tolerant to sequence differences outside the tested hypotheses.  The wrapper option (--rc) takes care of these parameters.  Other options (such as --dp for long reads, --splice for RNA-seq, --isc to ignore soft clipped bases, etc.) may or may not be applicable depending on the use case.
 
 Usage, with more details in *example.sh*: 
 
-`eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --omega=1e-40 --mvh --verbose 1> output.tab 2>readinfo.txt`
+`eagle -t 2 -v variants.vcf -a alignment.bam -r reference.fasta --rc 1> output.tab 2>readinfo.txt`
 
 `eagle-rc -a alignment.bam -o out_prefix -v output.tab readinfo.txt > classified_reads.list`
 
@@ -130,6 +132,30 @@ Usage, with more details in *example.sh*:
 **--paired**  Consider paired-end reads together.
 
 **--pao**  Use primary alignments only, based on SAM flag.
+
+For no genotype information classification, the options in the default mode listed above are also applicable. Usage, where the classification is from the point of view of ref1 as the reference hypothesis and ref2 as the alternative hypothesis:
+
+`eagle-rc --ngi -a align1.bam --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.list`
+
+### Program Parameters specific to no genotype information mode (--ngi)
+
+**--ref1**  [FILE] Reference genome 1 fasta file
+
+**--bam1**  [FILE] Alignments to reference genome 1, --ref1, bam file
+
+**--ref2**  [FILE] Reference genome 2 fasta file, ensure that the chromosome names are different between ref1 and ref2.
+
+**--bam2**  [FILE] Alignments to reference genome 2, --ref2, bam file
+
+**--isc**  Ignore soft-clipped bases in reads when calculating the probabilities, based on cigar string.
+
+**--nodup**  Ignore marked duplicate reads, based on SAM flag.
+
+**--splice**  Allow spliced reads, based on cigar string.
+
+**--phred64**  Reads quality scores are in phred64.  Default is phred33.
+
+Without rerunning, we can get the classification from the point of view of ref2 as the reference hypothesis and ref1 as the alternative hypothesis with command line tools to switch REF and ALT and switching columns 5 and 6 to create a new list file.  Then use the --readlist option to print the bam files.
 
 ## References
 Tony Kuo and Martin C Frith and Jun Sese and Paul Horton. EAGLE: Explicit Alternative Genome Likelihood Evaluator. BMC Medical Genomics. 11(Suppl 2):28. https://doi.org/10.1186/s12920-018-0342-1

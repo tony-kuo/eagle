@@ -124,7 +124,7 @@ double calc_prob_region(const double *matrix, int read_length, const char *seq, 
     for (i = start; i < end; i++) {
         p[i - start] = calc_read_prob(matrix, read_length, seq, seq_length, i, seqnt_map);
     }
-    return sum_d(p, end - start);
+    return log_sum_exp(p, end - start);
 }
 
 double calc_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {

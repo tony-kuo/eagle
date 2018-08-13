@@ -242,3 +242,88 @@ double calc_prob_dp(const double *matrix, int read_length, const char *seq, int 
     }
     return probability;
 }
+
+void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
+    if (start < 0) start = 0;
+    if (end >= seq_length) end = seq_length;
+
+    int i, j, m;
+    double prgu_i[end - start], prgv_i[end - start];
+    //ALIGN_t *a = ALIGN_create(0, 0, matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
+    //calc_read_prob_cpu(a, prgu_i);
+    //ALIGN_destroy(a);
+    for (i = start; i < end; i++) {
+        int n = i - start;
+        prgu_i[n] = calc_read_prob(matrix, read_length, seq, seq_length, i, seqnt_map); // reference probability per position i
+        prgv_i[n] = prgu_i[n]; // alternative probability per position i
+
+        int offset = 0;
+        for (j = 0; j < combo->len; j++) {
+            variant_t *v = var_data[combo->data[j]];
+            int v_pos = v->pos - 1;
+            int ref_len = strlen(v->ref);
+            int alt_len = strlen(v->alt);
+            if (v->ref[0] == '-') ref_len = 0;
+            else if (v->alt[0] == '-') alt_len = 0;
+
+            int l = (ref_len == alt_len) ? ref_len : read_length + ref_len + alt_len; // if snp(s), consider each change; if indel, consider the frameshift as a series of snps in the rest of the read
+            for (m = 0; m < l; m++) {
+                int g_pos = v_pos + m;
+                int r_pos = g_pos - i + offset;
+                if (r_pos < 0) continue;
+                if (r_pos >= read_length || g_pos >= seq_length) break;
+
+                int x = seq[g_pos] - 'A';
+                int y;
+                if (m >= alt_len) {
+                    if (g_pos + ref_len - alt_len >= seq_length) break;
+                    y = seq[g_pos + ref_len - alt_len] - 'A';
+                }
+                else {
+                    y = v->alt[m] - 'A';
+                }
+
+                if (x < 0 || x >= 26) { exit_err("Ref character %c at gpos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
+                if (y < 0 || y >= 26) { exit_err("Alt character %c at rpos %d for %s;%d;%s;%s not in valid alphabet\n", v->alt[m], m, v->chr, v->pos, v->ref, v->alt); }
+
+                prgv_i[n] = prgv_i[n] - matrix[read_length * seqnt_map[x] + r_pos] + matrix[read_length * seqnt_map[y] + r_pos]; // update alternative array
+            }
+            offset += alt_len - ref_len;
+        }
+    }
+    *prgu += log_sum_exp(prgu_i, end - start);
+    *prgv += log_sum_exp(prgv_i, end - start);
+}
+
+void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {
+    /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
+    int start = pos - (read_length / 2);
+    int end = pos + (read_length / 2);
+
+    *prgu = 0;
+    *prgv = 0;
+
+    int i, j;
+    if (n_splice == 0) {
+        calc_prob_snps_region(prgu, prgv, combo, var_data, matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
+    }
+    else { // calculate the probability for each splice section separately
+        int r_pos = 0;
+        int g_pos = pos;
+        for (i = 0; i <= n_splice; i++) {
+            int r_len = (i < n_splice) ? splice_pos[i] - r_pos + 1 : read_length - r_pos;
+            start = g_pos - (r_len / 2);
+            end = g_pos + (r_len / 2);
+
+            double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
+            for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
+            calc_prob_snps_region(prgu, prgv, combo, var_data, submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
+            free(submatrix); submatrix = NULL;
+
+            g_pos += r_len + splice_offset[i];
+            r_pos = splice_pos[i] + 1;
+        }
+    }
+}
+
+

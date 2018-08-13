@@ -27,4 +27,6 @@ double calc_prob(const double *matrix, int read_length, const char *seq, int seq
 double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end, int gap_op, int gap_ex, int *seqnt_map);
 double calc_prob_region_dp(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int gap_op, int gap_ex, int *seqnt_map);
 double calc_prob_dp(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int gap_op, int gap_ex, int *seqnt_map);
+void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map);
+void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map);
 #endif

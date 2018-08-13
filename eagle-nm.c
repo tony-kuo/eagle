@@ -246,7 +246,7 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     return f;
 }
 
-static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
+static inline void calc_prob_snps_mut_region(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
     if (start < 0) start = 0;
     if (end >= seq_length) end = seq_length;
 
@@ -278,7 +278,7 @@ static inline void calc_prob_snps_region(double *prgu, double *prgv, int g_pos, 
     *prgv += log_sum_exp(prgv_i, end - start);
 }
 
-static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {
+static inline void calc_prob_snps_mut(double *prgu, double *prgv, int g_pos, const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int *seqnt_map) {
     /* Get the sequence g in G and its neighborhood (half a read length flanking regions) */
     int start = pos; // - (read_length / 2);
     int end = pos + 1; //(read_length / 2);
@@ -288,7 +288,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const d
 
     int i, j;
     if (n_splice == 0) {
-        calc_prob_snps_region(prgu, prgv, g_pos, matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
+        calc_prob_snps_mut_region(prgu, prgv, g_pos, matrix, read_length, seq, seq_length, pos, start, end, seqnt_map);
     }
     else { // calculate the probability for each splice section separately
         int r_pos = 0;
@@ -300,7 +300,7 @@ static inline void calc_prob_snps(double *prgu, double *prgv, int g_pos, const d
 
             double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
             for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
-            calc_prob_snps_region(prgu, prgv, g_pos, submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
+            calc_prob_snps_mut_region(prgu, prgv, g_pos, submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
             free(submatrix); submatrix = NULL;
 
             g_pos += r_len + splice_offset[i];
@@ -355,7 +355,7 @@ static char *evaluate_nomutation(const region_t *g) {
 
             double prgu, prgv;
             //printf("\t%d\t%s\t%d\t%d\t%s\n", g_pos, read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
-            calc_prob_snps(&prgu, &prgv, g_pos, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, seqnt_map);
+            calc_prob_snps_mut(&prgu, &prgv, g_pos, readprobmatrix, read_data[readi]->length, refseq, refseq_length, read_data[readi]->pos, read_data[readi]->splice_pos, read_data[readi]->splice_offset, read_data[readi]->n_splice, seqnt_map);
             //printf("%f\t%f\n\n", prgu, prgv);
 
             /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */

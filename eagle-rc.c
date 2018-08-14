@@ -30,7 +30,7 @@ This program is distributed under the terms of the GNU General Public License
 
 /* Constants */
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
-#define LGALPHA (log(ALPHA))
+#define LOGALPHA (log(ALPHA))
 
 /* Command line arguments */
 static int listonly;
@@ -729,7 +729,7 @@ static void bam_read(const char *bam_file, int ind) {
             a += is_match[i];
             delta[i] = no_match[i] - is_match[i];
         }
-        double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read->length)) - (LGALPHA * (read->length - read->inferred_length));
+        double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read->length)) - (LOGALPHA * (read->length - read->inferred_length));
         double prgu = -DBL_MAX;
         double prgv = -DBL_MAX;
         double pout = elsewhere;
@@ -814,13 +814,13 @@ static void print_usage() {
     printf("     --ngi                         No genotype information (i.e. vcf).  Directly classify read alignments mapped to two different reference (sub)genomes.\n");
     printf("     --ref1=     FILE             --ngi mode: Reference genome 1 fasta file\n");
     printf("     --bam1=     FILE             --ngi mode: Alignments to reference genome 1 bam file\n");
-    printf("     --ref2=     FILE             --ngi mode: Reference genome 2, ensure sequence names are different from ref1\n");
+    printf("     --ref2=     FILE             --ngi mode: Reference genome 2, recommend that sequence names are different from ref1\n");
     printf("     --bam2=     FILE             --ngi mode: Alignments to reference genome 2 bam file\n");
-    printf("     --omega=    FLOAT            --ngi mode: Prior probability of originating from outside paralogous source, between [0,1]. [1e-40]\n");
     printf("     --isc                        --ngi mode: Ignore soft-clipped bases.\n");
     printf("     --nodup                      --ngi mode: Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice                     --ngi mode: Allow spliced reads.\n");
     printf("     --phred64                    --ngi mode: Read quality scores are in phred64.\n");
+    printf("     --omega=    FLOAT            --ngi mode: Prior probability of originating from outside paralogous source, between [0,1]. [1e-40]\n");
 }
 
 int main(int argc, char **argv) {
@@ -915,12 +915,19 @@ int main(int argc, char **argv) {
         if (omega < 0 || omega > 1) omega = 1e-40;
         lgomega = (log(omega) - log(1.0-omega));
 
+        khiter_t k;
+
         refseq_hash = kh_init(rsh);
         fasta_read(ref_file1);
         bam_read(bam_file1, 0);
+        for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
+            if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
+        }
+        kh_destroy(rsh, refseq_hash);
+
+        refseq_hash = kh_init(rsh);
         fasta_read(ref_file2);
         bam_read(bam_file2, 1);
-        khiter_t k;
         for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
             if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
         }

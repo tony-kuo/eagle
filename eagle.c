@@ -30,9 +30,9 @@ This program is distributed under the terms of the GNU General Public License
 /* Precalculated log values */
 #define M_1_LOG10E (1.0/M_LOG10E)
 #define M_1_LN10 (1.0/M_LN10)
-#define LG50 (log(0.5))
-#define LG10 (log(0.1))
-#define LG90 (log(0.9))
+#define LOG50 (log(0.5))
+#define LOG10 (log(0.1))
+#define LOG90 (log(0.9))
 #define LGALPHA (log(ALPHA))
 
 /* Command line arguments */
@@ -564,9 +564,9 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         }
 
         /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
-        double phet   = log_add_exp(LG50 + prgv, LG50 + prgu);
-        double phet10 = log_add_exp(LG10 + prgv, LG90 + prgu);
-        double phet90 = log_add_exp(LG90 + prgv, LG10 + prgu);
+        double phet   = log_add_exp(LOG50 + prgv, LOG50 + prgu);
+        double phet10 = log_add_exp(LOG10 + prgv, LOG90 + prgu);
+        double phet90 = log_add_exp(LOG90 + prgv, LOG10 + prgu);
         if (phet10 > phet) phet = phet10;
         if (phet90 > phet) phet = phet90;
 
@@ -686,9 +686,9 @@ static char *evaluate(const vector_t *var_set) {
         vector_double_add(prhap, 0);
         for (readi = 0; readi < read_list->len; readi++) {
             if (stat[x]->read_prgv->data[readi] == -DBL_MAX && stat[y]->read_prgv->data[readi] == -DBL_MAX) continue;
-            double phet   = log_add_exp(LG50 + stat[x]->read_prgv->data[readi], LG50 + stat[y]->read_prgv->data[readi]);
-            double phet10 = log_add_exp(LG10 + stat[x]->read_prgv->data[readi], LG90 + stat[y]->read_prgv->data[readi]);
-            double phet90 = log_add_exp(LG90 + stat[x]->read_prgv->data[readi], LG10 + stat[y]->read_prgv->data[readi]);
+            double phet   = log_add_exp(LOG50 + stat[x]->read_prgv->data[readi], LOG50 + stat[y]->read_prgv->data[readi]);
+            double phet10 = log_add_exp(LOG10 + stat[x]->read_prgv->data[readi], LOG90 + stat[y]->read_prgv->data[readi]);
+            double phet90 = log_add_exp(LOG90 + stat[x]->read_prgv->data[readi], LOG10 + stat[y]->read_prgv->data[readi]);
             if (phet10 > phet) phet = phet10;
             if (phet90 > phet) phet = phet90;
             prhap->data[seti] += phet; // equal prior probability to ref since this assumes heterozygous non-reference variant

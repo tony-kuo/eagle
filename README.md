@@ -1,6 +1,6 @@
 # EAGLE: Explicit Alternative Genome Likelihood Evaluator
 
-**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.  Note that we merely call make on htslib, as such, its dependencies and system requirements need to be fufilled.
+**Requires**: htslib (http://www.htslib.org/). Set HTSDIR in the make file to the htslib folder and make.  Note that we merely call make on htslib, as such, its dependencies and system requirements need to be fulfilled.
 
 Compile:
 
@@ -135,7 +135,7 @@ Usage, with more details in *example.sh*:
 
 For no genotype information classification, the options in the default mode listed above are also applicable. Usage, where the classification is from the point of view of ref1 as the reference hypothesis and ref2 as the alternative hypothesis:
 
-`eagle-rc --ngi -a align1.bam -o out_prefix --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.list`
+`eagle-rc --ngi -a align1.bam -o out1 --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
 
 ### Program Parameters specific to no genotype information mode (--ngi)
 
@@ -143,7 +143,7 @@ For no genotype information classification, the options in the default mode list
 
 **--bam1**  [FILE] Alignments to reference genome 1, --ref1, bam file
 
-**--ref2**  [FILE] Reference genome 2 fasta file, ensure that the chromosome names are different between ref1 and ref2.
+**--ref2**  [FILE] Reference genome 2 fasta file, we recommend that the chromosome names are different between ref1 and ref2.
 
 **--bam2**  [FILE] Alignments to reference genome 2, --ref2, bam file
 
@@ -155,7 +155,9 @@ For no genotype information classification, the options in the default mode list
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
 
-Without completely rerunning, we can get the classified output bam files for align2.bam using the --readlist option on the classified reads list.  Keep in mind here that the resulting -.alt.bam contains the ref2 classified alignments.  One may wish to switch the -.alt.bam and -.ref.bam names after they are written.
+Without completely rerunning, we can get the classified output bam files for ref2 and align2.bam using the --readlist option on the classified reads list.  Keep in mind here that the resulting -.alt.bam contains the ref2 classified alignments.  One may wish to switch the -.alt.bam and -.ref.bam names after they are written.  If we wish to get the classified list for ref2 for further processing, then it is possible to switch REF and ALT and columns 5 and 6 to get the probabilities, though the alignment positions will not be for ref2.  The simplest option is to rerun it:
+
+`eagle-rc --ngi -a align2.bam -o out2 --ref2=ref1.fa --ref1=ref2.fa --bam2=align1.bam --bam1=align2.bam > classified_reads.2vs1.list`
 
 ## References
 Tony Kuo and Martin C Frith and Jun Sese and Paul Horton. EAGLE: Explicit Alternative Genome Likelihood Evaluator. BMC Medical Genomics. 11(Suppl 2):28. https://doi.org/10.1186/s12920-018-0342-1

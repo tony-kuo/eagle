@@ -137,7 +137,7 @@ For no genotype information classification, the options in the default mode list
 
 `eagle-rc --ngi -a align1.bam -o out1 --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
 
-### Program Parameters specific to no genotype information mode (--ngi)
+### Program Parameters (specific to no genotype information mode --ngi)
 
 **--ref1**  [FILE] Reference genome 1 fasta file
 

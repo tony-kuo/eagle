@@ -891,7 +891,7 @@ int main(int argc, char **argv) {
     if (optind > argc) { exit_usage("Bad program call"); }
 
     if (!listonly) {
-       if (bam_file == NULL) { exit_usage("Missing BAM file!"); }
+       if (bam_file == NULL) { exit_usage("Missing BAM file! -a bam"); }
        if (output_prefix == NULL) { exit_usage("Missing output prefix!"); }
     }
 
@@ -910,8 +910,8 @@ int main(int argc, char **argv) {
         init_seqnt_map(seqnt_map);
         init_q2p_table(p_match, p_mismatch, 50);
 
-        if (ref_file1 == NULL || ref_file2 == NULL) { exit_usage("Missing reference FASTA file!"); } 
-        if (bam_file1 == NULL || bam_file2 == NULL) { exit_usage("Missing BAM file!"); } 
+        if (ref_file1 == NULL || ref_file2 == NULL) { exit_usage("Missing reference FASTA file! ref1 or ref2!"); }
+        if (bam_file1 == NULL || bam_file2 == NULL) { exit_usage("Missing BAM file! bam1 or bam2!"); }
         if (omega < 0 || omega > 1) omega = 1e-40;
         lgomega = (log(omega) - log(1.0-omega));
 

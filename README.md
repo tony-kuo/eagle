@@ -156,7 +156,7 @@ For no genotype information classification, the options in the default mode list
 
 **--splice**  Reads are from RNA-seq and potentially spliced, based on cigar string.
 
-**--bs**  Reads are bisulfite treated.  In the probability model, this considers C to T and G to A as matches.
+**--bs**  Reads are bisulfite treated.  In the probability model, this considers C to T and G to A as matches in the forward and reverse strand respectively.
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
 

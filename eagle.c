@@ -22,8 +22,6 @@ This program is distributed under the terms of the GNU General Public License
 #include "calc.h"
 #include "heap.h"
 
-//#include "calc_gpu.h"
-
 /* Constants */
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
@@ -53,6 +51,7 @@ static int splice;
 static int verbose;
 static int lowmem;
 static int phred64;
+static int bisulfite;
 static double hetbias;
 static double omega, lgomega;
 static int dp, gap_op, gap_ex;
@@ -482,19 +481,16 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
         }
         /* Read probability matrix */
         double readprobmatrix[NT_CODES * read_data[readi]->length];
-        set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match, seqnt_map);
+        set_prob_matrix(readprobmatrix, read_data[readi], is_match, no_match, seqnt_map, bisulfite);
 
         /* Outside Paralog Exact Formuation: Probability that read is from an outside the reference paralogous "elsewhere", f in F.  Approximate the bulk of probability distribution P(r|f):
            a) perfect match = prod[ (1-e) ]
            b) hamming/edit distance 1 = prod[ (1-e) ] * sum[ (e/3) / (1-e) ]
            c) lengthfactor = alpha ^ (read length - expected read length). Length distribution, for reads with different lengths (hard clipped), where longer reads should have a relatively lower P(r|f):
         P(r|f) = (perfect + hamming_1) / lengthfactor */
-        double a = 0;
         double delta[read_data[readi]->length];
-        for (i = 0; i < read_data[readi]->length; i++) {
-            a += is_match[i];
-            delta[i] = no_match[i] - is_match[i];
-        }
+        for (i = 0; i < read_data[readi]->length; i++) delta[i] = no_match[i] - is_match[i];
+        double a = sum_d(is_match, read_data[readi]->length);
         double elsewhere = log_add_exp(a, a + log_sum_exp(delta, read_data[readi]->length)) - (LGALPHA * (read_data[readi]->length - read_data[readi]->inferred_length));
 
         double prgu, prgv;
@@ -922,7 +918,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
     else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->len, asctime(time_info)); }
 
-    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d lowmem=%d phred64=%d\n", maxh, mvh, pao, isc, nodup, splice, lowmem, phred64);
+    print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d bs=%d lowmem=%d phred64=%d\n", maxh, mvh, pao, isc, nodup, splice, bisulfite, lowmem, phred64);
     print_status("#          dp=%d gap_op=%d gap_ex=%d\n", dp, gap_op, gap_ex);
     print_status("#          hetbias=%g omega=%g\n", hetbias, omega);
     print_status("#          verbose=%d\n", verbose);
@@ -975,7 +971,8 @@ static void print_usage() {
     printf("     --pao             Primary alignments only.\n");
     printf("     --isc             Ignore soft-clipped bases.\n");
     printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
-    printf("     --splice          Allow spliced reads.\n");
+    printf("     --splice          RNA-seq spliced reads.\n");
+    printf("     --bs              Bisulfite treated reads.\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
     printf("     --gap_op   INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
     printf("     --gap_ex   INT    DP gap extend penalty. [1].\n");
@@ -1003,6 +1000,7 @@ int main(int argc, char **argv) {
     isc = 0;
     nodup = 0;
     splice = 0;
+    bisulfite = 0;
     verbose = 0;
     lowmem = 0;
     phred64 = 0;
@@ -1029,9 +1027,10 @@ int main(int argc, char **argv) {
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
+        {"bs", no_argument, &bisulfite, 1},
         {"verbose", no_argument, &verbose, 1},
-        {"lowmem", no_argument, &lowmem, 1},
         {"phred64", no_argument, &phred64, 1},
+        {"lowmem", no_argument, &lowmem, 1},
         {"dp", no_argument, &dp, 1},
         {"gap_op", optional_argument, NULL, 981},
         {"gap_ex", optional_argument, NULL, 982},

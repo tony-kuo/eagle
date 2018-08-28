@@ -12,6 +12,7 @@ This program is distributed under the terms of the GNU General Public License
 #include <float.h>
 #include <math.h>
 #include "calc.h"
+//#include "calc_gpu.h"
 
 #define M_1_LOG10E (1.0/M_LOG10E)
 #define LG3 (log(3.0))
@@ -55,48 +56,52 @@ void init_seqnt_map(int *seqnt_map) {
     seqnt_map['U'-'A'] = 16;
 }
 
-void set_prob_matrix(double *matrix, const char *seq, int read_length, const double *is_match, const double *no_match, int *seqnt_map) {
+void set_prob_matrix(double *matrix, const read_t *read, const double *is_match, const double *no_match, const int *seqnt_map, const int bisulfite) {
     int i, b; // array[row * width + col] = value
-    for (b = 0; b < read_length; b++) {
-        for (i = 0; i < NT_CODES; i++) matrix[read_length * i + b] = no_match[b];
-        matrix[read_length * seqnt_map[seq[b] - 'A'] + b] = is_match[b];
-        switch (seq[b]) {
+    for (b = 0; b < read->length; b++) {
+        for (i = 0; i < NT_CODES; i++) matrix[read->length * i + b] = no_match[b];
+        matrix[read->length * seqnt_map[read->qseq[b] - 'A'] + b] = is_match[b];
+        switch (read->qseq[b]) {
         case 'A':
-            matrix[read_length * seqnt_map['M' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['R' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['W' - 'A'] + b] = is_match[b];
-            matrix[read_length * 9 + b] = is_match[b]; // also W
+            matrix[read->length * seqnt_map['M' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['R' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['V' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['H' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['D' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['W' - 'A'] + b] = is_match[b];
+            matrix[read->length * 9 + b] = is_match[b]; // also W
             break;
         case 'T':
-            matrix[read_length * seqnt_map['K' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['Y' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['W' - 'A'] + b] = is_match[b];
-            matrix[read_length * 9 + b] = is_match[b]; // also W
+            matrix[read->length * seqnt_map['K' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['Y' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['B' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['H' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['D' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['W' - 'A'] + b] = is_match[b];
+            matrix[read->length * 9 + b] = is_match[b]; // also W
             break;
         case 'C':
-            matrix[read_length * seqnt_map['M' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['Y' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['H' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['S' - 'A'] + b] = is_match[b];
-            matrix[read_length * 10 + b] = is_match[b]; // also S
+            matrix[read->length * seqnt_map['M' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['Y' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['B' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['V' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['H' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['S' - 'A'] + b] = is_match[b];
+            matrix[read->length * 10 + b] = is_match[b]; // also S
             break;
         case 'G':
-            matrix[read_length * seqnt_map['K' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['R' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['B' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['V' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['D' - 'A'] + b] = is_match[b];
-            matrix[read_length * seqnt_map['S' - 'A'] + b] = is_match[b];
-            matrix[read_length * 10 + b] = is_match[b]; // also S
+            matrix[read->length * seqnt_map['K' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['R' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['B' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['V' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['D' - 'A'] + b] = is_match[b];
+            matrix[read->length * seqnt_map['S' - 'A'] + b] = is_match[b];
+            matrix[read->length * 10 + b] = is_match[b]; // also S
             break;
+        }
+        if (bisulfite) {
+            if (read->is_reverse && read->qseq[b] == 'A') matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
+            else if (!read->is_reverse && read->qseq[b] == 'T') matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand
         }
     }
 }

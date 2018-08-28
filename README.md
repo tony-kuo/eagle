@@ -69,7 +69,9 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **--nodup**  Ignore marked duplicate reads, based on SAM flag.
 
-**--splice**  Allow spliced reads, based on cigar string.
+**--splice**  Reads are from RNA-seq and potentially spliced, based on cigar string.
+
+**--bs**  Reads are bisulfite treated.  In the probability model, this considers C to T and G to A as matches.
 
 **--dp**  Instead of the short read model, which assumes no indel errors, use dynamic programming (short in long) to calculate the likelihood.  This allows handling of long reads which have higher rates of sequencing errors and indel errors.
 
@@ -82,6 +84,7 @@ The read counts represent reads that are unambiguously for the reference or alte
 **--lowmem**  Low memory usage mode.  For SNPs, we use a method to quickly derive the alternative hypothesis probability from the reference hypothesis probability without constructing the alternative sequence in memory.  For indels, which can be treated as a series of SNPs, this method may not be faster depending on read depth due to the number of frameshifted bases to account for.  Though it will save memory which may allow for more threads without hitting some memory cap.
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
+
 
 **--hetbias** [FLOAT]  Prior probability bias towards heterozygous or homozygous mutations.  Value between [0,1] where 1 is towards heterozygosity.  Default is 0.5 (unbiased).
 
@@ -117,7 +120,7 @@ Usage, with more details in *example.sh*:
 
 **-v --var**  [FILE] EAGLE output file, containing variant likelihoods
 
-**-a --bam**  [FILE] BAM alignment data file to be processed, reference coordinated sorted with index
+**-a --bam**  [FILE] BAM alignment data file to be processed and whose reads are to be classified, reference coordinated sorted with index
 
 **-o --out**  [String] Output file name prefix
 
@@ -151,7 +154,9 @@ For no genotype information classification, the options in the default mode list
 
 **--nodup**  Ignore marked duplicate reads, based on SAM flag.
 
-**--splice**  Allow spliced reads, based on cigar string.
+**--splice**  Reads are from RNA-seq and potentially spliced, based on cigar string.
+
+**--bs**  Reads are bisulfite treated.  In the probability model, this considers C to T and G to A as matches.
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
 

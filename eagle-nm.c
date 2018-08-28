@@ -48,6 +48,7 @@ static int nodup;
 static int splice;
 static int verbose;
 static int phred64;
+static int bisulfite;
 static int debug;
 static double ref_prior, alt_prior, het_prior;
 static double mut_prior, nomut_prior;
@@ -351,7 +352,7 @@ static char *evaluate_nomutation(const region_t *g) {
                 no_match[i] = p_mismatch[read_data[readi]->qual[i]];
             }
             double readprobmatrix[NT_CODES * read_data[readi]->length];
-            set_prob_matrix(readprobmatrix, read_data[readi]->qseq, read_data[readi]->length, is_match, no_match, seqnt_map);
+            set_prob_matrix(readprobmatrix, read_data[readi], is_match, no_match, seqnt_map, bisulfite);
 
             double prgu, prgv;
             //printf("\t%d\t%s\t%d\t%d\t%s\n", g_pos, read_data[readi]->name, read_data[readi]->pos, read_data[readi]->length, read_data[readi]->qseq);
@@ -466,7 +467,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     region_t **reg_data = (region_t **)reg_list->data;
     size_t nregions = reg_list->len;
 
-    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d phred64=%d\n", pao, isc, nodup, splice, phred64);
+    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d\n", pao, isc, nodup, splice, bisulfite, phred64);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
     vector_t *queue = vector_create(nregions, VOID_T);
@@ -510,10 +511,12 @@ static void print_usage() {
     printf("     --pao               Primary alignments only.\n");
     printf("     --isc               Ignore soft-clipped bases.\n");
     printf("     --nodup             Ignore marked duplicate reads (based on SAM flag).\n");
-    printf("     --splice            Allow spliced reads.\n");
+    printf("     --splice            RNA-seq spliced reads.\n");
+    printf("     --bs                Bisulfite treated reads.\n");
     printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --phred64           Read quality scores are in phred64.\n");
+    printf("     --bisulf            Reads are bisulfite treated.\n");
 }
 
 int main(int argc, char **argv) {
@@ -528,6 +531,7 @@ int main(int argc, char **argv) {
     nodup = 0;
     verbose = 0;
     phred64 = 0;
+    bisulfite = 0;
     debug = 0;
 
     mut_prior = 0.001;
@@ -542,6 +546,7 @@ int main(int argc, char **argv) {
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
+        {"bs", no_argument, &bisulfite, 1},
         {"verbose", no_argument, &verbose, 1},
         {"phred64", no_argument, &phred64, 1},
         {"debug", optional_argument, NULL, 'd'},

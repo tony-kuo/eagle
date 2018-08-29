@@ -71,6 +71,8 @@ def readFiles(files, idcol, valcol, delim, addtogether):
                     entry[key][fn] = values
                 elif key in entry and addtogether:
                     entry[key][fn] = [float(values[i]) + float(entry[key][fn][i]) for i in range(0, len(values))]
+                else:
+                    entry[key][fn] = values
         fh.close
         print("Read:\t{0}\t{1} entries".format(fn, numlines), file=sys.stderr)
     return(entry, numid, numval)

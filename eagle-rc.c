@@ -175,6 +175,7 @@ static int readinfo_read(const char* filename) {
             read_t **r = (read_t **)node->data;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
+                    r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
                     r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
                     add2var_list(r[i]->var_list, var);
                     break;

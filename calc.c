@@ -100,8 +100,14 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
             break;
         }
         if (bisulfite) {
-            if (read->is_reverse && read->qseq[b] == 'A') matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
-            else if (!read->is_reverse && read->qseq[b] == 'T') matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand
+            switch (read->qseq[b]) {
+            case 'A':
+                matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
+                break;
+            case 'T':
+                matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand
+                break;
+            }
         }
     }
 }

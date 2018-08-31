@@ -732,7 +732,8 @@ static char *evaluate(const vector_t *var_set) {
             int seen = -1;
             for (seti = 0; seti < stats->len; seti++) {
                 if (variant_find(stat[seti]->combo, i) != -1) { // if variant is in this combination
-                    has_alt = (has_alt == 0) ? stat[seti]->mut - stat[seti]->ref : log_add_exp(has_alt, stat[seti]->mut - stat[seti]->ref);
+                    has_alt = (has_alt == 0) ? stat[seti]->mut : log_add_exp(has_alt, stat[seti]->mut);
+                    not_alt = (not_alt == 0) ? stat[seti]->ref : log_add_exp(not_alt, stat[seti]->ref);
                     if (stat[seti]->seen > seen) seen = stat[seti]->seen;
                     if (stat[seti]->alt_count > acount) {
                         acount = stat[seti]->alt_count;
@@ -740,7 +741,7 @@ static char *evaluate(const vector_t *var_set) {
                     }
                 }
                 else {
-                    not_alt = (not_alt == 0) ? stat[seti]->mut - stat[seti]->ref : log_add_exp(not_alt, stat[seti]->mut - stat[seti]->ref);
+                    not_alt = (not_alt == 0) ? stat[seti]->mut : log_add_exp(not_alt, stat[seti]->mut);
                 }
             }
             for (seti = 0; seti < combo->len; seti++) {

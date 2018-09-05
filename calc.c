@@ -42,18 +42,24 @@ void init_seqnt_map(int *seqnt_map) {
     seqnt_map['S'-'A'] = 6; // G, C
     seqnt_map['W'-'A'] = 7; // A, T
 
-    seqnt_map['N'-'A'] = 8;
-    seqnt_map['X'-'A'] = 8;
+    seqnt_map['c'-'A'] = 8; // methylated C
+    seqnt_map['t'-'A'] = 9; // unmethylated C
 
-    // W also in 9, S also in 10
-    seqnt_map['M'-'A'] = 11; // A, C
-    seqnt_map['Y'-'A'] = 12; // C, T
-    seqnt_map['V'-'A'] = 13; // A, C, G
-    seqnt_map['D'-'A'] = 14; // A, G, T
+    seqnt_map['N'-'A'] = 10;
+    seqnt_map['X'-'A'] = 10;
 
-    seqnt_map['G'-'A'] = 15;
-    seqnt_map['T'-'A'] = 16;
-    seqnt_map['U'-'A'] = 16;
+    seqnt_map['g'-'A'] = 11; // methylated C, other strand, i.e. G
+    seqnt_map['a'-'A'] = 12; // unmethylated C, other strand, i.e. A
+
+    // W also in 13, S also in 14
+    seqnt_map['M'-'A'] = 15; // A, C
+    seqnt_map['Y'-'A'] = 16; // C, T
+    seqnt_map['V'-'A'] = 17; // A, C, G
+    seqnt_map['D'-'A'] = 18; // A, G, T
+
+    seqnt_map['G'-'A'] = 19;
+    seqnt_map['T'-'A'] = 20;
+    seqnt_map['U'-'A'] = 20;
 }
 
 void set_prob_matrix(double *matrix, const read_t *read, const double *is_match, const double *no_match, const int *seqnt_map, const int bisulfite) {
@@ -69,7 +75,7 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
             matrix[read->length * seqnt_map['H' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['D' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['W' - 'A'] + b] = is_match[b];
-            matrix[read->length * 9 + b] = is_match[b]; // also W
+            matrix[read->length * 13 + b] = is_match[b]; // also W
             break;
         case 'T':
             matrix[read->length * seqnt_map['K' - 'A'] + b] = is_match[b];
@@ -78,7 +84,7 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
             matrix[read->length * seqnt_map['H' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['D' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['W' - 'A'] + b] = is_match[b];
-            matrix[read->length * 9 + b] = is_match[b]; // also W
+            matrix[read->length * 13 + b] = is_match[b]; // also W
             break;
         case 'C':
             matrix[read->length * seqnt_map['M' - 'A'] + b] = is_match[b];
@@ -87,7 +93,7 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
             matrix[read->length * seqnt_map['V' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['H' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['S' - 'A'] + b] = is_match[b];
-            matrix[read->length * 10 + b] = is_match[b]; // also S
+            matrix[read->length * 14 + b] = is_match[b]; // also S
             break;
         case 'G':
             matrix[read->length * seqnt_map['K' - 'A'] + b] = is_match[b];
@@ -96,16 +102,24 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
             matrix[read->length * seqnt_map['V' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['D' - 'A'] + b] = is_match[b];
             matrix[read->length * seqnt_map['S' - 'A'] + b] = is_match[b];
-            matrix[read->length * 10 + b] = is_match[b]; // also S
+            matrix[read->length * 14 + b] = is_match[b]; // also S
             break;
         }
         if (bisulfite) {
             switch (read->qseq[b]) {
             case 'A':
                 matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
+                matrix[read->length * seqnt_map['a' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
                 break;
             case 'T':
                 matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand
+                matrix[read->length * seqnt_map['t' - 'A'] + b] = is_match[b]; // unmethylated forward strand
+                break;
+            case 'C':
+                matrix[read->length * seqnt_map['c' - 'A'] + b] = is_match[b]; // methylated forward strand
+                break;
+            case 'G':
+                matrix[read->length * seqnt_map['g' - 'A'] + b] = is_match[b]; // methylated reverse strand
                 break;
             }
         }
@@ -119,7 +133,7 @@ double calc_read_prob(const double *matrix, int read_length, const char *seq, in
     double probability[end - pos];
     for (i = pos;  i < end; i++) {
         int c = seq[i] - 'A';
-        if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
+        if (c < 0 || c > 57 || (c > 25 && c < 32)) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
         probability[i - pos] = matrix[read_length * seqnt_map[c] + (i - pos)];
     }
@@ -191,7 +205,7 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
         b_gap_curr[0] = -DBL_MAX;
         for (j = 1; j <= read_length; j++) {
             int c = seq[i] - 'A';
-            if (c < 0 || c >= 26) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
+            if (c < 0 || c > 57 || (c > 25 && c < 32)) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }
 
             upleft = prev[j - 1] + matrix[read_length * seqnt_map[c] + (j - 1)];
 
@@ -284,7 +298,10 @@ void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, vari
                 if (r_pos < 0) continue;
                 if (r_pos >= read_length || g_pos >= seq_length) break;
 
-                int x = seq[g_pos] - 'A';
+                int x;
+                if (m >= ref_len) x = seq[g_pos] - 'A';
+                else x = v->ref[m] - 'A';
+
                 int y;
                 if (m >= alt_len) {
                     if (g_pos + ref_len - alt_len >= seq_length) break;
@@ -294,8 +311,8 @@ void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, vari
                     y = v->alt[m] - 'A';
                 }
 
-                if (x < 0 || x >= 26) { exit_err("Ref character %c at gpos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
-                if (y < 0 || y >= 26) { exit_err("Alt character %c at rpos %d for %s;%d;%s;%s not in valid alphabet\n", v->alt[m], m, v->chr, v->pos, v->ref, v->alt); }
+                if (x < 0 || x > 57 || (x > 25 && x < 32)) { exit_err("Ref character %c at gpos %d (%d) not in valid alphabet\n", seq[g_pos], g_pos, seq_length); }
+                if (y < 0 || y > 57 || (y > 25 && y < 32)) { exit_err("Alt character %c at rpos %d for %s;%d;%s;%s not in valid alphabet\n", v->alt[m], m, v->chr, v->pos, v->ref, v->alt); }
 
                 prgv_i[n] = prgv_i[n] - matrix[read_length * seqnt_map[x] + r_pos] + matrix[read_length * seqnt_map[y] + r_pos]; // update alternative array
             }

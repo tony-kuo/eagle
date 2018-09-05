@@ -65,7 +65,7 @@ static struct tm *time_info;
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
 /* Mapping table */
-static int seqnt_map[26];
+static int seqnt_map[58];
 
 /* Fastq quality to probability table */
 static double p_match[50], p_mismatch[50];

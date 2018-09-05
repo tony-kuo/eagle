@@ -15,7 +15,7 @@ This program is distributed under the terms of the GNU General Public License
 #include <string.h>
 #include "util.h"
 
-#define NT_CODES 17   // Size of nucleotide code table
+#define NT_CODES 21   // Size of nucleotide code table
 
 void init_seqnt_map(int *seqnt_map);
 void init_q2p_table(double *p_match, double *p_mismatch, size_t size);

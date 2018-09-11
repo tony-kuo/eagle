@@ -63,7 +63,7 @@ typedef struct {
     int *qual, *cigar_oplen, *splice_pos, *splice_offset;
     int tid, pos, end, length, inferred_length, n_cigar, n_splice, multimapNH;
     char *qseq, *chr, *name, *flag, *cigar_opchr, *multimapXA;
-    int is_unmap, is_dup, is_reverse, is_secondary;
+    int is_unmap, is_dup, is_reverse, is_secondary, is_read2;
     double prgu, prgv, pout;
     int index;
     vector_t *var_list;

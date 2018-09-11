@@ -221,6 +221,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
                 else if (strcmp("DUP", token) == 0) read->is_dup = 1;
                 else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
                 else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
+                else if (strcmp("READ2", token) == 0) read->is_read2 = 1;
                 if (*(s + n) != ',') break;
             }
             if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {

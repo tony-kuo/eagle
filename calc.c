@@ -142,7 +142,9 @@ double calc_read_prob(const double *matrix, int read_length, const char *seq, in
 
 double calc_prob_region(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
     if (start < 0) start = 0;
-    if (end >= seq_length) end = seq_length - 1;
+    else if (start >= seq_length) start = seq_length - 1;
+    if (end < 0) end = 0;
+    else if (end >= seq_length) end = seq_length - 1;
 
     int i;
     double p[end - start];
@@ -173,7 +175,7 @@ double calc_prob(const double *matrix, int read_length, const char *seq, int seq
 
             double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
             for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
-            probability += calc_prob_region(submatrix, r_len, seq, seq_length, pos, start, end, seqnt_map);
+            probability += calc_prob_region(submatrix, r_len, seq, seq_length, g_pos, start, end, seqnt_map);
             free(submatrix); submatrix = NULL;
 
             g_pos += r_len + splice_offset[i];
@@ -232,8 +234,10 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
 
 double calc_prob_region_dp(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int gap_op, int gap_ex, int *seqnt_map) {
     if (start < 0) start = 0;
+    else if (start >= seq_length) start = seq_length - 1;
     end += read_length;
-    if (end >= seq_length) end = seq_length - 1;
+    if (end < 0) end = 0;
+    else if (end >= seq_length) end = seq_length - 1;
     return smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end, gap_op, gap_ex, seqnt_map);
 }
 
@@ -258,7 +262,7 @@ double calc_prob_dp(const double *matrix, int read_length, const char *seq, int 
 
             double *submatrix = malloc(NT_CODES * r_len * sizeof (double));
             for (j = 0; j < NT_CODES; j++) memcpy(&submatrix[r_len * j], &matrix[read_length * j + r_pos], r_len * sizeof (double));
-            probability += calc_prob_region_dp(submatrix, r_len, seq, seq_length, pos, start, end, gap_op, gap_ex, seqnt_map);
+            probability += calc_prob_region_dp(submatrix, r_len, seq, seq_length, g_pos, start, end, gap_op, gap_ex, seqnt_map);
             free(submatrix); submatrix = NULL;
 
             g_pos += r_len + splice_offset[i];
@@ -270,7 +274,9 @@ double calc_prob_dp(const double *matrix, int read_length, const char *seq, int 
 
 void calc_prob_snps_region(double *prgu, double *prgv, vector_int_t *combo, variant_t **var_data, double *matrix, int read_length, const char *seq, int seq_length, int pos, int start, int end, int *seqnt_map) {
     if (start < 0) start = 0;
-    if (end >= seq_length) end = seq_length;
+    else if (start >= seq_length) start = seq_length;
+    if (end < 0) end = 0;
+    else if (end >= seq_length) end = seq_length;
 
     int i, j, m;
     double prgu_i[end - start], prgv_i[end - start];

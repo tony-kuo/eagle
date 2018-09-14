@@ -64,12 +64,6 @@ static time_t now;
 static struct tm *time_info; 
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
-/* Mapping table */
-static int seqnt_map[58];
-
-/* Fastq quality to probability table */
-static double p_match[50], p_mismatch[50];
-
 KHASH_MAP_INIT_STR(rsh, vector_t)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 

@@ -47,12 +47,6 @@ static int phred64;
 static int bisulfite;
 static double omega, lgomega;
 
-/* Mapping table */
-static int seqnt_map[58];
-
-/* Fastq quality to probability table */
-static double p_match[50], p_mismatch[50];
-
 /* Time info */
 static time_t now; 
 static struct tm *time_info; 

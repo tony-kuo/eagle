@@ -155,14 +155,12 @@ static int readinfo_read(const char* filename) {
 
         if (prgu == prgv) continue; // if ref and alt probabilities are equal, it didn't "align" and was in a splice zone
 
-        int n;
         int is_read2 = 0;
-        if (!paired) {
-            char *s, token[strlen(flag) + 1];
-            for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-                if (strcmp("READ2", token) == 0) is_read2 = 1;
-                if (*(s + n) != ',') break;
-            }
+        int n;
+        char *s, token[strlen(flag) + 1];
+        for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+            if (strcmp("READ2", token) == 0) is_read2 = 1;
+            if (*(s + n) != ',') break;
         }
 
         size_t i = snprintf(NULL, 0, "%s\t%d", name, is_read2) + 1;
@@ -293,6 +291,7 @@ static void readinfo_classify() {
 
 static void bam_write(const char *bam_file, const char *output_prefix, char *other_bam) {
     size_t i;
+    other_read_hash = kh_init(orh);
     if (other_bam != NULL) {
         int n;
         char *f, fn[strlen(other_bam) + 1];
@@ -444,6 +443,13 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
             if (r < 0) { exit_err("Bad program call"); }
         }
     }
+
+    khiter_t k;
+    for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
+        if (kh_exist(other_read_hash, k)) vector_destroy(&kh_val(other_read_hash, k));
+    }
+    kh_destroy(orh, other_read_hash);
+
     bam_destroy1(aln);
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
@@ -640,14 +646,13 @@ static void bam_read(const char *bam_file, int ind) {
         free(flag); flag = NULL;
 
         int n;
-        int is_read2 = 0;
         char *s, token[strlen(read->flag) + 1];
         for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
             if (strcmp("UNMAP", token) == 0) read->is_unmap = 1;
             else if (strcmp("DUP", token) == 0) read->is_dup = 1;
             else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
             else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
-            else if (strcmp("READ2", token) == 0) is_read2 = 1;
+            else if (strcmp("READ2", token) == 0) read->is_read2 = 1;
             if (*(s + n) != ',') break;
         }
         if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {
@@ -755,9 +760,9 @@ static void bam_read(const char *bam_file, int ind) {
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
 
-        i = snprintf(NULL, 0, "%s\t%d", read->name, is_read2) + 1;
+        i = snprintf(NULL, 0, "%s\t%d", read->name, read->is_read2) + 1;
         char key[i];
-        snprintf(key, i, "%s\t%d", read->name, is_read2);
+        snprintf(key, i, "%s\t%d", read->name, read->is_read2);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
@@ -793,6 +798,86 @@ static void bam_read(const char *bam_file, int ind) {
     bam_hdr_destroy(bam_header);
     sam_close(sam_in);
     print_status("# Read bam:\t%s\t%d reads\t%s", bam_file, nreads, asctime(time_info));
+}
+
+static void combine_pe() {
+    other_read_hash = kh_init(orh);
+
+    size_t i, readi;
+	khiter_t k;
+    for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
+		if (kh_exist(read_hash, k)) {
+            vector_t *node = &kh_val(read_hash, k);
+            read_t **r = (read_t **)node->data;
+            for (readi = 0; readi < node->len; readi++) {
+                i = snprintf(NULL, 0, "%s\t0", r[readi]->name) + 1;
+                char key[i];
+                snprintf(key, i, "%s\t0", r[readi]->name);
+
+                khiter_t k2 = kh_get(orh, other_read_hash, key);
+                if (k2 != kh_end(other_read_hash)) {
+                    vector_t *node2 = &kh_val(other_read_hash, k2);
+                    read_t **r2 = (read_t **)node2->data;
+                    for (i = 0; i < node2->len; i++) {
+                        if (strcmp(r2[i]->name, r[readi]->name) == 0 && strcmp(r2[i]->qseq, key) == 0) {
+                            r2[i]->prgu += r[readi]->prgu;
+                            r2[i]->prgv += r[readi]->prgv;
+                            r2[i]->pout += r[readi]->pout;
+                            break;
+                        }
+                    }
+                    if (i == node2->len) { exit_err("failed to find %s in hash key %d\n", key, k2); }
+                }
+                else {
+                    read_t *r2 = read_create(r[readi]->name, r[readi]->tid, r[readi]->chr, r[readi]->pos);
+                    r2->prgu = r[readi]->prgu;
+                    r2->prgv = r[readi]->prgv;
+                    r2->pout = r[readi]->pout;
+                    r2->flag = strdup(r[readi]->flag);
+                    r2->qseq = strdup(key);
+
+                    int absent;
+                    k2 = kh_put(orh, other_read_hash, r2->qseq, &absent);
+                    vector_t *node2 = &kh_val(other_read_hash, k2);
+                    if (absent) vector_init(node2, 8, READ_T);
+                    vector_add(node2, r2);
+                }
+            }
+            vector_destroy(&kh_val(read_hash, k));
+        }
+    }
+    kh_destroy(rh, read_hash);
+
+    read_hash = kh_init(rh);
+    for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
+        if (kh_exist(other_read_hash, k)) {
+            vector_t *node = &kh_val(other_read_hash, k);
+            read_t **r = (read_t **)node->data;
+            for (readi = 0; readi < node->len; readi++) {
+                i = snprintf(NULL, 0, "%s\t0", r[readi]->name) + 1;
+                char key[i];
+                snprintf(key, i, "%s\t0", r[readi]->name);
+
+                khiter_t k2 = kh_get(rh, read_hash, key);
+                if (k2 == kh_end(read_hash)) {
+                    read_t *r2 = read_create(r[readi]->name, r[readi]->tid, r[readi]->chr, r[readi]->pos);
+                    r2->prgu = r[readi]->prgu;
+                    r2->prgv = r[readi]->prgv;
+                    r2->pout = r[readi]->pout;
+                    r2->flag = strdup(r[readi]->flag);
+                    r2->qseq = strdup(key);
+
+                    int absent;
+                    k2 = kh_put(rh, read_hash, r2->qseq, &absent);
+                    vector_t *node2 = &kh_val(read_hash, k2);
+                    if (absent) vector_init(node2, 8, READ_T);
+                    vector_add(node2, r2);
+                }
+            }
+            vector_destroy(&kh_val(other_read_hash, k));
+        }
+    }
+    kh_destroy(orh, other_read_hash);
 }
 
 static void print_usage() {
@@ -907,7 +992,6 @@ int main(int argc, char **argv) {
 
     var_hash = kh_init(vh);
     read_hash = kh_init(rh);
-    other_read_hash = kh_init(orh);
 
     if (ngi) {
         init_seqnt_map(seqnt_map);
@@ -936,8 +1020,9 @@ int main(int argc, char **argv) {
         }
         kh_destroy(rsh, refseq_hash);
 
+        if (paired) combine_pe();
         readinfo_classify();
-        if (!listonly) bam_write(bam_file, output_prefix, NULL);
+        if (!listonly) bam_write(bam_file, output_prefix, other_bam);
     }
     else if (readlist) {
         readlist_read(argv[optind]);
@@ -956,8 +1041,9 @@ int main(int argc, char **argv) {
         int nreads = readinfo_read(readinfo_file);
         print_status("# Read EAGLE read info file: %s\t%i reads\t%s", readinfo_file, nreads, asctime(time_info));
 
+        if (paired) combine_pe();
         readinfo_classify();
-        if (!listonly) bam_write(bam_file, output_prefix, NULL);
+        if (!listonly) bam_write(bam_file, output_prefix, other_bam);
     }
 
     khiter_t k;
@@ -970,11 +1056,6 @@ int main(int argc, char **argv) {
         if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
     }
     kh_destroy(rh, read_hash);
-
-    for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
-        if (kh_exist(other_read_hash, k)) vector_destroy(&kh_val(other_read_hash, k));
-    }
-    kh_destroy(orh, other_read_hash);
 
     clock_t toc = clock();
     print_status("# CPU time (hr):\t%f\n", (double)(toc - tic) / CLOCKS_PER_SEC / 3600);

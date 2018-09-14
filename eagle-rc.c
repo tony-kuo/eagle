@@ -33,6 +33,7 @@ This program is distributed under the terms of the GNU General Public License
 #define LOGALPHA (log(ALPHA))
 
 /* Command line arguments */
+static int debug;
 static int listonly;
 static int readlist;
 static int refonly;
@@ -47,7 +48,7 @@ static int bisulfite;
 static double omega, lgomega;
 
 /* Mapping table */
-static int seqnt_map[26];
+static int seqnt_map[58];
 
 /* Fastq quality to probability table */
 static double p_match[50], p_mismatch[50];
@@ -415,6 +416,11 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
                     else if (!refonly && r[i]->index == 2) out = ref_out;
                     else if (!refonly && r[i]->index == 3) out = mul_out;
                     else if (r[i]->index == 4) out = unk_out;
+                    if (debug >= 1) {
+                        fprintf(stderr, "%f\t%f\t%f\t%d\t", r[i]->prgu, r[i]->prgv, r[i]->pout, r[i]->index);
+                        fprintf(stderr, "%s\t%s\t%d\t%d\t", r[i]->name, r[i]->chr, r[i]->pos, r[i]->end);
+                        fprintf(stderr, "%s\t%s\t%p\n", r[i]->flag, r[i]->qseq, out);
+                    }
                     break;
                 }
             }
@@ -583,8 +589,7 @@ static void fasta_read(const char *fa_file) {
         if (t < 1) { exit_err("bad fields in FA index file\n"); }
         if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
-        fasta_t *f = malloc(sizeof (fasta_t));
-        f->name = strdup(name);
+        fasta_t *f = fasta_create(name);
         f->seq = fai_fetch(fai, name, &f->seq_length);
         char *s;
         for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
@@ -764,6 +769,17 @@ static void bam_read(const char *bam_file, int ind) {
         char key[i];
         snprintf(key, i, "%s\t%d", read->name, read->is_read2);
 
+        if (debug >= 2) {
+            fprintf(stderr, "%f\t%f\t%f\t", prgu, prgv, pout);
+            fprintf(stderr, "%s\t%s\t%d\t%d\t", read->name, read->chr, read->pos, read->end);
+            for (i = 0; i < read->n_cigar; i++) fprintf(stderr, "%d%c ", read->cigar_oplen[i], read->cigar_opchr[i]);
+            fprintf(stderr, "\t");
+            if (read->multimapXA != NULL) fprintf(stderr, "%s\t", read->multimapXA);
+            else fprintf(stderr, "%d\t", read->multimapNH);
+            if (read->flag != NULL) fprintf(stderr, "%s\t", read->flag);
+            fprintf(stderr, "%s\n", key);
+        }
+
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
             vector_t *node = &kh_val(read_hash, k);
@@ -772,6 +788,7 @@ static void bam_read(const char *bam_file, int ind) {
                 if (strcmp(r[i]->name, read->name) == 0 && strcmp(r[i]->qseq, key) == 0) {
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
                     r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
+                    nreads++;
                     break;
                 }
             }
@@ -911,6 +928,7 @@ static void print_usage() {
 
 int main(int argc, char **argv) {
     /* Command line parameters defaults */
+    debug = 0;
     char *readinfo_file = NULL;
     char *var_file = NULL;
     char *bam_file = NULL;
@@ -935,6 +953,7 @@ int main(int argc, char **argv) {
     char *ref_file2 = NULL;
 
     static struct option long_options[] = {
+        {"debug", optional_argument, NULL, 'd'},
         {"var", optional_argument, NULL, 'v'},
         {"bam", optional_argument, NULL, 'a'},
         {"out", optional_argument, NULL, 'o'},
@@ -959,11 +978,12 @@ int main(int argc, char **argv) {
     };
 
     int opt = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:o:u:", long_options, &opt)) != -1) {
+    while ((opt = getopt_long(argc, argv, "d:v:a:o:u:", long_options, &opt)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
                 break;
+            case 'd': debug = parse_int(optarg); break;
             case 'v': var_file = optarg; break;
             case 'a': bam_file = optarg; break;
             case 'o': output_prefix = optarg; break;
@@ -1003,7 +1023,6 @@ int main(int argc, char **argv) {
         lgomega = (log(omega) - log(1.0-omega));
 
         khiter_t k;
-
         refseq_hash = kh_init(rsh);
         fasta_read(ref_file1);
         bam_read(bam_file1, 0);

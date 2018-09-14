@@ -34,6 +34,7 @@ This program is distributed under the terms of the GNU General Public License
 #define LGALPHA (log(ALPHA))
 
 /* Command line arguments */
+static int debug;
 static char *vcf_file;
 static char *bam_file;
 static char *fa_file;
@@ -55,7 +56,6 @@ static int bisulfite;
 static double hetbias;
 static double omega, lgomega;
 static int dp, gap_op, gap_ex;
-static int debug;
 static int rc;
 static double ref_prior, alt_prior, het_prior;
 
@@ -988,6 +988,7 @@ static void print_usage() {
 
 int main(int argc, char **argv) {
     /* Command line parameters defaults */
+    debug = 0;
     vcf_file = NULL;
     bam_file = NULL;
     fa_file = NULL;
@@ -1011,10 +1012,10 @@ int main(int argc, char **argv) {
     gap_ex = 1;
     hetbias = 0.5;
     omega = 1.0e-5;
-    debug = 0;
     rc = 0;
 
     static struct option long_options[] = {
+        {"debug", optional_argument, NULL, 'd'},
         {"vcf", required_argument, NULL, 'v'},
         {"bam", required_argument, NULL, 'a'},
         {"ref", required_argument, NULL, 'r'},
@@ -1038,17 +1039,17 @@ int main(int argc, char **argv) {
         {"gap_ex", optional_argument, NULL, 982},
         {"hetbias", optional_argument, NULL, 990},
         {"omega", optional_argument, NULL, 991},
-        {"debug", optional_argument, NULL, 'd'},
         {"rc", no_argument, &rc, 1},
         {0, 0, 0, 0}
     };
 
     int opt = 0;
-    while ((opt = getopt_long(argc, argv, "v:a:r:o:t:s:n:w:m:d:", long_options, &opt)) != -1) {
+    while ((opt = getopt_long(argc, argv, "d:v:a:r:o:t:s:n:w:m:", long_options, &opt)) != -1) {
         switch (opt) {
             case 0: 
                 //if (long_options[option_index].flag != 0) break;
                 break;
+            case 'd': debug = parse_int(optarg); break;
             case 'v': vcf_file = optarg; break;
             case 'a': bam_file = optarg; break;
             case 'r': fa_file= optarg; break;
@@ -1062,7 +1063,6 @@ int main(int argc, char **argv) {
             case 982: gap_ex = parse_int(optarg); break;
             case 990: hetbias = parse_float(optarg); break;
             case 991: omega = parse_float(optarg); break;
-            case 'd': debug = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }

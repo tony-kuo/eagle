@@ -31,6 +31,12 @@ This program is distributed under the terms of the GNU General Public License
 #define MASK_16 (((u_int32_t)1<<16)-1) /* i.e., (u_int32_t)0xffff */
 #define MASK_24 (((u_int32_t)1<<24)-1) /* i.e., (u_int32_t)0xffff */
 
+/* Mapping table */
+int seqnt_map[58];
+
+/* Fastq quality to probability table */
+double p_match[50], p_mismatch[50];
+
 char *strdup1(const char *src);
 void str_resize(char **str, size_t size);
 

@@ -507,11 +507,10 @@ static void print_usage() {
     printf("     --isc               Ignore soft-clipped bases.\n");
     printf("     --nodup             Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice            RNA-seq spliced reads.\n");
-    printf("     --bs                Bisulfite treated reads.\n");
+    printf("     --bs         INT    Bisulfite treated reads. 0: off, 1: top/forward strand, 2: bottom/reverse strand, 3: both. [0]\n");
     printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --phred64           Read quality scores are in phred64.\n");
-    printf("     --bisulf            Reads are bisulfite treated.\n");
 }
 
 int main(int argc, char **argv) {
@@ -541,11 +540,11 @@ int main(int argc, char **argv) {
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
-        {"bs", no_argument, &bisulfite, 1},
         {"verbose", no_argument, &verbose, 1},
         {"phred64", no_argument, &phred64, 1},
         {"debug", optional_argument, NULL, 'd'},
         {"mut_prior", optional_argument, NULL, 990},
+        {"bs", optional_argument, NULL, 992},
         {0, 0, 0, 0}
     };
 
@@ -562,6 +561,7 @@ int main(int argc, char **argv) {
             case 't': nthread = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
             case 990: mut_prior = parse_float(optarg); break;
+            case 992: bisulfite = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }

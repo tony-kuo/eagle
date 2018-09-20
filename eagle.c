@@ -968,7 +968,7 @@ static void print_usage() {
     printf("     --isc             Ignore soft-clipped bases.\n");
     printf("     --nodup           Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice          RNA-seq spliced reads.\n");
-    printf("     --bs              Bisulfite treated reads.\n");
+    printf("     --bs       INT    Bisulfite treated reads. 0: off, 1: top/forward strand, 2: bottom/reverse strand, 3: both. [0]\n");
     printf("     --dp              Use dynamic programming to calculate likelihood instead of the basic model.\n");
     printf("     --gap_op   INT    DP gap open penalty. [6]. Recommend 2 for long reads with indel errors.\n");
     printf("     --gap_ex   INT    DP gap extend penalty. [1].\n");
@@ -1019,12 +1019,12 @@ int main(int argc, char **argv) {
         {"distlim", optional_argument, NULL, 'n'},
         {"maxdist", optional_argument, NULL, 'w'},
         {"maxh", optional_argument, NULL, 'm'},
+        {"maxh", optional_argument, NULL, 'm'},
         {"mvh", no_argument, &mvh, 1},
         {"pao", no_argument, &pao, 1},
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
-        {"bs", no_argument, &bisulfite, 1},
         {"verbose", no_argument, &verbose, 1},
         {"phred64", no_argument, &phred64, 1},
         {"lowmem", no_argument, &lowmem, 1},
@@ -1033,6 +1033,7 @@ int main(int argc, char **argv) {
         {"gap_ex", optional_argument, NULL, 982},
         {"hetbias", optional_argument, NULL, 990},
         {"omega", optional_argument, NULL, 991},
+        {"bs", optional_argument, NULL, 992},
         {"rc", no_argument, &rc, 1},
         {0, 0, 0, 0}
     };
@@ -1057,6 +1058,7 @@ int main(int argc, char **argv) {
             case 982: gap_ex = parse_int(optarg); break;
             case 990: hetbias = parse_float(optarg); break;
             case 991: omega = parse_float(optarg); break;
+            case 992: bisulfite = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }

@@ -105,7 +105,7 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
             matrix[read->length * 14 + b] = is_match[b]; // also S
             break;
         }
-        if (bisulfite) {
+        if (bisulfite > 0) {
             switch (read->qseq[b]) {
             case 'A':
                 matrix[read->length * seqnt_map['a' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
@@ -120,8 +120,10 @@ void set_prob_matrix(double *matrix, const read_t *read, const double *is_match,
                 matrix[read->length * seqnt_map['g' - 'A'] + b] = is_match[b]; // methylated reverse strand
                 break;
             }
-            if ((read->qseq[b] == 'T') && ((!read->is_read2 && !read->is_reverse) || (read->is_read2 && read->is_reverse))) matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand
-            else if ((read->qseq[b] == 'A') && ((!read->is_read2 && read->is_reverse) || (read->is_read2 && !read->is_reverse))) matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand
+            if ((bisulfite == 1) && (read->qseq[b] == 'T') && ((!read->is_read2 && !read->is_reverse) || (read->is_read2 && read->is_reverse))) matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand, top strand
+            else if ((bisulfite == 2) && (read->qseq[b] == 'A') && ((!read->is_read2 && read->is_reverse) || (read->is_read2 && !read->is_reverse))) matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand, bottom strand
+            else if ((bisulfite >= 3) && (read->qseq[b] == 'T') && ((!read->is_read2 && !read->is_reverse) || (read->is_read2 && read->is_reverse))) matrix[read->length * seqnt_map['C' - 'A'] + b] = is_match[b]; // unmethylated forward strand, top strand
+            else if ((bisulfite >= 3) && (read->qseq[b] == 'A') && ((!read->is_read2 && read->is_reverse) || (read->is_read2 && !read->is_reverse))) matrix[read->length * seqnt_map['G' - 'A'] + b] = is_match[b]; // unmethylated reverse strand, bottom strand
         }
     }
 }

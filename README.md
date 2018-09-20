@@ -71,7 +71,7 @@ The read counts represent reads that are unambiguously for the reference or alte
 
 **--splice**  Reads are from RNA-seq and potentially spliced, based on cigar string.
 
-**--bs**  Reads are bisulfite treated.  In the probability model, this considers C to T and G to A as matches.
+**--bs**  [INT]  Reads are bisulfite treated.  In the probability model, this considers C to T (top strand) and G to A (both strand) as matches.  0: off, 1: top/forward strand, 2: bottom/reverse strand, 3: both.  Default is 0 (off).
 
 **--dp**  Instead of the short read model, which assumes no indel errors, use dynamic programming (short in long) to calculate the likelihood.  This allows handling of long reads which have higher rates of sequencing errors and indel errors.
 
@@ -156,7 +156,7 @@ For no genotype information classification, the options in the default mode list
 
 **--splice**  Reads are from RNA-seq and potentially spliced, based on cigar string.
 
-**--bs**  Reads are bisulfite treated.  In the probability model, this considers C to T and G to A as matches in the forward and reverse strand respectively.
+**--bs**  [INT]  Reads are bisulfite treated.  In the probability model, this considers C to T (top strand) and G to A (both strand) as matches.  0: off, 1: top/forward strand, 2: bottom/reverse strand, 3: both.  Default is 0 (off).
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
 

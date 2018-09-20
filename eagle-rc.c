@@ -633,7 +633,7 @@ static void bam_read(const char *bam_file, int ind) {
         read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
         fasta_t *f = refseq_fetch(read->chr);
         if (f == NULL) {
-            read_destroy(read);
+            read_destroy(read); free(read); read = NULL;
             continue;
         }
         char *refseq = f->seq;
@@ -655,7 +655,7 @@ static void bam_read(const char *bam_file, int ind) {
             if (*(s + n) != ',') break;
         }
         if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {
-            read_destroy(read);
+            read_destroy(read); free(read); read = NULL;
             continue;
         }
 
@@ -812,10 +812,9 @@ static void bam_read(const char *bam_file, int ind) {
 }
 
 static void combine_pe() {
-    other_read_hash = kh_init(orh);
-
-    size_t i, readi;
 	khiter_t k;
+    size_t i, readi;
+    other_read_hash = kh_init(orh);
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
             vector_t *node = &kh_val(read_hash, k);
@@ -915,7 +914,7 @@ static void print_usage() {
     printf("     --isc                        --ngi mode: Ignore soft-clipped bases.\n");
     printf("     --nodup                      --ngi mode: Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice                     --ngi mode: RNA-seq spliced reads.\n");
-    printf("     --bs                         --ngi mode: bisulfite treated reads.\n");
+    printf("     --bs        INT              --ngi mode: Bisulfite treated reads. 0: off, 1: top/forward strand, 2: bottom/reverse strand, 3: both. [0]\n");
     printf("     --phred64                    --ngi mode: Read quality scores are in phred64.\n");
     printf("     --omega=    FLOAT            --ngi mode: Prior probability of originating from outside paralogous source, between [0,1]. [1e-40]\n");
 }
@@ -961,13 +960,13 @@ int main(int argc, char **argv) {
         {"isc", no_argument, &isc, 1},
         {"nodup", no_argument, &nodup, 1},
         {"splice", no_argument, &splice, 1},
-        {"bs", no_argument, &bisulfite, 1},
         {"phred64", no_argument, &phred64, 1},
         {"ref1", optional_argument, NULL, 981},
         {"ref2", optional_argument, NULL, 982},
         {"bam1", optional_argument, NULL, 983},
         {"bam2", optional_argument, NULL, 984},
         {"omega", optional_argument, NULL, 991},
+        {"bs", optional_argument, NULL, 992},
         {0, 0, 0, 0}
     };
 
@@ -987,6 +986,7 @@ int main(int argc, char **argv) {
             case 983: bam_file1 = optarg; break;
             case 984: bam_file2 = optarg; break;
             case 991: omega = parse_float(optarg); break;
+            case 992: bisulfite = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }

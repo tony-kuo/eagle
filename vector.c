@@ -222,7 +222,6 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
     r->splice_pos = NULL;
     r->splice_offset = NULL;
     r->multimapXA = NULL;
-    r->is_unmap = 0;
     r->is_dup = 0;
     r->is_reverse = 0;
     r->is_secondary = 0;
@@ -233,7 +232,7 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
 void read_destroy(read_t *r) {
     if (r != NULL) {
         r->tid = r->pos = r->end = r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
-        r->is_unmap = r->is_dup = r->is_reverse = r->is_secondary = r->is_read2 = 0;
+        r->is_dup = r->is_reverse = r->is_secondary = r->is_read2 = 0;
         r->prgu = r->prgv = r->pout = 0;
         r->index = 0;
         free(r->name); r->name = NULL;

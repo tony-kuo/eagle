@@ -201,6 +201,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
             size_t i, j;
+            if (aln->core.tid < 0) continue; // not mapped
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
             char *flag = bam_flag2str(aln->core.flag);
@@ -211,14 +212,13 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             int n;
             char *s, token[strlen(read->flag) + 1];
             for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-                if (strcmp("UNMAP", token) == 0) read->is_unmap = 1;
-                else if (strcmp("DUP", token) == 0) read->is_dup = 1;
+                if (strcmp("DUP", token) == 0) read->is_dup = 1;
                 else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
                 else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
                 else if (strcmp("READ2", token) == 0) read->is_read2 = 1;
                 if (*(s + n) != ',') break;
             }
-            if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {
+            if ((nodup && read->is_dup) || (pao && read->is_secondary)) {
                 read_destroy(read);
                 continue;
             }

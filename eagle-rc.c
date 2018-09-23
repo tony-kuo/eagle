@@ -298,19 +298,18 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
 
             bam1_t *aln = bam_init1(); // initialize an alignment
             while (sam_read1(sam_in, bam_header, aln) >= 0) {
-                int is_unmap = 0;
+                if (aln->core.tid < 0) continue; // not mapped
                 int is_secondary = 0;
                 char *flag = bam_flag2str(aln->core.flag);
 
                 int n2;
                 char *s, token[strlen(flag) + 1];
                 for (s = flag; sscanf(s, "%[^,]%n", token, &n2) == 1; s += n2 + 1) {
-                    if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-                    else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
+                    if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
                     if (*(s + n2) != ',') break;
                 }
                 free(flag); flag = NULL;
-                if (is_unmap || (pao && is_secondary)) continue;
+                if (pao && is_secondary) continue;
 
                 int found = 0;
                 char *name = strdup((char *)aln->data);
@@ -373,20 +372,20 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
 
     bam1_t *aln = bam_init1(); // initialize an alignment
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
+        if (aln->core.tid < 0) continue; // not mapped
+
         /* Mapped & Primary alignments only */
         int n;
-        int is_unmap = 0;
         int is_secondary = 0;
         int is_read2 = 0;
         char *flag = bam_flag2str(aln->core.flag);
         char *s, token[strlen(flag) + 1];
         for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-            if (strcmp("UNMAP", token) == 0) is_unmap = 1;
-            else if (strcmp("READ2", token) == 0) is_read2 = 1;
+            if (strcmp("READ2", token) == 0) is_read2 = 1;
             else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) is_secondary = 1;
             if (*(s + n) != ',') break;
         }
-        if (is_unmap || (pao && is_secondary)) {
+        if (pao && is_secondary) {
             free(flag); flag = NULL;
             continue;
         }
@@ -630,6 +629,7 @@ static void bam_read(const char *bam_file, int ind) {
     bam1_t *aln = bam_init1(); // initialize an alignment
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
         size_t i, j;
+        if (aln->core.tid < 0) continue; // not mapped
         read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
         fasta_t *f = refseq_fetch(read->chr);
         if (f == NULL) {
@@ -647,14 +647,13 @@ static void bam_read(const char *bam_file, int ind) {
         int n;
         char *s, token[strlen(read->flag) + 1];
         for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-            if (strcmp("UNMAP", token) == 0) read->is_unmap = 1;
-            else if (strcmp("DUP", token) == 0) read->is_dup = 1;
+            if (strcmp("DUP", token) == 0) read->is_dup = 1;
             else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
             else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
             else if (strcmp("READ2", token) == 0) read->is_read2 = 1;
             if (*(s + n) != ',') break;
         }
-        if (read->is_unmap || (nodup && read->is_dup) || (pao && read->is_secondary)) {
+        if ((nodup && read->is_dup) || (pao && read->is_secondary)) {
             read_destroy(read); free(read); read = NULL;
             continue;
         }

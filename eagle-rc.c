@@ -460,7 +460,7 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
     sam_close(alt_out);
     sam_close(mul_out);
     sam_close(unk_out);
-    print_status("# BAM Processed:\t%s", asctime(time_info));
+    print_status("# BAM Processed:\t%s\t%s", bam_file, asctime(time_info));
 }
 
 static int type2ind(char *type) {

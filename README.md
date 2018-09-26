@@ -138,7 +138,7 @@ Usage, with more details in *example.sh*:
 
 For no genotype information classification, the options in the default mode listed above are also applicable. Usage, where the classification is from the point of view of ref1 as the reference hypothesis and ref2 as the alternative hypothesis:
 
-`eagle-rc --ngi -a align1.bam -o out1 --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
+`eagle-rc --ngi -o out --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
 
 ### Program Parameters (specific to no genotype information mode --ngi)
 
@@ -160,11 +160,6 @@ For no genotype information classification, the options in the default mode list
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
 
-Without completely rerunning, we can get the classified output bam files for ref2 and align2.bam using the --readlist option on the classified reads list.  Keep in mind here that the resulting -.alt.bam contains the ref2 classified alignments.  One may wish to switch the -.alt.bam and -.ref.bam names after they are written.  If we wish to get the classified list for ref2 for further processing, then it is possible to switch REF and ALT and columns 5 and 6 to get the probabilities, though the alignment positions will not be for ref2.  The simplest option is to run it twice:
-
-1. `eagle-rc --ngi -a align1.bam -o out1 --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
-2. `eagle-rc --ngi -a align2.bam -o out2 --ref2=ref1.fa --ref1=ref2.fa --bam2=align1.bam --bam1=align2.bam > classified_reads.2vs1.list`
-
 ### Output
 
 A tab-delimited text file with one row per read (pair if --paired) and columns representing:
@@ -180,17 +175,18 @@ A tab-delimited text file with one row per read (pair if --paired) and columns r
 
 Output BAM files which classify reads into 4 classes (reads from -a align.bam):
 
-1. out.ref.bam: reads classified as reference [ref1 if --ngi]
-2. out.alt.bam: reads classified as alternate [ref2 if --ngi]
+1. out.ref.bam: reads classified as reference
+2. out.alt.bam: reads classified as alternate
 3. out.unk.bam: reads that could not be classified due to identical likelihoods
-4. out.mul.bam: multi-allelic variants (heterozygous non-reference variants) [not applicable to --ngi]
+4. out.mul.bam: multi-allelic variants (heterozygous non-reference variants) (not applicable to --ngi)
 
-If eagle-rc with --ngi is run twice as recommended above then:
+If --ngi then there are 2 sets of output bam files:
 
-* out1.ref.bam: reads in align1.bam classified as ref1.fa
-* out2.ref.bam: reads in align2.bam classified as ref2.fa
-* The read list in out1.ref.bam is the same as out2.alt.bam but aligned to different references.  Similarly for out1.alt.bam and out2.ref.bam.
-* The other bam files are used when one wishes to focus analysis on one reference (perhaps due to assembly quality).
+* out1.ref.bam: reads in bam1 classified as ref1
+* out1.alt.bam: reads in bam1 classified as ref2
+* out2.ref.bam: reads in bam2 classified as ref2
+* out2.alt.bam: reads in bam2 classified as ref1
+* Both out1.unk.bam and out2.unk.bam contain reads that could not be classified, aligned to ref1 and ref2 respectively.
 
 ## References
 Tony Kuo and Martin C Frith and Jun Sese and Paul Horton. EAGLE: Explicit Alternative Genome Likelihood Evaluator. BMC Medical Genomics. 11(Suppl 2):28. https://doi.org/10.1186/s12920-018-0342-1

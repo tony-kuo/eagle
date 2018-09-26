@@ -284,7 +284,7 @@ static void readinfo_classify() {
     print_status("# Reads Classified:\t%s", asctime(time_info));
 }
 
-static void bam_write(const char *bam_file, const char *output_prefix, char *other_bam) {
+static void bam_write(const char *bam_file, const char *output_prefix, char *other_bam, int reverse) {
     size_t i;
     other_read_hash = kh_init(orh);
     if (other_bam != NULL) {
@@ -404,8 +404,10 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
             read_t **r = (read_t **)node->data;                                                                                                                          
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
-                    if (r[i]->index == 0) out = ref_out;
-                    else if (!refonly && r[i]->index == 1) out = alt_out;
+                    if (r[i]->index == 0 && !reverse) out = ref_out;
+                    else if (r[i]->index == 1 && reverse) out = ref_out; // reverse, ALT writes to ref.bam
+                    else if (!refonly && r[i]->index == 1 && !reverse) out = alt_out;
+                    else if (!refonly && r[i]->index == 0 && reverse) out = alt_out; // reverse, REF writes to alt.bam
                     else if (!refonly && r[i]->index == 2) out = ref_out;
                     else if (!refonly && r[i]->index == 3) out = mul_out;
                     else if (r[i]->index == 4) out = unk_out;
@@ -991,10 +993,8 @@ int main(int argc, char **argv) {
     }
     if (optind > argc) { exit_usage("Bad program call"); }
 
-    if (!listonly) {
-       if (bam_file == NULL) { exit_usage("Missing BAM file! -a bam"); }
-       if (output_prefix == NULL) { exit_usage("Missing output prefix!"); }
-    }
+    if (!listonly && !ngi && bam_file == NULL) { exit_usage("Missing BAM file! -a bam"); }
+    else if (!listonly && output_prefix == NULL) { exit_usage("Missing output prefix!"); }
 
     print_status("# Options: listonly=%d readlist=%d refonly=%d paired=%d pao=%d\n", listonly, readlist, refonly, paired, pao);
     print_status("#          ngi=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d omega=%g\n", ngi, isc, nodup, splice, bisulfite, phred64, omega);
@@ -1034,11 +1034,20 @@ int main(int argc, char **argv) {
 
         if (paired) combine_pe();
         readinfo_classify();
-        if (!listonly) bam_write(bam_file, output_prefix, other_bam);
+
+        if (!listonly) {
+            size_t i = snprintf(NULL, 0, "%s1", output_prefix) + 1;
+            char output_prefix1[i], output_prefix2[i];
+            snprintf(output_prefix1, i, "%s1", output_prefix);
+            snprintf(output_prefix2, i, "%s2", output_prefix);
+
+            bam_write(bam_file1, output_prefix1, other_bam, 0);
+            bam_write(bam_file2, output_prefix2, other_bam, 1);
+        }
     }
     else if (readlist) {
         readlist_read(argv[optind]);
-        bam_write(bam_file, output_prefix, other_bam);
+        bam_write(bam_file, output_prefix, other_bam, 0);
     }
     else {
         //var_file = argv[optind++];
@@ -1055,7 +1064,7 @@ int main(int argc, char **argv) {
 
         if (paired) combine_pe();
         readinfo_classify();
-        if (!listonly) bam_write(bam_file, output_prefix, other_bam);
+        if (!listonly) bam_write(bam_file, output_prefix, other_bam, 0);
     }
 
     khiter_t k;

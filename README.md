@@ -160,7 +160,7 @@ For no genotype information classification, the options in the default mode list
 
 **--phred64**  Reads quality scores are in phred64.  Default is phred33.
 
-Without completely rerunning, we can get the classified output bam files for ref2 and align2.bam using the --readlist option on the classified reads list.  Keep in mind here that the resulting -.alt.bam contains the ref2 classified alignments.  One may wish to switch the -.alt.bam and -.ref.bam names after they are written.  If we wish to get the classified list for ref2 for further processing, then it is possible to switch REF and ALT and columns 5 and 6 to get the probabilities, though the alignment positions will not be for ref2.  The simplest option is to rerun it:
+Without completely rerunning, we can get the classified output bam files for ref2 and align2.bam using the --readlist option on the classified reads list.  Keep in mind here that the resulting -.alt.bam contains the ref2 classified alignments.  One may wish to switch the -.alt.bam and -.ref.bam names after they are written.  If we wish to get the classified list for ref2 for further processing, then it is possible to switch REF and ALT and columns 5 and 6 to get the probabilities, though the alignment positions will not be for ref2.  The simplest option is to run it twice:
 
 1. `eagle-rc --ngi -a align1.bam -o out1 --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
 2. `eagle-rc --ngi -a align2.bam -o out2 --ref2=ref1.fa --ref1=ref2.fa --bam2=align1.bam --bam1=align2.bam > classified_reads.2vs1.list`

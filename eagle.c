@@ -173,6 +173,7 @@ static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1,
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
+            if (aln->core.tid < 0) continue; // not mapped
             last = aln->core.pos + aln->core.l_qseq;
         }
         bam_destroy1(aln);

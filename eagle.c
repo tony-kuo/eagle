@@ -431,7 +431,7 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
     strcat(*output, "]\n");
 }
 
-static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti, int *seqnt_map) {
+static void calc_likelihood(stats_t *stat, vector_t *var_set, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti, int *seqnt_map) {
     size_t i, readi;
     stat->ref = 0;
     stat->alt = 0;
@@ -439,6 +439,9 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
     stat->ref_count = 0;
     stat->alt_count = 0;
     stat->seen = 0;
+
+    variant_t **var_data = (variant_t **)var_set->data;
+    double log_nv = log((double)var_set->len);
 
     int has_indel = 0;
     if (!lowmem) {
@@ -563,8 +566,8 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
 
         /* Priors */
         prgu += ref_prior;
-        prgv += alt_prior;
-        phet += het_prior;
+        prgv += alt_prior - log_nv;
+        phet += het_prior - log_nv;
         stat->ref += prgu;
         stat->alt += prgv;
         stat->het += phet;
@@ -598,7 +601,7 @@ static void calc_likelihood(stats_t *stat, variant_t **var_data, const char *ref
     }
 }
 
-static char *evaluate(const vector_t *var_set) {
+static char *evaluate(vector_t *var_set) {
     size_t i, readi, seti;
 
     variant_t **var_data = (variant_t **)var_set->data;
@@ -632,7 +635,7 @@ static char *evaluate(const vector_t *var_set) {
     for (seti = 0; seti < combo->len; seti++) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti], read_list->len);
         vector_add(stats, s);
-        calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, seti, seqnt_map);
+        calc_likelihood(s, var_set, refseq, refseq_length, read_data, read_list->len, seti, seqnt_map);
     }
     if (var_set->len > 1) { // doubles and beyond
         heap_t *h = heap_create(STATS_T);
@@ -647,7 +650,7 @@ static char *evaluate(const vector_t *var_set) {
             for (i = 0; i < c->len; i++) {
                 stats_t *s = stats_create((vector_int_t *)c->data[i], read_list->len);
                 vector_add(stats, s);
-                calc_likelihood(s, var_data, refseq, refseq_length, read_data, read_list->len, stats->len - 1, seqnt_map);
+                calc_likelihood(s, var_set, refseq, refseq_length, read_data, read_list->len, stats->len - 1, seqnt_map);
                 heap_push(h, s->mut, s);
             }
             vector_free(c); //combos in stat so don't destroy
@@ -1005,7 +1008,7 @@ int main(int argc, char **argv) {
     gap_op = 6;
     gap_ex = 1;
     hetbias = 0.5;
-    omega = 1.0e-5;
+    omega = 1.0e-6;
     rc = 0;
 
     static struct option long_options[] = {

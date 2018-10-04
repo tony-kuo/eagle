@@ -97,11 +97,9 @@ static int var_read(const char* filename) {
         char chr[line_length], ref[line_length], alt[line_length], set[line_length];
 
         int t = sscanf(line, "%s %d %s %s %*[^\t] %*[^\t] %*[^\t] %*[^\t] %*[^\t] %s", chr, &pos, ref, alt, set);
-        if (t < 4) { exit_err("bad fields in EAGLE output file\n"); }
+        if (t < 4) { exit_err("bad fields in EAGLE output file\n%s\n", line); }
 
-        if (strcmp(set, "[]") == 0) {
-            snprintf(set, line_length, "[%s,%d,%s,%s;]", chr, pos, ref, alt);
-        }
+        if (strcmp(set, "[]") == 0) snprintf(set, line_length, "[%s,%d,%s,%s;]", chr, pos, ref, alt);
 
         char *s;
         for (s = set + 1; sscanf(s, "%[^;];%n", chr, &n) == 1; s += n) { // scan variant set and add to hash
@@ -146,7 +144,11 @@ static int readinfo_read(const char* filename) {
         double prgu, prgv, pout;
         char name[line_length], chr[line_length], flag[line_length], var[line_length];
         int t = sscanf(line, "%s %s %d %lf %lf %lf %*[^\t] %*[^\t] %s %s", name, chr, &pos, &prgu, &prgv, &pout, flag, var);
-        if (t < 8) { exit_err("bad fields in EAGLE read info file\n"); }
+        if (t < 8) {
+            t = sscanf(line, "%s %s %d %lf %lf %lf %*[^\t] %*[^\t] %s", name, chr, &pos, &prgu, &prgv, &pout, var);
+            if (t < 7) { exit_err("bad fields in EAGLE read info file\n%s\n", line); }
+            flag[0] = '\0';
+        }
 
         if (prgu == prgv) continue; // if ref and alt probabilities are equal, it didn't "align" and was in a splice zone
 
@@ -556,12 +558,8 @@ static void fasta_read(const char *fa_file) {
     faidx_t *fai = fai_load(fa_file);
     if (fai == NULL) {
         errno = fai_build(fa_file);
-        if (errno == 0) {
-            fai = fai_load(fa_file);
-        }
-        else {
-            exit_err("failed to build and open FA index %s\n", fa_file);
-        }
+        if (errno == 0) { fai = fai_load(fa_file); }
+        else { exit_err("failed to build and open FA index %s\n", fa_file); }
     }
 
     char *filename = malloc((strlen(fa_file) + 5) * sizeof (*filename));
@@ -612,9 +610,7 @@ static fasta_t *refseq_fetch(char *name) {
         vector_t *node = &kh_val(refseq_hash, k);
         fasta_t **f = (fasta_t **)node->data;
         for (i = 0; i < node->len; i++) {
-            if (strcmp(f[i]->name, name) == 0) {
-                return f[i];
-            }
+            if (strcmp(f[i]->name, name) == 0) return f[i];
         }
         exit_err("failed to find %s in hash key %d\n", name, k);
     }

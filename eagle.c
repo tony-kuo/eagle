@@ -81,7 +81,7 @@ static vector_t *vcf_read(FILE *file) {
         int pos;
         char chr[line_length], ref[line_length], alt[line_length];
         int t = sscanf(line, "%s %d %*[^\t] %s %s", chr, &pos, ref, alt);
-        if (t < 4 || has_numbers(ref) || has_numbers(alt)) { exit_err("bad fields in VCF file\n"); }
+        if (t < 4 || has_numbers(ref) || has_numbers(alt)) { exit_err("bad fields in VCF file\n%s\n", line); }
 
         int n1, n2;
         char *s1, *s2, ref_token[strlen(ref) + 1], alt_token[strlen(alt) + 1];
@@ -107,12 +107,8 @@ static void fasta_read(const char *fa_file) {
     faidx_t *fai = fai_load(fa_file);
     if (fai == NULL) { 
         errno = fai_build(fa_file);
-        if (errno == 0) {
-            fai = fai_load(fa_file);
-        }
-        else {
-            exit_err("failed to build and open FA index %s\n", fa_file);
-        }
+        if (errno == 0) { fai = fai_load(fa_file); }
+        else { exit_err("failed to build and open FA index %s\n", fa_file); }
     }
 
     char *filename = malloc((strlen(fa_file) + 5) * sizeof (*filename));
@@ -132,7 +128,7 @@ static void fasta_read(const char *fa_file) {
 
         char name[line_length];
         int t = sscanf(line, "%s%*[^ \t\v\r\n]", name);
-        if (t < 1) { exit_err("bad fields in FA index file\n"); }
+        if (t < 1) { exit_err("bad fields in FA index file\n%s\n", line); }
         if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
         fasta_t *f = malloc(sizeof (fasta_t));
@@ -316,12 +312,8 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     faidx_t *fai = fai_load(fa_file);
     if (fai == NULL) { 
         errno = fai_build(fa_file);
-        if (errno == 0) {
-            fai = fai_load(fa_file);
-        }
-        else {
-            exit_err("failed to build and open FA index %s\n", fa_file);
-        }
+        if (errno == 0) { fai = fai_load(fa_file); }
+        else { exit_err("failed to build and open FA index %s\n", fa_file); }
     }
     if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
@@ -746,12 +738,8 @@ static char *evaluate(vector_t *var_set) {
             for (seti = 0; seti < combo->len; seti++) {
                 int x = haplotypes->data[((vector_int_t *)combo->data[seti])->data[0]];
                 int y = haplotypes->data[((vector_int_t *)combo->data[seti])->data[1]];
-                if (variant_find(stat[x]->combo, i) != -1 || variant_find(stat[y]->combo, i) != -1) {
-                    has_alt = log_add_exp(has_alt, prhap->data[seti]);
-                }
-                else {
-                    not_alt = log_add_exp(not_alt, prhap->data[seti]);
-                }
+                if (variant_find(stat[x]->combo, i) != -1 || variant_find(stat[y]->combo, i) != -1) has_alt = log_add_exp(has_alt, prhap->data[seti]);
+                else not_alt = log_add_exp(not_alt, prhap->data[seti]);
             }
             variant_print(&output, var_set, i, seen, rcount, acount, total, has_alt, not_alt);
         }

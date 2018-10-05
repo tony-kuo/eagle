@@ -140,6 +140,8 @@ For no genotype information classification, the options in the default mode list
 
 `eagle-rc --ngi -o out --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam > classified_reads.1vs2.list`
 
+Note: This does not have the advantage of the default usage where explicit genotype information is used in the form of variants.  For example a read did not map to ref2 due to divergence between sample and reference.  However, we could still evaluate this in the default usage by considering the explicit genotype difference between ref1 and ref2, with ref1 as the reference where the read was mappable.  The evaluation showed that the read was more likely to be ref2 genotype despite being mappable only in ref1, in which case we designated this read as unknown UNK.  This case has been observed to truly happen in our benchmarks where the truth being the read is derived from ref2 is known.  Using --ngi in this case would give a false ref1 classification.
+
 ### Program Parameters (specific to no genotype information mode --ngi)
 
 **--ref1**  [FILE] Reference genome 1 fasta file
@@ -175,10 +177,10 @@ A tab-delimited text file with one row per read (pair if --paired) and columns r
 
 Output BAM files which classify reads into 4 classes (reads from -a align.bam):
 
-1. out.ref.bam: reads classified as reference
-2. out.alt.bam: reads classified as alternate
-3. out.unk.bam: reads that could not be classified due to identical likelihoods
-4. out.mul.bam: multi-allelic variants (heterozygous non-reference variants) (not applicable to --ngi)
+1. out.ref.bam: reads classified as reference, REF in the classified read list
+2. out.alt.bam: reads classified as alternate, ALT in the classified read list
+3. out.unk.bam: reads that could not be classified due to identical likelihoods, UNK in the classified read list
+4. out.mul.bam: multi-allelic variants (heterozygous non-reference variants) (not applicable to --ngi), MUL in the classified read list
 
 If --ngi then there are 2 sets of output bam files:
 
@@ -187,6 +189,21 @@ If --ngi then there are 2 sets of output bam files:
 * out2.ref.bam: reads in bam2 classified as ref2
 * out2.alt.bam: reads in bam2 classified as ref1
 * Both out1.unk.bam and out2.unk.bam contain reads that could not be classified, aligned to ref1 and ref2 respectively.
+
+In the classified read list, keep in mind that the reference focus is in ref1 coordinates.  If ref2 is listed then that is because it mapped only to ref2.  One way to get the reversed list is to switch REF and ALT along with their likelihoods:
+
+`perl -ne 'chomp; @t=split(/\t/); if($t[1] eq "REF"){$t[1]="ALT";} elsif($t[1] eq "ALT"){$t[1]="REF";} $tmp=$t[4]; $t[4]=$t[5]; $t[5]=$tmp; print join("\t", @t)."\n";' classified_reads.1vs2.list > classified_reads.2vs1.list`
+
+To account for reads that map to only one reference and to have the corresponding reference focus in the reversed list, rerun with:
+
+`eagle-rc --ngi --listonly --ref1=ref2.fa --ref2=ref1.fa --bam1=align2.bam --bam2=align1.bam > classified_reads.2vs1.list`
+
+Then filter for reads that only map to one reference:
+
+`grep 'ref1uniqueid' classified_reads.1vs2.list > classified_reads.1vs2.double.list`
+`grep 'ref2uniqueid' classified_reads.2vs1.list > classified_reads.2vs1.double.list`
+
+This filtered lists can then be passed on for further processing such as in hexaploid analysis.
 
 ## References
 Tony Kuo and Martin C Frith and Jun Sese and Paul Horton. EAGLE: Explicit Alternative Genome Likelihood Evaluator. BMC Medical Genomics. 11(Suppl 2):28. https://doi.org/10.1186/s12920-018-0342-1

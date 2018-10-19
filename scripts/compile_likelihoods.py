@@ -151,7 +151,7 @@ def main():
     parser.add_argument('-mindepth', type=int, default=0, help='minimum read depth [default: 0 off]')
     parser.add_argument('-maxdepth', type=int, default=0, help='maximum read depth [default: 0 off]')
     parser.add_argument('-mincp', type=float, default=0.95, help='minimum combined probability: positive * (1-negative) [default: 0.95]')
-    parser.add_argument('-minrp', type=float, default=0.5, help='minimum read proportion: reads seen that are unambiguously ref or alt [default: 0.5]')
+    parser.add_argument('-minrp', type=float, default=0.75, help='minimum read proportion: reads seen that are unambiguously ref or alt [default: 0.75]')
     parser.add_argument('-seen', action='store_true', help='use the total number of reads seen at this position as the depth [instead of: ref + alt]')
     parser.add_argument('-loh', action='store_true', help='include mutations with loss of heterozygosity, labeled with LOH')
     args = parser.parse_args()

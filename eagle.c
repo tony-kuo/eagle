@@ -968,7 +968,7 @@ static void print_usage() {
     printf("     --lowmem          Low memory usage mode, the default mode for snps, this may be slightly slower for indels but uses less memory.\n");
     printf("     --phred64         Read quality scores are in phred64.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
-    printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-5]\n");
+    printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-6]\n");
     printf("     --rc              Wrapper for read classification settings: --omega=1.0e-40 --isc --mvh --verbose --lowmem.\n");
 }
 
@@ -1074,7 +1074,7 @@ int main(int argc, char **argv) {
     if (gap_op <= 0) gap_op = 6;
     if (gap_ex <= 0) gap_ex = 1;
     if (hetbias < 0 || hetbias > 1) hetbias = 0.5;
-    if (omega < 0 || omega > 1) omega = 1e-5;
+    if (omega < 0 || omega > 1) omega = 1e-6;
     if (rc) {
         omega = 1e-40;
         isc = 1;

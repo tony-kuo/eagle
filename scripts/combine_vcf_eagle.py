@@ -52,7 +52,7 @@ def readVCF(filename, eagle, raw):
     return(entry);
 
 def main():
-    parser = argparse.ArgumentParser(description='Compare to VCF Truth Data');
+    parser = argparse.ArgumentParser(description='Combine VCF and EAGLE output');
     parser.add_argument('-v', help='VCF file');
     parser.add_argument('-e', help='EAGLE file');
     parser.add_argument('-raw', action='store_true', help='raw EAGLE output, otherwise output after compile_likelihoods');

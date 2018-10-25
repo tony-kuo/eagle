@@ -49,8 +49,7 @@ def readFile(fn, entry):
             pos = "{}\t{}".format(t[2], t[3])
 
             if key not in entry: # pos, prgu, total, pout, n
-                total = logsumexp([float(t[4]), float(t[5]), float(t[6])])
-                entry[key] = (pos, float(t[4]), total, float(t[6]), 0)
+                entry[key] = (pos, float(t[4]), float(t[5], float(t[6]), 0)
             elif key in entry:
                 entry[key] = (pos, entry[key][1], np.logaddexp(entry[key][2], float(t[5])), entry[key][3], entry[key][4] + 1)
     fh.close
@@ -85,7 +84,7 @@ def classifyDouble(key, chrA, chrB, idx, fh, p_threshold, m_threshold):
     p = [x[i] - y[i] for i in range(len(x))]
     total = logsumexp(p)
     m = [p[i] - total for i in range(len(p))]
-    i = max(range(len(x)), key=x.__getitem__)
+    i = max(range(len(p)), key=p.__getitem__)
 
     if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = "REF"
     else: c = "UNK"
@@ -100,7 +99,7 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhD = open(out_prefix + '.chrD.list', 'w')
     fh = [fhA, fhB, fhD]
 
-    p_threshold = np.log(0.95)
+    p_threshold = np.log(2)
     m_threshold = np.log(0.51)
     for key in chrA:
         if key not in chrB or key not in chrD: continue
@@ -114,7 +113,7 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
         p = [x[i] - y[i] for i in range(len(x))]
         total = logsumexp(p)
         m = [p[i] - total for i in range(len(p))]
-        i = max(range(len(x)), key=x.__getitem__)
+        i = max(range(len(p)), key=p.__getitem__)
 
         if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = "REF"
         else: c = "UNK"

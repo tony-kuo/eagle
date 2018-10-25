@@ -34,8 +34,7 @@ def readFile(fn, entry):
             t = line.strip().split('\t')
             key = "{}\t{}".format(t[0], t[7])
             pos = "{}\t{}".format(t[2], t[3])
-            total = logsumexp([float(t[4]), float(t[5]), float(t[6])])
-            entry[key] = (pos, float(t[4]), total, float(t[6]))
+            entry[key] = (pos, float(t[4]), float(t[5]), float(t[6]))
     fh.close
     print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
     return(entry)
@@ -63,7 +62,7 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
     fhB = open(out_prefix + '.chrB.list', 'w')
     fh = [fhA, fhB]
 
-    p_threshold = np.log(0.95)
+    p_threshold = np.log(2)
     m_threshold = np.log(0.51)
     for key in chrA:
         if key not in chrB: continue
@@ -76,7 +75,7 @@ def writeTable(chrA, chrB, unique_reads, out_prefix):
         p = [x[i] - y[i] for i in range(len(x))]
         total = logsumexp(p)
         m = [p[i] - total for i in range(len(p))]
-        i = max(range(len(x)), key=x.__getitem__)
+        i = max(range(len(p)), key=p.__getitem__)
 
         if p[i] >= p_threshold and m[i] > m_threshold: c = "REF"
         else: c = "UNK"

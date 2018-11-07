@@ -55,6 +55,9 @@ perl triple_homeolog.pl A.vs.B.reciprocal_best B.vs.D.reciprocal_best A.vs.D.rec
 cat A.vs.B.reciprocal_best A.vs.D.reciprocal_best | cut -f1 | sort | uniq > A.vs.all.list
 cat B.vs.A.reciprocal_best B.vs.D.reciprocal_best | cut -f1 | sort | uniq > B.vs.all.list
 cat D.vs.A.reciprocal_best D.vs.B.reciprocal_best | cut -f1 | sort | uniq > D.vs.all.list
+grep $'mRNA\t' $GTF.gff3 | grep $'chr.A\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrA.cds.list
+grep $'mRNA\t' $GTF.gff3 | grep $'chr.B\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrB.cds.list
+grep $'mRNA\t' $GTF.gff3 | grep $'chr.D\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrD.cds.list
 python scripts/tablize.py -v0 A.vs.all.list chrA.cds.list > chrA.only.list
 python scripts/tablize.py -v0 B.vs.all.list chrB.cds.list > chrB.only.list
 python scripts/tablize.py -v0 D.vs.all.list chrD.cds.list > chrD.only.list

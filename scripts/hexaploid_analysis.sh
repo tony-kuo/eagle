@@ -108,9 +108,9 @@ for i in `ls *_R1.fastq.gz`; do
     eagle-rc --refonly --readlist -a chrA/$F.refsort.bam -o eagle/$F.chrA eagle/$F.ref.chrA.list
     eagle-rc --refonly --readlist -a chrB/$F.refsort.bam -o eagle/$F.chrB eagle/$F.ref.chrB.list
     eagle-rc --refonly --readlist -a chrD/$F.refsort.bam -o eagle/$F.chrD eagle/$F.ref.chrD.list
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrA.gtf -o eagle/$F.chrA.counts.txt eagle/$F.chrA.ref.bam
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrB.gtf -o eagle/$F.chrB.counts.txt eagle/$F.chrB.ref.bam
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrD.gtf -o eagle/$F.chrD.counts.txt eagle/$F.chrD.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrA.gtf -o eagle/$F.chrA.counts.txt eagle/$F.chrA.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrB.gtf -o eagle/$F.chrB.counts.txt eagle/$F.chrB.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrD.gtf -o eagle/$F.chrD.counts.txt eagle/$F.chrD.ref.bam
 done
 
 # Double and triple homeolog counts
@@ -141,9 +141,9 @@ for i in `ls *_R1.fastq.gz`; do
     eagle-rc --refonly --readlist -a chrA/$F.refsort.bam -u chrB/$F.refsort.bam,chrD/$F.refsort.bam -o eagle/$F.chrA.only dummy.txt
     eagle-rc --refonly --readlist -a chrB/$F.refsort.bam -u chrA/$F.refsort.bam,chrD/$F.refsort.bam -o eagle/$F.chrB.only dummy.txt
     eagle-rc --refonly --readlist -a chrD/$F.refsort.bam -u chrA/$F.refsort.bam,chrB/$F.refsort.bam -o eagle/$F.chrD.only dummy.txt
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrA.gtf -o eagle/$F.chrA.only.counts.txt eagle/$F.chrA.only.ref.bam
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrB.gtf -o eagle/$F.chrB.only.counts.txt eagle/$F.chrB.only.ref.bam
-    featureCounts -T 8 -t exon -g transcript_id -a $GTF.chrD.gtf -o eagle/$F.chrD.only.counts.txt eagle/$F.chrD.only.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrA.gtf -o eagle/$F.chrA.only.counts.txt eagle/$F.chrA.only.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrB.gtf -o eagle/$F.chrB.only.counts.txt eagle/$F.chrB.only.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrD.gtf -o eagle/$F.chrD.only.counts.txt eagle/$F.chrD.only.ref.bam
 done
 
 python scripts/tablize.py -skip 1 -a -i 0 -c 6 eagle/*.chrA.only.counts.txt > eagle.chrA.only.tsv

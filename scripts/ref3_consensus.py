@@ -49,7 +49,7 @@ def readFile(fn, entry):
             pos = "{}\t{}".format(t[2], t[3])
 
             if key not in entry: # pos, prgu, total, pout, n
-                entry[key] = (pos, float(t[4]), float(t[5], float(t[6]), 0)
+                entry[key] = (pos, float(t[4]), float(t[5]), float(t[6]), 0)
             elif key in entry:
                 entry[key] = (pos, entry[key][1], np.logaddexp(entry[key][2], float(t[5])), entry[key][3], entry[key][4] + 1)
     fh.close

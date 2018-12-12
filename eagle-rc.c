@@ -478,11 +478,6 @@ static void readlist_read(const char *filename) {
     FILE *file = fopen(filename, "r");
     if (file == NULL) { exit_err("failed to open file %s\n", filename); }
 
-    vector_t *ref = vector_create(64, VOID_T); // reference
-    vector_t *alt = vector_create(64, VOID_T); // alternative
-    vector_t *mul = vector_create(64, VOID_T); // multi-allelic that are undifferentiateable
-    vector_t *unk = vector_create(64, VOID_T); // unknown, ambiguous with equal likelihoods for reference and alternative
-
     int nreads = 0;
     char *line = NULL;
     ssize_t read_file = 0;
@@ -522,8 +517,8 @@ static void readlist_read(const char *filename) {
                         r[i]->prgu = prgu;
                         r[i]->prgv = prgv;
                         r[i]->index = type2ind(type);
-                        break;
                     }
+                    break;
                 }
             }
             if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
@@ -547,11 +542,6 @@ static void readlist_read(const char *filename) {
     free(line); line = NULL;
     fclose(file);
     print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
-
-    vector_destroy(ref); free(ref); ref = NULL;
-    vector_destroy(alt); free(alt); alt = NULL;
-    vector_destroy(mul); free(mul); mul = NULL;
-    vector_destroy(unk); free(unk); unk = NULL;
 }
 
 static void fasta_read(const char *fa_file) {

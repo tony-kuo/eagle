@@ -45,6 +45,7 @@ static int splice;
 static int ngi;
 static int phred64;
 static int bisulfite;
+static int const_qual;
 static double omega, lgomega;
 
 /* Time info */
@@ -698,7 +699,8 @@ static void bam_read(const char *bam_file, int ind) {
         uint8_t *qual = bam_get_qual(aln);
         for (i = 0; i < read->length; i++) {
             read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-            read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
+            if (const_qual > 0) read->qual[i] = const_qual;
+            else read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
         }
         read->qseq[read->length] = '\0';
 
@@ -882,10 +884,10 @@ static void print_usage() {
     printf("Usage:\n");
     printf("(Default mode) with genotype info: eagle-rc [options] -a align.bam -o out -v eagle.out.txt eagle.readinfo.txt > classified_reads.list\n");
     printf("Options:\n");
-    printf("  -v --var=      FILE             EAGLE output text with variant likelihood ratios\n");
-    printf("  -a --bam=      FILE             Alignment data BAM file whose reads are to be classified\n");
-    printf("  -o --out=      String           Prefix for output BAM files\n");
-    printf("  -u --unique=   FILE1,FILE2,...  Optionally, also output reads that are unique against other BAM files (comma separated list)\n");
+    printf("  -v --var       FILE             EAGLE output text with variant likelihood ratios\n");
+    printf("  -a --bam       FILE             Alignment data BAM file whose reads are to be classified\n");
+    printf("  -o --out       String           Prefix for output BAM files\n");
+    printf("  -u --unique    FILE1,FILE2,...  Optionally, also output reads that are unique against other BAM files (comma separated list)\n");
     printf("     --listonly                   Print classified read list only (stdout) without processing BAM file\n");
     printf("     --readlist                   Read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
     printf("     --refonly                    Write REF classified reads only when processing BAM file\n");
@@ -894,16 +896,17 @@ static void print_usage() {
     printf("\nNo genotype info mode: eagle-rc [options] --ng --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam -o out > classified_reads.list\n");
     printf("Options (the above default mode options are also applicable):\n");
     printf("     --ngi                         No genotype information (i.e. vcf).  Directly classify read alignments mapped to two different reference (sub)genomes.\n");
-    printf("     --ref1=     FILE             --ngi mode: Reference genome 1 fasta file\n");
-    printf("     --bam1=     FILE             --ngi mode: Alignments to reference genome 1 bam file\n");
-    printf("     --ref2=     FILE             --ngi mode: Reference genome 2, recommend that sequence names are different from ref1\n");
-    printf("     --bam2=     FILE             --ngi mode: Alignments to reference genome 2 bam file\n");
+    printf("     --ref1      FILE             --ngi mode: Reference genome 1 fasta file\n");
+    printf("     --bam1      FILE             --ngi mode: Alignments to reference genome 1 bam file\n");
+    printf("     --ref2      FILE             --ngi mode: Reference genome 2, recommend that sequence names are different from ref1\n");
+    printf("     --bam2      FILE             --ngi mode: Alignments to reference genome 2 bam file\n");
     printf("     --isc                        --ngi mode: Ignore soft-clipped bases.\n");
     printf("     --nodup                      --ngi mode: Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice                     --ngi mode: RNA-seq spliced reads.\n");
     printf("     --bs        INT              --ngi mode: Bisulfite treated reads. 0: off, 1: top/forward strand, 2: bottom/reverse strand, 3: both. [0]\n");
     printf("     --phred64                    --ngi mode: Read quality scores are in phred64.\n");
-    printf("     --omega=    FLOAT            --ngi mode: Prior probability of originating from outside paralogous source, between [0,1]. [1e-40]\n");
+    printf("     --omega     FLOAT            --ngi mode: Prior probability of originating from outside paralogous source, between [0,1]. [1e-40]\n");
+    printf("     --cq        INT              --ngi mode: Constant quality as a phred score, ignoring the quality field in SAM. [0 is off]\n");
 }
 
 int main(int argc, char **argv) {
@@ -924,6 +927,7 @@ int main(int argc, char **argv) {
     splice = 0;
     phred64 = 0;
     bisulfite = 0;
+    const_qual = 0;
 
     ngi = 0;
     omega = 1.0e-40;
@@ -954,6 +958,7 @@ int main(int argc, char **argv) {
         {"bam2", optional_argument, NULL, 984},
         {"omega", optional_argument, NULL, 991},
         {"bs", optional_argument, NULL, 992},
+        {"cq", optional_argument, NULL, 993},
         {0, 0, 0, 0}
     };
 
@@ -974,6 +979,7 @@ int main(int argc, char **argv) {
             case 984: bam_file2 = optarg; break;
             case 991: omega = parse_float(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
+            case 993: const_qual = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }
@@ -983,7 +989,7 @@ int main(int argc, char **argv) {
     else if (!listonly && output_prefix == NULL) { exit_usage("Missing output prefix!"); }
 
     print_status("# Options: listonly=%d readlist=%d refonly=%d paired=%d pao=%d\n", listonly, readlist, refonly, paired, pao);
-    print_status("#          ngi=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d omega=%g\n", ngi, isc, nodup, splice, bisulfite, phred64, omega);
+    print_status("#          ngi=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d omega=%g cq=%d\n", ngi, isc, nodup, splice, bisulfite, phred64, omega, const_qual);
     print_status("# Start: \t%s", asctime(time_info));
 
     /* Start processing data */

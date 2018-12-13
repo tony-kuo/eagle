@@ -53,6 +53,7 @@ static int verbose;
 static int lowmem;
 static int phred64;
 static int bisulfite;
+static int const_qual;
 static double hetbias;
 static double omega, lgomega;
 static int dp, gap_op, gap_ex;
@@ -272,7 +273,8 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             uint8_t *qual = bam_get_qual(aln);
             for (i = 0; i < read->length; i++) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
+                if (const_qual > 0) read->qual[i] = const_qual;
+                else read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
 
@@ -908,7 +910,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
 
     print_status("# Options: maxh=%d mvh=%d pao=%d isc=%d nodup=%d splice=%d bs=%d lowmem=%d phred64=%d\n", maxh, mvh, pao, isc, nodup, splice, bisulfite, lowmem, phred64);
     print_status("#          dp=%d gap_op=%d gap_ex=%d\n", dp, gap_op, gap_ex);
-    print_status("#          hetbias=%g omega=%g\n", hetbias, omega);
+    print_status("#          hetbias=%g omega=%g cq=%d\n", hetbias, omega, const_qual);
     print_status("#          verbose=%d\n", verbose);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
@@ -969,6 +971,7 @@ static void print_usage() {
     printf("     --phred64         Read quality scores are in phred64.\n");
     printf("     --hetbias  FLOAT  Prior probability bias towards non-homozygous mutations, between [0,1]. [0.5]\n");
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-6]\n");
+    printf("     --cq       INT    Constant quality as a phred score, ignoring the quality field in SAM. [0 is off]\n");
     printf("     --rc              Wrapper for read classification settings: --omega=1.0e-40 --isc --mvh --verbose --lowmem.\n");
 }
 
@@ -998,6 +1001,7 @@ int main(int argc, char **argv) {
     gap_ex = 1;
     hetbias = 0.5;
     omega = 1.0e-6;
+    const_qual = 0;
     rc = 0;
 
     static struct option long_options[] = {
@@ -1026,6 +1030,7 @@ int main(int argc, char **argv) {
         {"hetbias", optional_argument, NULL, 990},
         {"omega", optional_argument, NULL, 991},
         {"bs", optional_argument, NULL, 992},
+        {"cq", optional_argument, NULL, 993},
         {"rc", no_argument, &rc, 1},
         {0, 0, 0, 0}
     };
@@ -1051,6 +1056,7 @@ int main(int argc, char **argv) {
             case 990: hetbias = parse_float(optarg); break;
             case 991: omega = parse_float(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
+            case 993: const_qual = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }

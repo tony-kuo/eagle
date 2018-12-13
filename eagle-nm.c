@@ -49,6 +49,7 @@ static int splice;
 static int verbose;
 static int phred64;
 static int bisulfite;
+static int const_qual;
 static int debug;
 static double ref_prior, alt_prior, het_prior;
 static double mut_prior, nomut_prior;
@@ -178,7 +179,8 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
             uint8_t *qual = bam_get_qual(aln);
             for (i = 0; i < read->length; i++) {
                 read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
+                if (const_qual > 0) read->qual[i] = const_qual;
+                else read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
             }
             read->qseq[read->length] = '\0';
 
@@ -458,7 +460,7 @@ static void process(const vector_t *reg_list, FILE *out_fh) {
     region_t **reg_data = (region_t **)reg_list->data;
     size_t nregions = reg_list->len;
 
-    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d\n", pao, isc, nodup, splice, bisulfite, phred64);
+    print_status("# Options: pao=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d cq=%d\n", pao, isc, nodup, splice, bisulfite, phred64, const_qual);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));
 
     vector_t *queue = vector_create(nregions, VOID_T);
@@ -507,6 +509,7 @@ static void print_usage() {
     printf("     --mut_prior  FLOAT  Prior probability for a mutation at any given reference position [0.001].\n");
     printf("     --verbose           Verbose mode, output likelihoods for each read seen for each hypothesis to stderr.\n");
     printf("     --phred64           Read quality scores are in phred64.\n");
+    printf("     --cq         INT    Constant quality as a phred score, ignoring the quality field in SAM. [0 is off]\n");
 }
 
 int main(int argc, char **argv) {
@@ -522,6 +525,7 @@ int main(int argc, char **argv) {
     verbose = 0;
     phred64 = 0;
     bisulfite = 0;
+    const_qual = 0;
     debug = 0;
 
     mut_prior = 0.001;
@@ -541,6 +545,7 @@ int main(int argc, char **argv) {
         {"debug", optional_argument, NULL, 'd'},
         {"mut_prior", optional_argument, NULL, 990},
         {"bs", optional_argument, NULL, 992},
+        {"cq", optional_argument, NULL, 993},
         {0, 0, 0, 0}
     };
 
@@ -558,6 +563,7 @@ int main(int argc, char **argv) {
             case 'd': debug = parse_int(optarg); break;
             case 990: mut_prior = parse_float(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
+            case 993: const_qual = parse_int(optarg); break;
             default: exit_usage("Bad options");
         }
     }

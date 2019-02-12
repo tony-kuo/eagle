@@ -45,15 +45,18 @@ def readFile(fn, entry):
             if re.match('^#', line): continue
 
             t = line.strip().split('\t')
-            key = "{}\t{}".format(t[0], t[7])
-            pos = "{}\t{}".format(t[2], t[3])
+            if len(t) < 8:
+                t.append(' ')
+
+            key = '{}\t{}'.format(t[0], t[7])
+            pos = '{}\t{}'.format(t[2], t[3])
 
             if key not in entry: # pos, prgu, total, pout, n
                 entry[key] = (pos, float(t[4]), float(t[5]), float(t[6]), 0)
             elif key in entry:
                 entry[key] = (pos, entry[key][1], np.logaddexp(entry[key][2], float(t[5])), entry[key][3], entry[key][4] + 1)
     fh.close
-    print("Read:\t{}\t{}".format(fn, datetime.now()), file=sys.stderr)
+    print('Read:\t{}\t{}'.format(fn, datetime.now()), file=sys.stderr)
     return(entry)
 
 def combinePE(data):
@@ -67,12 +70,12 @@ def combinePE(data):
     return(entry)
 
 def classifySingle(key, chrA, fh, p_threshold):
-    if chrA[key][4] > 0 and chrA[key][1] - chrA[key][2] >= p_threshold: c = "REF"
-    else: c = "UNK"
+    if chrA[key][4] > 0 and chrA[key][1] - chrA[key][2] >= p_threshold: c = 'REF'
+    else: c = 'UNK'
     t = key.strip().split('\t')
     if len(t) > 1: f = t[1]
-    else: f = "-"
-    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t-".format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], chrA[key][3], f), file=fh)
+    else: f = '-'
+    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t-'.format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], chrA[key][3], f), file=fh)
 
 def classifyDouble(key, chrA, chrB, idx, fh, p_threshold, m_threshold):
     pos = [chrA[key][0], chrB[key][0]]
@@ -86,12 +89,12 @@ def classifyDouble(key, chrA, chrB, idx, fh, p_threshold, m_threshold):
     m = [p[i] - total for i in range(len(p))]
     i = max(range(len(p)), key=p.__getitem__)
 
-    if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = "REF"
-    else: c = "UNK"
+    if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = 'REF'
+    else: c = 'UNK'
     t = key.strip().split('\t')
     if len(t) > 1: f = t[1]
-    else: f = "-"
-    print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t-".format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[idx[i]])
+    else: f = '-'
+    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t-'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[idx[i]])
 
 def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
@@ -115,12 +118,12 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
         m = [p[i] - total for i in range(len(p))]
         i = max(range(len(p)), key=p.__getitem__)
 
-        if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = "REF"
-        else: c = "UNK"
+        if n[i] > 0 and p[i] >= p_threshold and m[i] >= m_threshold: c = 'REF'
+        else: c = 'UNK'
         t = key.strip().split('\t')
         if len(t) > 1: f = t[1]
-        else: f = "-"
-        print("{}\t{}\t{}\t{}\t{}\t{}\t{}\t-".format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[i])
+        else: f = '-'
+        print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t-'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[i])
 
     if doubles:
         for key in chrA:
@@ -140,7 +143,7 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhA.close()
     fhB.close()
     fhD.close()
-    print("Done:\t{}".format(datetime.now()), file=sys.stderr)
+    print('Done:\t{}'.format(datetime.now()), file=sys.stderr)
 
 def main():
     parser = argparse.ArgumentParser(description='Determine read classification REF = A, B, D.')
@@ -157,7 +160,7 @@ def main():
         sys.exit(1)
     args = parser.parse_args()
 
-    print("Start:\t{0}".format(datetime.now()), file=sys.stderr)
+    print('Start:\t{0}'.format(datetime.now()), file=sys.stderr)
     chrA = {}
     chrA = readFile(args.A[0], chrA) # file 1
     chrA = readFile(args.A[1], chrA) # file 2

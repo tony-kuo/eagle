@@ -161,14 +161,14 @@ static int readinfo_read(const char* filename) {
             if (*(s + n) != ',') break;
         }
 
-        size_t i = snprintf(NULL, 0, "%s\t%d", name, is_read2) + 1;
-        char key[i];
-        snprintf(key, i, "%s\t%d", name, is_read2);
+        char key[256];
+        snprintf(key, 256, "%s\t%d", name, is_read2);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;
+            size_t i;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
@@ -351,24 +351,24 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
 
     /* Split input bam files into respective categories' output bam files */
     samFile *out;
-    char out_fn[999];
+    char out_fn[256];
 
-    snprintf(out_fn, 999, "%s.ref.bam", output_prefix);
+    snprintf(out_fn, 256, "%s.ref.bam", output_prefix);
     samFile *ref_out = sam_open(out_fn, "wb"); // write bam
     if (ref_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
     if (sam_hdr_write(ref_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.alt.bam", output_prefix);
+    snprintf(out_fn, 256, "%s.alt.bam", output_prefix);
     samFile *alt_out = sam_open(out_fn, "wb"); // write bam
     if (alt_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
     if (sam_hdr_write(alt_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.mul.bam", output_prefix);
+    snprintf(out_fn, 256, "%s.mul.bam", output_prefix);
     samFile *mul_out = sam_open(out_fn, "wb"); // write bam
     if (mul_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
     if (sam_hdr_write(mul_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
 
-    snprintf(out_fn, 999, "%s.unk.bam", output_prefix);
+    snprintf(out_fn, 256, "%s.unk.bam", output_prefix);
     samFile *unk_out = sam_open(out_fn, "wb"); // write bam
     if (unk_out == NULL) { exit_err("failed to open BAM file %s\n", out_fn); }
     if (sam_hdr_write(unk_out, bam_header) != 0) { exit_err("bad header write %s\n", out_fn); } // write bam header
@@ -397,9 +397,8 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
         char *name = (char *)aln->data;
 
         if (paired) is_read2 = 0;
-        i = snprintf(NULL, 0, "%s\t%d", name, is_read2) + 1;
-        char key[i];
-        snprintf(key, i, "%s\t%d", name, is_read2);
+        char key[256];
+        snprintf(key, 256, "%s\t%d", name, is_read2);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
@@ -503,9 +502,8 @@ static void readlist_read(const char *filename) {
             }
         }
 
-        size_t i = snprintf(NULL, 0, "%s\t%d", name, is_read2) + 1;
-        char key[i];
-        snprintf(key, i, "%s\t%d", name, is_read2);
+        char key[256];
+        snprintf(key, 256, "%s\t%d", name, is_read2);
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
@@ -748,9 +746,8 @@ static void bam_read(const char *bam_file, int ind) {
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
 
-        i = snprintf(NULL, 0, "%s\t%d", read->name, read->is_read2) + 1;
-        char key[i];
-        snprintf(key, i, "%s\t%d", read->name, read->is_read2);
+        char key[256];
+        snprintf(key, 256, "%s\t%d", read->name, read->is_read2);
 
         if (debug >= 2) {
             fprintf(stderr, "%f\t%f\t%f\t", prgu, prgv, pout);
@@ -809,9 +806,8 @@ static void combine_pe() {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;
             for (readi = 0; readi < node->len; readi++) {
-                i = snprintf(NULL, 0, "%s\t0", r[readi]->name) + 1;
-                char key[i];
-                snprintf(key, i, "%s\t0", r[readi]->name);
+                char key[256];
+                snprintf(key, 256, "%s\t0", r[readi]->name);
 
                 khiter_t k2 = kh_get(orh, other_read_hash, key);
                 if (k2 != kh_end(other_read_hash)) {
@@ -822,6 +818,10 @@ static void combine_pe() {
                             r2[i]->prgu += r[readi]->prgu;
                             r2[i]->prgv += r[readi]->prgv;
                             r2[i]->pout += r[readi]->pout;
+                            char flag[256];
+                            snprintf(flag, 256, "%s;%s", r2[i]->flag, r[readi]->flag);
+                            free(r2[i]->flag); r2[i]->flag = NULL;
+                            r2[i]->flag = strdup(flag);
                             break;
                         }
                     }
@@ -853,9 +853,8 @@ static void combine_pe() {
             vector_t *node = &kh_val(other_read_hash, k);
             read_t **r = (read_t **)node->data;
             for (readi = 0; readi < node->len; readi++) {
-                i = snprintf(NULL, 0, "%s\t0", r[readi]->name) + 1;
-                char key[i];
-                snprintf(key, i, "%s\t0", r[readi]->name);
+                char key[256];
+                snprintf(key, 256, "%s\t0", r[readi]->name);
 
                 khiter_t k2 = kh_get(rh, read_hash, key);
                 if (k2 == kh_end(read_hash)) {
@@ -893,7 +892,7 @@ static void print_usage() {
     printf("     --refonly                    Write REF classified reads only when processing BAM file\n");
     printf("     --paired                     Consider paired-end reads together.\n");
     printf("     --pao                        Primary alignments only.\n");
-    printf("\nNo genotype info mode: eagle-rc [options] --ng --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam -o out > classified_reads.list\n");
+    printf("\nNo genotype info mode: eagle-rc [options] --ngi --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam -o out > classified_reads.list\n");
     printf("Options (the above default mode options are also applicable):\n");
     printf("     --ngi                         No genotype information (i.e. vcf).  Directly classify read alignments mapped to two different reference (sub)genomes.\n");
     printf("     --ref1      FILE             --ngi mode: Reference genome 1 fasta file\n");
@@ -1028,10 +1027,9 @@ int main(int argc, char **argv) {
         readinfo_classify();
 
         if (!listonly) {
-            size_t i = snprintf(NULL, 0, "%s1", output_prefix) + 1;
-            char output_prefix1[i], output_prefix2[i];
-            snprintf(output_prefix1, i, "%s1", output_prefix);
-            snprintf(output_prefix2, i, "%s2", output_prefix);
+            char output_prefix1[256], output_prefix2[256];
+            snprintf(output_prefix1, 256, "%s1", output_prefix);
+            snprintf(output_prefix2, 256, "%s2", output_prefix);
 
             bam_write(bam_file1, output_prefix1, other_bam, 0);
             bam_write(bam_file2, output_prefix2, other_bam, 1);

@@ -790,6 +790,7 @@ static void bam_read(const char *bam_file, int ind) {
             nreads++;
         }
         read_destroy(read); free(read); read = NULL;
+        if (nreads % 1000000 == 0 ) { print_status("# Read bam:\t%s\t%d reads\t%s", bam_file, nreads, asctime(time_info)); }
     }
     bam_destroy1(aln);
     bam_hdr_destroy(bam_header);

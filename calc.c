@@ -194,19 +194,17 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
     double a_gap_curr[read_length + 1];
     double b_gap_prev[read_length + 1], b_gap_curr[read_length + 1];
 
-    prev[0] = 0;
-    prev[1] = 0 - gap_op;
-    for (j = 2; j < read_length + 1; j++) prev[j] = prev[j - 1] - gap_ex;
-    for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = -DBL_MAX;
+    for (j = 0; j < read_length + 1; j++) prev[j] = 0;
+    for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = 0;
 
-    double max_score = -DBL_MAX;
+    double max_score = 0;
     for (i = start; i < end; i++) {
-        double row_max = -DBL_MAX;
+        double row_max = 0;
         double upleft, open, extend;
 
         curr[0] = 0;
-        a_gap_curr[0] = -DBL_MAX;
-        b_gap_curr[0] = -DBL_MAX;
+        a_gap_curr[0] = 0;
+        b_gap_curr[0] = 0;
         for (j = 1; j <= read_length; j++) {
             int c = seq[i] - 'A';
             if (c < 0 || c > 57 || (c > 25 && c < 32)) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[i], i, seq_length); }

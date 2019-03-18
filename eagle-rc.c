@@ -730,20 +730,7 @@ static void bam_read(const char *bam_file, int ind) {
         if (ind == 0) prgu = calc_prob(readprobmatrix, read->length, refseq, refseq_length, read->pos, read->splice_pos, read->splice_offset, read->n_splice, seqnt_map);
         else if (ind == 1) prgv = calc_prob(readprobmatrix, read->length, refseq, refseq_length, read->pos, read->splice_pos, read->splice_offset, read->n_splice, seqnt_map);
 
-        /* Multi-map alignments from XA tags: chr8,+42860367,97M3S,3;chr9,-44165038,100M,4; */
-        if (read->multimapXA != NULL) {
-            int xa_pos, n;
-            char *s, xa_chr[strlen(read->multimapXA) + 1];
-            for (s = read->multimapXA; sscanf(s, "%[^,],%d,%*[^;]%n", xa_chr, &xa_pos, &n) == 2; s += n + 1) {
-                pout = log_add_exp(pout, elsewhere); // the more multi-mapped, the more likely it is the read is from elsewhere (paralogous), hence it scales (multiplied) with the number of multi-mapped locations
-                if (*(s + n) != ';') break;
-            }
-        }
-        else if (read->multimapNH > 1) { // scale by the number of multimap positions
-            double n = log(read->multimapNH - 1);
-            pout = log_add_exp(pout, elsewhere + n);
-        }
-        // Assuming all secondary alignments, corresponding to multi-map tags, are outputed to the bam file and will be processed eventually
+        // Assuming all secondary alignments, corresponding to multi-map tags, are outputted to the bam file and will be processed eventually
         pout += lgomega;
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
@@ -767,9 +754,10 @@ static void bam_read(const char *bam_file, int ind) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;
             for (i = 0; i < node->len; i++) {
-                if (strcmp(r[i]->name, read->name) == 0 && strcmp(r[i]->qseq, key) == 0) {
+                if (strcmp(r[i]->name, read->name) == 0 && strcmp(r[i]->qseq, key) == 0) { // seen before
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
                     r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
+                    r[i]->pout = log_add_exp(r[i]->pout, pout);
                     nreads++;
                     break;
                 }
@@ -1044,7 +1032,8 @@ int main(int argc, char **argv) {
     }
     else if (readlist) {
         readlist_read(argv[optind]);
-        if (reclassify) readinfo_classify();
+        if (paired) combine_pe();
+        if (paired || reclassify) readinfo_classify();
         if (!listonly) bam_write(bam_file, output_prefix, other_bam, 0);
     }
     else {

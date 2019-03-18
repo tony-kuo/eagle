@@ -36,6 +36,7 @@ This program is distributed under the terms of the GNU General Public License
 static int debug;
 static int listonly;
 static int readlist;
+static int reclassify;
 static int refonly;
 static int paired;
 static int pao;
@@ -486,9 +487,10 @@ static void readlist_read(const char *filename) {
         if (line_length <= 0 || line[strspn(line, " \t\v\r\n")] == '\0') continue; // blank line
         if (line[0] == '#') continue;
 
-        double prgu, prgv;
-        char type[line_length], name[line_length], flag[line_length];
-        int t = sscanf(line, "%s %s %*[^\t] %*[^\t] %lf %lf %*[^\t] %s %*[^\n]", name, type, &prgu, &prgv, flag);
+        int pos;
+        double prgu, prgv, pout;
+        char type[line_length], name[line_length], flag[line_length], chr[line_length];
+        int t = sscanf(line, "%s %s %s %d %lf %lf %lf %s %*[^\n]", name, type, chr, &pos, &prgu, &prgv, &pout, flag);
         if (t < 5) { exit_err("bad fields in read classified list file\n"); }
 
         int n;
@@ -512,20 +514,20 @@ static void readlist_read(const char *filename) {
             read_t **r = (read_t **)node->data;                                                                                                                          
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
-                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
-                        r[i]->prgu = prgu;
-                        r[i]->prgv = prgv;
-                        r[i]->index = type2ind(type);
-                    }
+                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) r[i]->index = type2ind(type);
+                    r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
+                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
+                    r[i]->pout = log_add_exp(r[i]->pout, pout);
                     break;
                 }
             }
             if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
         }
         else {
-            read_t *r = read_create(name, 0, "", 0);
+            read_t *r = read_create(name, 0, chr, pos);
             r->prgu = prgu;
             r->prgv = prgv;
+            r->pout = pout;
             r->flag = strdup(flag);
             r->qseq = strdup(key);
             r->index = type2ind(type);
@@ -890,6 +892,7 @@ static void print_usage() {
     printf("  -u --unique    FILE1,FILE2,...  Optionally, also output reads that are unique against other BAM files (comma separated list)\n");
     printf("     --listonly                   Print classified read list only (stdout) without processing BAM file\n");
     printf("     --readlist                   Read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
+    printf("     --reclassify                 Reclassify after reading in classified read list file\n");
     printf("     --refonly                    Write REF classified reads only when processing BAM file\n");
     printf("     --paired                     Consider paired-end reads together.\n");
     printf("     --pao                        Primary alignments only.\n");
@@ -919,6 +922,7 @@ int main(int argc, char **argv) {
     char *other_bam = NULL;
     listonly = 0;
     readlist = 0;
+    reclassify = 0;
     refonly = 0;
     paired = 0;
     pao = 0;
@@ -928,6 +932,7 @@ int main(int argc, char **argv) {
     phred64 = 0;
     bisulfite = 0;
     const_qual = 0;
+    reclassify = 0;
 
     ngi = 0;
     omega = 1.0e-40;
@@ -944,6 +949,7 @@ int main(int argc, char **argv) {
         {"unique", optional_argument, NULL, 'u'},
         {"listonly", no_argument, &listonly, 1},
         {"readlist", no_argument, &readlist, 1},
+        {"reclassify", no_argument, &reclassify, 1},
         {"refonly", no_argument, &refonly, 1},
         {"paired", no_argument, &paired, 1},
         {"pao", no_argument, &pao, 1},
@@ -988,7 +994,7 @@ int main(int argc, char **argv) {
     if (!listonly && !ngi && bam_file == NULL) { exit_usage("Missing BAM file! -a bam"); }
     else if (!listonly && output_prefix == NULL) { exit_usage("Missing output prefix!"); }
 
-    print_status("# Options: listonly=%d readlist=%d refonly=%d paired=%d pao=%d\n", listonly, readlist, refonly, paired, pao);
+    print_status("# Options: listonly=%d readlist=%d reclassify=%d refonly=%d paired=%d pao=%d\n", listonly, readlist, reclassify, refonly, paired, pao);
     print_status("#          ngi=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d omega=%g cq=%d\n", ngi, isc, nodup, splice, bisulfite, phred64, omega, const_qual);
     print_status("# Start: \t%s", asctime(time_info));
 
@@ -1038,7 +1044,8 @@ int main(int argc, char **argv) {
     }
     else if (readlist) {
         readlist_read(argv[optind]);
-        bam_write(bam_file, output_prefix, other_bam, 0);
+        if (reclassify) readinfo_classify();
+        if (!listonly) bam_write(bam_file, output_prefix, other_bam, 0);
     }
     else {
         //var_file = argv[optind++];

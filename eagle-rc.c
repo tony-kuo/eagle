@@ -69,9 +69,8 @@ static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static void add2var_list(vector_t *var_list, char *set) {
     char var[strlen(set)];
 
-    int n;
+    int i, n;
     char *s;
-    size_t i;
     for (s = set + 1; sscanf(s, "%[^;];%n", var, &n) == 1; s += n) { // scan variant set
         char *v = strdup(var);
         for (i = 0; i < var_list->len; i++) {
@@ -169,7 +168,7 @@ static int readinfo_read(const char* filename) {
         if (k != kh_end(read_hash)) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;
-            size_t i;
+            int i;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
@@ -211,7 +210,7 @@ static void readinfo_classify() {
     unknown, ambiguous with equal likelihoods for reference and alternative = 4
     */
 
-    size_t readi, i, j;
+    int readi, i, j;
 	khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
@@ -219,7 +218,7 @@ static void readinfo_classify() {
             read_t **r = (read_t **)node->data;
             for (readi = 0; readi < node->len; readi++) {
                 char **v = (char **)r[readi]->var_list->data;
-                size_t nvariants = r[readi]->var_list->len;
+                int nvariants = r[readi]->var_list->len;
 
                 int multiallele;
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
@@ -289,7 +288,7 @@ static void readinfo_classify() {
 }
 
 static void bam_write(const char *bam_file, const char *output_prefix, char *other_bam, int reverse) {
-    size_t i;
+    int i;
     other_read_hash = kh_init(orh);
     if (other_bam != NULL) {
         int n;
@@ -509,7 +508,7 @@ static void readlist_read(const char *filename) {
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
-            size_t i;
+            int i;
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;                                                                                                                          
             for (i = 0; i < node->len; i++) {
@@ -595,7 +594,7 @@ static void fasta_read(const char *fa_file) {
 }
 
 static fasta_t *refseq_fetch(char *name) {
-    size_t i;
+    int i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
         vector_t *node = &kh_val(refseq_hash, k);
@@ -617,7 +616,7 @@ static void bam_read(const char *bam_file, int ind) {
     int nreads = 0;
     bam1_t *aln = bam_init1(); // initialize an alignment
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
-        size_t i, j;
+        int i, j;
         if (aln->core.tid < 0) continue; // not mapped
         read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
         fasta_t *f = refseq_fetch(read->chr);
@@ -790,7 +789,7 @@ static void bam_read(const char *bam_file, int ind) {
 
 static void combine_pe() {
 	khiter_t k;
-    size_t i, readi;
+    int i, readi;
     other_read_hash = kh_init(orh);
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {

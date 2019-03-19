@@ -31,14 +31,8 @@ This program is distributed under the terms of the GNU General Public License
 #define MASK_16 (((u_int32_t)1<<16)-1) /* i.e., (u_int32_t)0xffff */
 #define MASK_24 (((u_int32_t)1<<24)-1) /* i.e., (u_int32_t)0xffff */
 
-/* Mapping table */
-int seqnt_map[58];
-
-/* Fastq quality to probability table */
-double p_match[50], p_mismatch[50];
-
 char *strdup1(const char *src);
-void str_resize(char **str, size_t size);
+void str_resize(char **str, int size);
 
 int has_numbers(const char *str);
 int parse_int(const char *str);
@@ -49,7 +43,7 @@ double sum_d(const double *a, int size);
 double *reverse(double *a, int size);
 
 double log_add_exp(double a, double b);
-double log_sum_exp(const double *a, size_t size);
+double log_sum_exp(const double *a, int size);
 
 void combinations(vector_t *combo, int k, int n);
 void derive_combo(vector_t *combo, vector_int_t *prev, int n);

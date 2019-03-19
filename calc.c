@@ -17,7 +17,7 @@ This program is distributed under the terms of the GNU General Public License
 #define M_1_LOG10E (1.0/M_LOG10E)
 #define LG3 (log(3.0))
 
-void init_q2p_table(double *p_match, double *p_mismatch, size_t size) {
+void init_q2p_table(double *p_match, double *p_mismatch, int size) {
     /* FastQ quality score to ln probability lookup table */
     int i;
     for (i = 0; i < size; i++) { 

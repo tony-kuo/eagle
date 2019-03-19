@@ -18,13 +18,13 @@ This program is distributed under the terms of the GNU General Public License
 #endif
 
 char *strdup1(const char *src) {
-    size_t n = strlen(src) + 1;
+    int n = strlen(src) + 1;
     char *des = malloc(n * sizeof (*des));
     des[n] = '\0';
     return des ? memcpy(des, src, n) : NULL;
 }
 
-void str_resize(char **str, size_t size) {
+void str_resize(char **str, int size) {
     char *p = realloc(*str, size * sizeof (*str));
     if (p == NULL) { exit_err("failed to realloc in str_resize\n"); }
     else { *str = p; }
@@ -56,7 +56,7 @@ float parse_float(const char *str) {
 int sum_i(const int *a, int size) {
     int s = 0;
 #if defined (__AVX2__)
-    size_t i;
+    int i;
     int n8 = size - (size % 8);
     __m256i v = _mm256_set1_epi32(0);
     for (i = 0; i < n8; i += 8) {
@@ -79,7 +79,7 @@ int sum_i(const int *a, int size) {
 double sum_d(const double *a, int size) {
     double s = 0;
 #if defined (__AVX__)
-    size_t i;
+    int i;
     int n4 = size - (size % 4);
     __m256d v = _mm256_set1_pd(0);
     for (i = 0; i < n4; i += 4) {
@@ -109,7 +109,7 @@ double log_add_exp(double a, double b) {
     return log(exp(a - max_exp) + exp(b - max_exp)) + max_exp;
 }
 
-double log_sum_exp(const double *a, size_t size) {
+double log_sum_exp(const double *a, int size) {
     int i;
     double max_exp; 
 #if defined (__AVX__)

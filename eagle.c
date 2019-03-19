@@ -198,7 +198,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
-            size_t i, j;
+            int i, j;
             if (aln->core.tid < 0) continue; // not mapped
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
@@ -297,7 +297,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
 
 static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
-    size_t i;
+    int i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
         vector_t *node = &kh_val(refseq_hash, k);
@@ -335,13 +335,13 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
 }
 
 static char *construct_altseq(const char *refseq, int refseq_length, const vector_int_t *combo, variant_t **var_data, int *altseq_length) {
-    size_t i;
+    int i;
     int offset = 0;
     char *altseq = strdup(refseq);
     *altseq_length = refseq_length;
     for (i = 0; i < combo->len; i++) {
         variant_t *v = var_data[combo->data[i]];
-        size_t pos = v->pos - 1 + offset;
+        int pos = v->pos - 1 + offset;
         if (pos < 0 || pos > *altseq_length) { exit_err("Variant at %s:%d is out of bounds in reference\n", v->chr, v->pos); }
 
         char *var_ref, *var_alt;
@@ -364,8 +364,8 @@ static char *construct_altseq(const char *refseq, int refseq_length, const vecto
             var_ref = s1;
             var_alt = s2;
         }
-        size_t var_ref_length = strlen(var_ref);
-        size_t var_alt_length = strlen(var_alt);
+        int var_ref_length = strlen(var_ref);
+        int var_alt_length = strlen(var_alt);
         int delta = var_alt_length - var_ref_length;
         offset += delta;
         if (delta == 0) { // snps, equal length haplotypes
@@ -398,10 +398,10 @@ static inline int variant_find(const vector_int_t *a, int v) {
     return -1;
 }
 
-static inline void variant_print(char **output, const vector_t *var_set, size_t i, int nreads, int not_alt_count, int has_alt_count, double total, double has_alt, double not_alt) {
+static inline void variant_print(char **output, const vector_t *var_set, int i, int nreads, int not_alt_count, int has_alt_count, double total, double has_alt, double not_alt) {
     variant_t **var_data = (variant_t **)var_set->data;
 
-    size_t n;
+    int n;
     double prob = (has_alt - total) * M_1_LN10;
     double odds = (has_alt - not_alt) * M_1_LN10;
 
@@ -426,8 +426,8 @@ static inline void variant_print(char **output, const vector_t *var_set, size_t 
     strcat(*output, "]\n");
 }
 
-static void calc_likelihood(stats_t *stat, vector_t *var_set, const char *refseq, const int refseq_length, read_t **read_data, const size_t nreads, size_t seti, int *seqnt_map) {
-    size_t i, readi;
+static void calc_likelihood(stats_t *stat, vector_t *var_set, const char *refseq, const int refseq_length, read_t **read_data, const int nreads, int seti, int *seqnt_map) {
+    int i, readi;
     stat->ref = 0;
     stat->alt = 0;
     stat->het = 0;
@@ -597,7 +597,7 @@ static void calc_likelihood(stats_t *stat, vector_t *var_set, const char *refseq
 }
 
 static char *evaluate(vector_t *var_set) {
-    size_t i, readi, seti;
+    int i, readi, seti;
 
     variant_t **var_data = (variant_t **)var_set->data;
 
@@ -782,7 +782,7 @@ typedef struct {
     vector_t *queue, *results;
     pthread_mutex_t q_lock;
     pthread_mutex_t r_lock;
-    size_t len;
+    int len;
 } work_t;
 
 static void *pool(void *work) {
@@ -790,7 +790,7 @@ static void *pool(void *work) {
     vector_t *queue = (vector_t *)w->queue;
     vector_t *results = (vector_t *)w->results;
 
-    size_t n = w->len / 10;
+    int n = w->len / 10;
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof (threadid), sizeof (ptid)));
         pthread_mutex_lock(&w->q_lock);
         vector_t *var_set = (vector_t *)vector_pop(queue);
@@ -812,7 +812,7 @@ static void *pool(void *work) {
 }
 
 static void process(const vector_t *var_list, FILE *out_fh) {
-    size_t i, j;
+    int i, j;
 
     variant_t **var_data = (variant_t **)var_list->data;
 

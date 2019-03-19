@@ -105,7 +105,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
-            size_t i, j;
+            int i, j;
             if (aln->core.tid < 0) continue; // not mapped
             read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
 
@@ -203,7 +203,7 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
 
 static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
-    size_t i;
+    int i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
         vector_t *node = &kh_val(refseq_hash, k);
@@ -304,7 +304,7 @@ static inline void calc_prob_snps_mut(double *prgu, double *prgv, int g_pos, con
 }
 
 static char *evaluate_nomutation(const region_t *g) {
-    size_t i, readi;
+    int i, readi;
 
     /* Reference sequence */
     fasta_t *f = refseq_fetch(g->chr, fa_file);
@@ -419,7 +419,7 @@ static char *evaluate_nomutation(const region_t *g) {
     ref_probability += nomut_prior;
     alt_probability += mut_prior;
     double odds = (ref_probability - alt_probability) * M_1_LN10;
-    size_t n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds) + 1;
+    int n = snprintf(NULL, 0, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds) + 1;
     char *output = malloc(n * sizeof (*output));
     snprintf(output, n, "%s\t%d\t%d\t%d\t%d\t%d\t%f\t%f\t%f\n", g->chr, g->pos1, g->pos2, (int)read_list->len, ref_count, alt_count, ref_probability, alt_probability, odds);
 
@@ -455,10 +455,10 @@ static void *pool(void *work) {
 }
 
 static void process(const vector_t *reg_list, FILE *out_fh) {
-    size_t i;
+    int i;
 
     region_t **reg_data = (region_t **)reg_list->data;
-    size_t nregions = reg_list->len;
+    int nregions = reg_list->len;
 
     print_status("# Options: pao=%d isc=%d nodup=%d splice=%d bs=%d phred64=%d cq=%d\n", pao, isc, nodup, splice, bisulfite, phred64, const_qual);
     print_status("# Start: %d threads \t%s\t%s", nthread, bam_file, asctime(time_info));

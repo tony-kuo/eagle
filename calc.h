@@ -17,8 +17,14 @@ This program is distributed under the terms of the GNU General Public License
 
 #define NT_CODES 21   // Size of nucleotide code table
 
+/* Mapping table */
+int seqnt_map[58];
+
+/* Fastq quality to probability table */
+double p_match[50], p_mismatch[50];
+
 void init_seqnt_map(int *seqnt_map);
-void init_q2p_table(double *p_match, double *p_mismatch, size_t size);
+void init_q2p_table(double *p_match, double *p_mismatch, int size);
 
 void set_prob_matrix(double *matrix, const read_t *read, const double *is_match, const double *no_match, const int *seqnt_map, const int bisulfite);
 double calc_read_prob(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *seqnt_map);

@@ -13,42 +13,42 @@ This program is distributed under the terms of the GNU General Public License
 enum type {VOID_T, STATS_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
 
 typedef struct __attribute__((packed)) {
-    int len, size;
+    size_t len, size;
     enum type type;
     void **data;
 } vector_t;
 
-void vector_init(vector_t *a, int initial_size, enum type var_type);
-vector_t *vector_create(int initial_size, enum type var_type);
+void vector_init(vector_t *a, size_t initial_size, enum type var_type);
+vector_t *vector_create(size_t initial_size, enum type var_type);
 void vector_free(vector_t *a);
 void vector_destroy(vector_t *a);
 void vector_add(vector_t *a, void *entry);
-void vector_del(vector_t *a, int i);
+void vector_del(vector_t *a, size_t i);
 void *vector_pop(vector_t *a);
 vector_t *vector_dup(vector_t *a);
 
 typedef struct __attribute__((packed)) {
-    int len, size;
+    size_t len, size;
     int *data;
 } vector_int_t;
 
-void vector_int_init(vector_int_t *a, int initial_size);
-vector_int_t *vector_int_create(int initial_size);
+void vector_int_init(vector_int_t *a, size_t initial_size);
+vector_int_t *vector_int_create(size_t initial_size);
 void vector_int_free(vector_int_t *a);
 void vector_int_add(vector_int_t *a, int entry);
-void vector_int_del(vector_int_t *a, int i);
+void vector_int_del(vector_int_t *a, size_t i);
 vector_int_t *vector_int_dup(vector_int_t *a);
 
 typedef struct __attribute__((packed)) {
-    int len, size;
+    size_t len, size;
     double *data;
 } vector_double_t;
 
-void vector_double_init(vector_double_t *a, int initial_size);
-vector_double_t *vector_double_create(int initial_size);
+void vector_double_init(vector_double_t *a, size_t initial_size);
+vector_double_t *vector_double_create(size_t initial_size);
 void vector_double_free(vector_double_t *a);
 void vector_double_add(vector_double_t *a, double entry);
-void vector_double_del(vector_double_t *a, int i);
+void vector_double_del(vector_double_t *a, size_t i);
 vector_double_t *vector_double_dup(vector_double_t *a);
 
 typedef struct __attribute__((packed)) {

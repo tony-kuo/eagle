@@ -64,8 +64,8 @@ void heap_push(heap_t *a, double priority, void *data) {
         if (p == NULL) { exit_err("failed to realloc in heap_push\n"); }
         else { a->node = p; }
     }
-    int i = a->len + 1;
-    int j = i / 2;
+    size_t i = a->len + 1;
+    size_t j = i / 2;
     while (i > 1 && a->node[j].priority < priority) {
         a->node[i] = a->node[j];
         i = j;
@@ -77,7 +77,7 @@ void heap_push(heap_t *a, double priority, void *data) {
 }
 
 void *heap_pop(heap_t *a) {
-    int i, j, k;
+    size_t i, j, k;
     if (a->len == 0) return NULL;
 
     void *data = a->node[1].data;

@@ -69,10 +69,11 @@ static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static void add2var_list(vector_t *var_list, char *set) {
     char var[strlen(set)];
 
-    int i, n;
+    int n;
     char *s;
     for (s = set + 1; sscanf(s, "%[^;];%n", var, &n) == 1; s += n) { // scan variant set
         char *v = strdup(var);
+        size_t i;
         for (i = 0; i < var_list->len; i++) {
             if (strcmp(v, (char *)var_list->data[i]) == 0) break;
         }
@@ -168,7 +169,7 @@ static int readinfo_read(const char* filename) {
         if (k != kh_end(read_hash)) {
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;
-            int i;
+            size_t i;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
@@ -210,7 +211,7 @@ static void readinfo_classify() {
     unknown, ambiguous with equal likelihoods for reference and alternative = 4
     */
 
-    int readi, i, j;
+    size_t readi, i, j;
 	khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
@@ -218,7 +219,7 @@ static void readinfo_classify() {
             read_t **r = (read_t **)node->data;
             for (readi = 0; readi < node->len; readi++) {
                 char **v = (char **)r[readi]->var_list->data;
-                int nvariants = r[readi]->var_list->len;
+                size_t nvariants = r[readi]->var_list->len;
 
                 int multiallele;
                 if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
@@ -288,7 +289,7 @@ static void readinfo_classify() {
 }
 
 static void bam_write(const char *bam_file, const char *output_prefix, char *other_bam, int reverse) {
-    int i;
+    size_t i;
     other_read_hash = kh_init(orh);
     if (other_bam != NULL) {
         int n;
@@ -508,12 +509,17 @@ static void readlist_read(const char *filename) {
 
         khiter_t k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
-            int i;
+            size_t i;
             vector_t *node = &kh_val(read_hash, k);
             read_t **r = (read_t **)node->data;                                                                                                                          
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
-                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) r[i]->index = type2ind(type);
+                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
+                        free(r[i]->chr); r[i]->chr = NULL;
+                        r[i]->chr = strdup(name);
+                        r[i]->pos = pos;
+                        r[i]->index = type2ind(type);
+                    }
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
                     r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
                     r[i]->pout = log_add_exp(r[i]->pout, pout);
@@ -594,9 +600,9 @@ static void fasta_read(const char *fa_file) {
 }
 
 static fasta_t *refseq_fetch(char *name) {
-    int i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
+        size_t i;
         vector_t *node = &kh_val(refseq_hash, k);
         fasta_t **f = (fasta_t **)node->data;
         for (i = 0; i < node->len; i++) {
@@ -754,6 +760,12 @@ static void bam_read(const char *bam_file, int ind) {
             read_t **r = (read_t **)node->data;
             for (i = 0; i < node->len; i++) {
                 if (strcmp(r[i]->name, read->name) == 0 && strcmp(r[i]->qseq, key) == 0) { // seen before
+                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
+                        free(r[i]->chr); r[i]->chr = NULL;
+                        r[i]->tid = read->tid;
+                        r[i]->chr = strdup(read->chr);
+                        r[i]->pos = read->pos;
+                    }
                     r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
                     r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
                     r[i]->pout = log_add_exp(r[i]->pout, pout);
@@ -789,7 +801,7 @@ static void bam_read(const char *bam_file, int ind) {
 
 static void combine_pe() {
 	khiter_t k;
-    int i, readi;
+    size_t i, readi;
     other_read_hash = kh_init(orh);
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {

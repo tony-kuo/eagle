@@ -14,14 +14,14 @@ This program is distributed under the terms of the GNU General Public License
 #include "util.h"
 #include "vector.h"
 
-void vector_init(vector_t *a, int initial_size, enum type var_type) {
+void vector_init(vector_t *a, size_t initial_size, enum type var_type) {
     a->len = 0;
     a->type = var_type;
     a->size = initial_size;
     a->data = malloc(initial_size * sizeof (void *));
 }
 
-vector_t *vector_create(int initial_size, enum type var_type) {
+vector_t *vector_create(size_t initial_size, enum type var_type) {
     vector_t *a = malloc(sizeof (vector_t));
     vector_init(a, initial_size, var_type);
     return a;
@@ -37,7 +37,7 @@ void vector_free(vector_t *a) {
 
 void vector_destroy(vector_t *a) {
     if (a != NULL) {
-        int i;
+        size_t i;
         enum type var_type = a->type;
         for (i = 0; i < a->len; i++) {
             switch (var_type) {
@@ -73,7 +73,7 @@ void vector_add(vector_t *a, void *entry) {
     a->data[a->len++] = entry;
 }
 
-void vector_del(vector_t *a, int i) {
+void vector_del(vector_t *a, size_t i) {
     a->data[i] = NULL;
     if (i == --a->len) return;
     memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (void *));
@@ -94,13 +94,13 @@ vector_t *vector_dup(vector_t *a) {
     return v;
 }
 
-void vector_int_init(vector_int_t *a, int initial_size) {
+void vector_int_init(vector_int_t *a, size_t initial_size) {
     a->len = 0;
     a->size = initial_size;
     a->data = malloc(initial_size * sizeof (int));
 }
 
-vector_int_t *vector_int_create(int initial_size) {
+vector_int_t *vector_int_create(size_t initial_size) {
     vector_int_t *a = malloc(sizeof (vector_int_t));
     vector_int_init(a, initial_size);
     return a;
@@ -124,7 +124,7 @@ void vector_int_add(vector_int_t *a, int entry) {
     a->data[a->len++] = entry;
 }
 
-void vector_int_del(vector_int_t *a, int i) {
+void vector_int_del(vector_int_t *a, size_t i) {
     a->data[i] = 0;
     if (i == --a->len) return;
     memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (int));
@@ -138,13 +138,13 @@ vector_int_t *vector_int_dup(vector_int_t *a) {
     return v;
 }
 
-void vector_double_init(vector_double_t *a, int initial_size) {
+void vector_double_init(vector_double_t *a, size_t initial_size) {
     a->len = 0;
     a->size = initial_size;
     a->data = malloc(initial_size * sizeof (double));
 }
 
-vector_double_t *vector_double_create(int initial_size) {
+vector_double_t *vector_double_create(size_t initial_size) {
     vector_double_t *a = malloc(sizeof (vector_double_t));
     vector_double_init(a, initial_size);
     return a;
@@ -168,7 +168,7 @@ void vector_double_add(vector_double_t *a, double entry) {
     a->data[a->len++] = entry;
 }
 
-void vector_double_del(vector_double_t *a, int i) {
+void vector_double_del(vector_double_t *a, size_t i) {
     a->data[i] = 0;
     if (i == --a->len) return;
     memmove(&(a->data[i]), &(a->data[i + 1]), (a->len - i) * sizeof (double));

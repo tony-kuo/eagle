@@ -54,16 +54,16 @@ static time_t now;
 static struct tm *time_info; 
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
-KHASH_MAP_INIT_STR(rh, vector_t) // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(rh, read_t *) // hashmap: string key, read_t * value
 static khash_t(rh) *read_hash; // pointer to hashmap, read
 
-KHASH_MAP_INIT_STR(orh, vector_t) // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(orh, read_t *) // hashmap: string key, read_t * value
 static khash_t(orh) *other_read_hash; // pointer to hashmap, reads from other_bam files
 
-KHASH_MAP_INIT_STR(vh, vector_t) // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(vh, char) // hashmap: string key, char value
 static khash_t(vh) *var_hash;  // pointer to hashmap, variant
 
-KHASH_MAP_INIT_STR(rsh, vector_t)   // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(rsh, fasta_t *)   // hashmap: string key, fasta_t * value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 
 static void add2var_list(vector_t *var_list, char *set) {
@@ -105,21 +105,9 @@ static int var_read(const char* filename) {
 
         char *s;
         for (s = set + 1; sscanf(s, "%[^;];%n", chr, &n) == 1; s += n) { // scan variant set and add to hash
-            char *v = strdup(chr);
-
-            vector_t *node;
-            khiter_t k = kh_get(vh, var_hash, chr);
-            if (k != kh_end(var_hash)) {
-                node = &kh_val(var_hash, k);
-            }
-            else {
-                int absent;
-                k = kh_put(vh, var_hash, v, &absent);
-                node = &kh_val(var_hash, k);
-                if (absent) vector_init(node, 8, VOID_T);
-            }
-            vector_add(node, v);
-
+            int absent;
+            khiter_t k = kh_put(vh, var_hash, chr, &absent);
+            if (absent) kh_key(var_hash, k) = strdup(chr);
             nvars++;
             if (*(s + n) == ']') break;
         }
@@ -165,22 +153,9 @@ static int readinfo_read(const char* filename) {
         char key[256];
         snprintf(key, 256, "%s\t%d", name, is_read2);
 
-        khiter_t k = kh_get(rh, read_hash, key);
-        if (k != kh_end(read_hash)) {
-            vector_t *node = &kh_val(read_hash, k);
-            read_t **r = (read_t **)node->data;
-            size_t i;
-            for (i = 0; i < node->len; i++) {
-                if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
-                    r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
-                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
-                    add2var_list(r[i]->var_list, var);
-                    break;
-                }
-            }
-            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
-        }
-        else {
+        int absent;
+        khiter_t k = kh_put(rh, read_hash, key, &absent);
+        if (absent) {
             read_t *r = read_create(name, 0, chr, pos);
             r->prgu = prgu;
             r->prgv = prgv;
@@ -188,13 +163,15 @@ static int readinfo_read(const char* filename) {
             r->flag = strdup(flag);
             r->qseq = strdup(key);
             add2var_list(r->var_list, var);
-
-            int absent;
-            k = kh_put(rh, read_hash, r->qseq, &absent);
-            vector_t *node = &kh_val(read_hash, k);
-            if (absent) vector_init(node, 8, READ_T);
-            vector_add(node, r);
+            kh_key(read_hash, k) = r->qseq;
+            kh_val(read_hash, k) = r;
             nreads++;
+        }
+        else {
+            read_t *r = kh_val(read_hash, k);
+            r->prgu = log_add_exp(r->prgu, prgu);
+            r->prgv = log_add_exp(r->prgv, prgv);
+            add2var_list(r->var_list, var);
         }
     }
     free(line); line = NULL;
@@ -211,77 +188,64 @@ static void readinfo_classify() {
     unknown, ambiguous with equal likelihoods for reference and alternative = 4
     */
 
-    size_t readi, i, j;
-	khiter_t k;
+    size_t i;
+    khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
-            vector_t *node = &kh_val(read_hash, k);
-            read_t **r = (read_t **)node->data;
-            for (readi = 0; readi < node->len; readi++) {
-                char **v = (char **)r[readi]->var_list->data;
-                size_t nvariants = r[readi]->var_list->len;
+            read_t *r = kh_val(read_hash, k);
+            char **v = (char **)r->var_list->data;
+            size_t nvariants = r->var_list->len;
 
-                int multiallele;
-                if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
-                    multiallele = 1;
-                    int prev_pos = -1;
-                    for (i = 0; i < nvariants; i++) {
-                        int pos;
-                        int t = sscanf(v[i], "%*[^,],%d,%*[^,],%*[^,],", &pos);
-                        if (t < 1) { exit_err("bad fields in %s\n", v[i]); }
-                        if (prev_pos != -1 && pos - prev_pos != 0) {
-                            multiallele = 0;
-                            break;
-                        }
-                        prev_pos = pos;
-                    }
-                    if (multiallele) {
-                        r[readi]->index = 3;
-                        fprintf(stdout, "%s\tMUL\t%s\t%d\t%f\t%f\t%f\t%s\t", r[readi]->name, r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout, r[readi]->flag);
-                        for (i = 0; i < nvariants; i++) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
-                        continue;
-                    }
-                }
-
-                // if any variant in list is not in EAGLE output, it suggests variants are from a different phase if alt wins
-                multiallele = 0;
+            int multiallele;
+            if (nvariants > 1) { // check if only multi-allelic variants at the same position & no hope of differentiating ref vs alt
+                multiallele = 1;
+                int prev_pos = -1;
                 for (i = 0; i < nvariants; i++) {
-                    khiter_t k = kh_get(vh, var_hash, v[i]);
-                    if (k != kh_end(var_hash)) {
-                        vector_t *var_hash_node = &kh_val(var_hash, k);
-                        char **vv = (char **)var_hash_node->data;
-                        for (j = 0; j < var_hash_node->len; j++) {
-                            if (strcmp(v[i], vv[j]) == 0) break;
-                        }
-                        if (j == var_hash_node->len) multiallele = 1;
+                    int pos;
+                    int t = sscanf(v[i], "%*[^,],%d,%*[^,],%*[^,],", &pos);
+                    if (t < 1) { exit_err("bad fields in %s\n", v[i]); }
+                    if (prev_pos != -1 && pos - prev_pos != 0) {
+                        multiallele = 0;
+                        break;
                     }
-                    else {
-                        multiallele = 1;
-                    }
+                    prev_pos = pos;
                 }
-
-                fprintf(stdout, "%s\t", r[readi]->name);
-                if (r[readi]->prgu > r[readi]->prgv && r[readi]->prgu - r[readi]->prgv >= 0.69) { // ref wins
-                    r[readi]->index = 0;
-                    fprintf(stdout, "REF\t");
+                if (multiallele) {
+                    r->index = 3;
+                    fprintf(stdout, "%s\tMUL\t%s\t%d\t%f\t%f\t%f\t%s\t", r->name, r->chr, r->pos, r->prgu, r->prgv, r->pout, r->flag);
+                    for (i = 0; i < nvariants; i++) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
+                    continue;
                 }
-                else if (r[readi]->prgv > r[readi]->prgu && r[readi]->prgv - r[readi]->prgu >= 0.69) { // alt wins
-                    if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
-                        r[readi]->index = 2;
-                        fprintf(stdout, "RLA\t");
-                    }
-                    else {
-                        r[readi]->index = 1;
-                        fprintf(stdout, "ALT\t");
-                    }
-                }
-                else { // unknown
-                    r[readi]->index = 4;
-                    fprintf(stdout, "UNK\t");
-                }
-                fprintf(stdout, "%s\t%d\t%f\t%f\t%f\t%s\t", r[readi]->chr, r[readi]->pos, r[readi]->prgu, r[readi]->prgv, r[readi]->pout, r[readi]->flag);
-                for (i = 0; i < nvariants; i++) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
             }
+
+            // if any variant in list is not in EAGLE output, it suggests variants are from a different phase if alt wins
+            multiallele = 0;
+            for (i = 0; i < nvariants; i++) {
+                khiter_t k = kh_get(vh, var_hash, v[i]);
+                if (k != kh_end(var_hash)) multiallele = 1;
+            }
+
+            fprintf(stdout, "%s\t", r->name);
+            if (r->prgu > r->prgv && r->prgu - r->prgv >= 0.69) { // ref wins
+                r->index = 0;
+                fprintf(stdout, "REF\t");
+            }
+            else if (r->prgv > r->prgu && r->prgv - r->prgu >= 0.69) { // alt wins
+                if (multiallele) { // EAGLE outputs the set with highest likelihood ratio, i.e. most different from reference, leaving the "reference-like-allele"
+                    r->index = 2;
+                    fprintf(stdout, "RLA\t");
+                }
+                else {
+                    r->index = 1;
+                    fprintf(stdout, "ALT\t");
+                }
+            }
+            else { // unknown
+                r->index = 4;
+                fprintf(stdout, "UNK\t");
+            }
+            fprintf(stdout, "%s\t%d\t%f\t%f\t%f\t%s\t", r->chr, r->pos, r->prgu, r->prgv, r->pout, r->flag);
+            for (i = 0; i < nvariants; i++) { fprintf(stdout, "%s;", v[i]); } fprintf(stdout, "\n");
         }
     }
     fflush(stdout);
@@ -289,7 +253,7 @@ static void readinfo_classify() {
 }
 
 static void bam_write(const char *bam_file, const char *output_prefix, char *other_bam, int reverse) {
-    size_t i;
+    khiter_t k;
     other_read_hash = kh_init(orh);
     if (other_bam != NULL) {
         int n;
@@ -315,27 +279,10 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
                 free(flag); flag = NULL;
                 if (pao && is_secondary) continue;
 
-                int found = 0;
                 char *name = strdup((char *)aln->data);
 
-                vector_t *node;
-                khiter_t k = kh_get(orh, other_read_hash, name);
-                if (k != kh_end(other_read_hash)) {
-                    node = &kh_val(other_read_hash, k);
-                }
-                else {
-                    int absent;
-                    k = kh_put(orh, other_read_hash, name, &absent);
-                    node = &kh_val(other_read_hash, k);
-                    if (absent) vector_init(node, 8, VOID_T);
-                }
-                for (i = 0; i < node->len; i++) {
-                    if (strcmp(node->data[i], name) == 0) {
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found) vector_add(node, name);
+                int absent;
+                k = kh_put(orh, other_read_hash, name, &absent);
             }
             bam_destroy1(aln);
             bam_hdr_destroy(bam_header);
@@ -401,45 +348,27 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
         char key[256];
         snprintf(key, 256, "%s\t%d", name, is_read2);
 
-        khiter_t k = kh_get(rh, read_hash, key);
+        k = kh_get(rh, read_hash, key);
         if (k != kh_end(read_hash)) {
-            vector_t *node = &kh_val(read_hash, k);
-            read_t **r = (read_t **)node->data;                                                                                                                          
-            for (i = 0; i < node->len; i++) {
-                if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
-                    if (r[i]->index == 0 && !reverse) out = ref_out;
-                    else if (r[i]->index == 1 && reverse) out = ref_out; // reverse, ALT writes to ref.bam
-                    else if (!refonly && r[i]->index == 1 && !reverse) out = alt_out;
-                    else if (!refonly && r[i]->index == 0 && reverse) out = alt_out; // reverse, REF writes to alt.bam
-                    else if (!refonly && r[i]->index == 2) out = ref_out;
-                    else if (!refonly && r[i]->index == 3) out = mul_out;
-                    else if (r[i]->index == 4) out = unk_out;
-                    if (debug >= 1) {
-                        fprintf(stderr, "%f\t%f\t%f\t%d\t", r[i]->prgu, r[i]->prgv, r[i]->pout, r[i]->index);
-                        fprintf(stderr, "%s\t%s\t%d\t%d\t", r[i]->name, r[i]->chr, r[i]->pos, r[i]->end);
-                        fprintf(stderr, "%s\t%s\t%p\n", r[i]->flag, r[i]->qseq, out);
-                    }
-                    break;
-                }
+            read_t *r = kh_val(read_hash, k);
+            if (r->index == 0 && !reverse) out = ref_out;
+            else if (r->index == 1 && reverse) out = ref_out; // reverse, ALT writes to ref.bam
+            else if (!refonly && r->index == 1 && !reverse) out = alt_out;
+            else if (!refonly && r->index == 0 && reverse) out = alt_out; // reverse, REF writes to alt.bam
+            else if (!refonly && r->index == 2) out = ref_out;
+            else if (!refonly && r->index == 3) out = mul_out;
+            else if (r->index == 4) out = unk_out;
+            if (debug >= 1) {
+                fprintf(stderr, "%f\t%f\t%f\t%d\t", r->prgu, r->prgv, r->pout, r->index);
+                fprintf(stderr, "%s\t%s\t%d\t", r->name, r->chr, r->pos);
+                fprintf(stderr, "%s\t%s\t%p\n", r->flag, r->qseq, out);
             }
-            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
         }
         free(flag); flag = NULL;
 
         if (other_bam != NULL && out == NULL) {
-            int unique = 1;
-            khiter_t k = kh_get(orh, other_read_hash, name);
-            if (k != kh_end(other_read_hash)) {
-                vector_t *node = &kh_val(other_read_hash, k);
-                for (i = 0; i < node->len; i++) {
-                    if (strcmp(node->data[i], name) == 0) {
-                        unique = 0;
-                        break;
-                    }
-                }
-                if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
-            }
-            if (unique) out = ref_out;
+            k = kh_get(orh, other_read_hash, name);
+            if (k == kh_end(other_read_hash)) out = ref_out; // unique vs other bams
         }
 
         if (out != NULL) {
@@ -448,9 +377,10 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
         }
     }
 
-    khiter_t k;
     for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
-        if (kh_exist(other_read_hash, k)) vector_destroy(&kh_val(other_read_hash, k));
+        if (kh_exist(other_read_hash, k)) {
+            read_destroy(kh_val(other_read_hash, k)); free(kh_val(other_read_hash, k)); kh_val(other_read_hash, k) = NULL;
+        }
     }
     kh_destroy(orh, other_read_hash);
 
@@ -496,39 +426,19 @@ static void readlist_read(const char *filename) {
         int n;
         int is_read2 = 0;
         if (flag[0] == '-') paired = 1;
-        if (!paired) {
-            char *s, token[strlen(flag) + 1];
-            for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-                if (strcmp("READ2", token) == 0) is_read2 = 1;
-                if (*(s + n) != ',') break;
-            }
+
+        char *s, token[strlen(flag) + 1];
+        for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
+            if (strcmp("READ2", token) == 0) is_read2 = 1;
+            if (*(s + n) != ',') break;
         }
 
         char key[256];
         snprintf(key, 256, "%s\t%d", name, is_read2);
 
-        khiter_t k = kh_get(rh, read_hash, key);
-        if (k != kh_end(read_hash)) {
-            size_t i;
-            vector_t *node = &kh_val(read_hash, k);
-            read_t **r = (read_t **)node->data;                                                                                                                          
-            for (i = 0; i < node->len; i++) {
-                if (strcmp(r[i]->name, name) == 0 && strcmp(r[i]->qseq, key) == 0) {
-                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
-                        free(r[i]->chr); r[i]->chr = NULL;
-                        r[i]->chr = strdup(name);
-                        r[i]->pos = pos;
-                        r[i]->index = type2ind(type);
-                    }
-                    r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
-                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
-                    r[i]->pout = log_add_exp(r[i]->pout, pout);
-                    break;
-                }
-            }
-            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
-        }
-        else {
+        int absent;
+        khiter_t k = kh_put(rh, read_hash, key, &absent);
+        if (absent) {
             read_t *r = read_create(name, 0, chr, pos);
             r->prgu = prgu;
             r->prgv = prgv;
@@ -536,13 +446,21 @@ static void readlist_read(const char *filename) {
             r->flag = strdup(flag);
             r->qseq = strdup(key);
             r->index = type2ind(type);
-
-            int absent;
-            khiter_t k = kh_put(rh, read_hash, r->qseq, &absent);
-            vector_t *node = &kh_val(read_hash, k);
-            if (absent) vector_init(node, 8, READ_T);
-            vector_add(node, r);
+            kh_key(read_hash, k) = r->qseq;
+            kh_val(read_hash, k) = r;
             nreads++;
+        }
+        else {
+            read_t *r = kh_val(read_hash, k);
+            if (log_add_exp(prgu, prgv) > log_add_exp(r->prgu, r->prgv)) {
+                free(r->chr); r->chr = NULL;
+                r->chr = strdup(name);
+                r->pos = pos;
+                r->index = type2ind(type);
+            }
+            r->prgu = log_add_exp(r->prgu, prgu);
+            r->prgv = log_add_exp(r->prgv, prgv);
+            r->pout = log_add_exp(r->pout, pout);
         }
     }
     free(line); line = NULL;
@@ -589,9 +507,8 @@ static void fasta_read(const char *fa_file) {
 
         int absent;
         khiter_t k = kh_put(rsh, refseq_hash, f->name, &absent);
-        vector_t *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
-        if (absent) vector_init(node, 8, FASTA_T);
-        vector_add(node, f);
+        if (absent) { kh_val(refseq_hash, k) = f; }
+        else { exit_err("# refseq_hash collision: %s", asctime(time_info)); }
     }
     free(line); line = NULL;
     fclose(file);
@@ -602,13 +519,7 @@ static void fasta_read(const char *fa_file) {
 static fasta_t *refseq_fetch(char *name) {
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
-        size_t i;
-        vector_t *node = &kh_val(refseq_hash, k);
-        fasta_t **f = (fasta_t **)node->data;
-        for (i = 0; i < node->len; i++) {
-            if (strcmp(f[i]->name, name) == 0) return f[i];
-        }
-        exit_err("failed to find %s in hash key %d\n", name, k);
+        return kh_val(refseq_hash, k);
     }
     return NULL;
 }
@@ -626,6 +537,7 @@ static void bam_read(const char *bam_file, int ind) {
         if (aln->core.tid < 0) continue; // not mapped
         read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
         fasta_t *f = refseq_fetch(read->chr);
+        if (strcmp(read->chr, f->name) != 0) { exit_err("# request: %s\tvs\tfetch: %s\t%s", read->chr, f->name, asctime(time_info)); }
         if (f == NULL) {
             read_destroy(read); free(read); read = NULL;
             continue;
@@ -754,42 +666,31 @@ static void bam_read(const char *bam_file, int ind) {
             fprintf(stderr, "%s\n", key);
         }
 
-        khiter_t k = kh_get(rh, read_hash, key);
-        if (k != kh_end(read_hash)) {
-            vector_t *node = &kh_val(read_hash, k);
-            read_t **r = (read_t **)node->data;
-            for (i = 0; i < node->len; i++) {
-                if (strcmp(r[i]->name, read->name) == 0 && strcmp(r[i]->qseq, key) == 0) { // seen before
-                    if (log_add_exp(prgu, prgv) > log_add_exp(r[i]->prgu, r[i]->prgv)) {
-                        free(r[i]->chr); r[i]->chr = NULL;
-                        r[i]->tid = read->tid;
-                        r[i]->chr = strdup(read->chr);
-                        r[i]->pos = read->pos;
-                    }
-                    r[i]->prgu = log_add_exp(r[i]->prgu, prgu);
-                    r[i]->prgv = log_add_exp(r[i]->prgv, prgv);
-                    r[i]->pout = log_add_exp(r[i]->pout, pout);
-                    nreads++;
-                    break;
-                }
-            }
-            if (i == node->len) { exit_err("failed to find %s in hash key %d\n", key, k); }
-        }
-        else {
+        int absent;
+        khiter_t k = kh_put(rh, read_hash, key, &absent);
+        if (absent) {
             read_t *r = read_create(read->name, read->tid, read->chr, read->pos);
             r->prgu = prgu;
             r->prgv = prgv;
             r->pout = pout;
             r->flag = strdup(read->flag);
             r->qseq = strdup(key);
-
-            int absent;
-            k = kh_put(rh, read_hash, r->qseq, &absent);
-            vector_t *node = &kh_val(read_hash, k);
-            if (absent) vector_init(node, 8, READ_T);
-            vector_add(node, r);
-            nreads++;
+            kh_key(read_hash, k) = r->qseq;
+            kh_val(read_hash, k) = r;
         }
+        else {
+            read_t *r = kh_val(read_hash, k);
+            if (log_add_exp(prgu, prgv) > log_add_exp(r->prgu, r->prgv)) {
+                free(r->chr); r->chr = NULL;
+                r->tid = read->tid;
+                r->chr = strdup(read->chr);
+                r->pos = read->pos;
+            }
+            r->prgu = log_add_exp(r->prgu, prgu);
+            r->prgv = log_add_exp(r->prgv, prgv);
+            r->pout = log_add_exp(r->pout, pout);
+        }
+        nreads++;
         read_destroy(read); free(read); read = NULL;
         if (nreads % 1000000 == 0 ) { print_status("# Read bam:\t%s\t%d reads\t%s", bam_file, nreads, asctime(time_info)); }
     }
@@ -800,51 +701,37 @@ static void bam_read(const char *bam_file, int ind) {
 }
 
 static void combine_pe() {
-	khiter_t k;
-    size_t i, readi;
     other_read_hash = kh_init(orh);
+	khiter_t k;
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
-            vector_t *node = &kh_val(read_hash, k);
-            read_t **r = (read_t **)node->data;
-            for (readi = 0; readi < node->len; readi++) {
-                char key[256];
-                snprintf(key, 256, "%s\t0", r[readi]->name);
+            read_t *r = kh_val(read_hash, k);
+            char key[256];
+            snprintf(key, 256, "%s\t0", r->name);
 
-                khiter_t k2 = kh_get(orh, other_read_hash, key);
-                if (k2 != kh_end(other_read_hash)) {
-                    vector_t *node2 = &kh_val(other_read_hash, k2);
-                    read_t **r2 = (read_t **)node2->data;
-                    for (i = 0; i < node2->len; i++) {
-                        if (strcmp(r2[i]->name, r[readi]->name) == 0 && strcmp(r2[i]->qseq, key) == 0) {
-                            r2[i]->prgu += r[readi]->prgu;
-                            r2[i]->prgv += r[readi]->prgv;
-                            r2[i]->pout += r[readi]->pout;
-                            char flag[256];
-                            snprintf(flag, 256, "%s;%s", r2[i]->flag, r[readi]->flag);
-                            free(r2[i]->flag); r2[i]->flag = NULL;
-                            r2[i]->flag = strdup(flag);
-                            break;
-                        }
-                    }
-                    if (i == node2->len) { exit_err("failed to find %s in hash key %d\n", key, k2); }
-                }
-                else {
-                    read_t *r2 = read_create(r[readi]->name, r[readi]->tid, r[readi]->chr, r[readi]->pos);
-                    r2->prgu = r[readi]->prgu;
-                    r2->prgv = r[readi]->prgv;
-                    r2->pout = r[readi]->pout;
-                    r2->flag = strdup(r[readi]->flag);
-                    r2->qseq = strdup(key);
-
-                    int absent;
-                    k2 = kh_put(orh, other_read_hash, r2->qseq, &absent);
-                    vector_t *node2 = &kh_val(other_read_hash, k2);
-                    if (absent) vector_init(node2, 8, READ_T);
-                    vector_add(node2, r2);
-                }
+            int absent;
+            khiter_t k2 = kh_put(orh, other_read_hash, key, &absent);
+            if (absent) {
+                read_t *r2 = read_create(r->name, r->tid, r->chr, r->pos);
+                r2->prgu = r->prgu;
+                r2->prgv = r->prgv;
+                r2->pout = r->pout;
+                r2->flag = strdup(r->flag);
+                r2->qseq = strdup(key);
+                kh_key(other_read_hash, k2) = r2->qseq;
+                kh_val(other_read_hash, k2) = r2;
             }
-            vector_destroy(&kh_val(read_hash, k));
+            else {
+                read_t *r2 = kh_val(other_read_hash, k2);
+                r2->prgu += r->prgu;
+                r2->prgv += r->prgv;
+                r2->pout += r->pout;
+                char flag[256];
+                snprintf(flag, 256, "%s;%s", r2->flag, r->flag);
+                free(r2->flag); r2->flag = NULL;
+                r2->flag = strdup(flag);
+            }
+            read_destroy(r); free(r); r = NULL;
         }
     }
     kh_destroy(rh, read_hash);
@@ -852,29 +739,9 @@ static void combine_pe() {
     read_hash = kh_init(rh);
     for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
         if (kh_exist(other_read_hash, k)) {
-            vector_t *node = &kh_val(other_read_hash, k);
-            read_t **r = (read_t **)node->data;
-            for (readi = 0; readi < node->len; readi++) {
-                char key[256];
-                snprintf(key, 256, "%s\t0", r[readi]->name);
-
-                khiter_t k2 = kh_get(rh, read_hash, key);
-                if (k2 == kh_end(read_hash)) {
-                    read_t *r2 = read_create(r[readi]->name, r[readi]->tid, r[readi]->chr, r[readi]->pos);
-                    r2->prgu = r[readi]->prgu;
-                    r2->prgv = r[readi]->prgv;
-                    r2->pout = r[readi]->pout;
-                    r2->flag = strdup(r[readi]->flag);
-                    r2->qseq = strdup(key);
-
-                    int absent;
-                    k2 = kh_put(rh, read_hash, r2->qseq, &absent);
-                    vector_t *node2 = &kh_val(read_hash, k2);
-                    if (absent) vector_init(node2, 8, READ_T);
-                    vector_add(node2, r2);
-                }
-            }
-            vector_destroy(&kh_val(other_read_hash, k));
+            int absent;
+            khiter_t k2 = kh_put(rh, read_hash, kh_key(other_read_hash, k), &absent);
+            kh_val(read_hash, k2) = kh_val(other_read_hash, k); 
         }
     }
     kh_destroy(orh, other_read_hash);
@@ -1016,16 +883,20 @@ int main(int argc, char **argv) {
         refseq_hash = kh_init(rsh);
         fasta_read(ref_file1);
         bam_read(bam_file1, 0);
-        for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
-            if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
+        for (k = kh_begin(ref_hash); k != kh_end(refseq_hash); k++) {
+            if (kh_exist(refseq_hash, k)) {
+                fasta_destroy(kh_val(refseq_hash, k)); free(kh_val(refseq_hash, k)); kh_val(refseq_hash, k) = NULL;
+            }
         }
         kh_destroy(rsh, refseq_hash);
 
         refseq_hash = kh_init(rsh);
         fasta_read(ref_file2);
         bam_read(bam_file2, 1);
-        for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
-            if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
+        for (k = kh_begin(ref_hash); k != kh_end(refseq_hash); k++) {
+            if (kh_exist(refseq_hash, k)) {
+                fasta_destroy(kh_val(refseq_hash, k)); free(kh_val(refseq_hash, k)); kh_val(refseq_hash, k) = NULL;
+            }
         }
         kh_destroy(rsh, refseq_hash);
 
@@ -1067,12 +938,16 @@ int main(int argc, char **argv) {
 
     khiter_t k;
     for (k = kh_begin(var_hash); k != kh_end(var_hash); k++) {
-        if (kh_exist(var_hash, k)) vector_destroy(&kh_val(var_hash, k));
+        if (kh_exist(var_hash, k)) {
+            free((char*)kh_key(var_hash, k)); kh_key(var_hash, k) = NULL;
+        }
     }
     kh_destroy(vh, var_hash);
 
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
-        if (kh_exist(read_hash, k)) vector_destroy(&kh_val(read_hash, k));
+        if (kh_exist(read_hash, k)) {
+            read_destroy(kh_val(read_hash, k)); free(kh_val(read_hash, k)); kh_val(read_hash, k) = NULL;
+        }
     }
     kh_destroy(rh, read_hash);
 

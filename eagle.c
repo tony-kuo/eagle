@@ -65,7 +65,7 @@ static time_t now;
 static struct tm *time_info; 
 #define print_status(M, ...) time(&now); time_info = localtime(&now); fprintf(stderr, M, ##__VA_ARGS__);
 
-KHASH_MAP_INIT_STR(rsh, vector_t)   // hashmap: string key, vector value
+KHASH_MAP_INIT_STR(rsh, fasta_t *)   // hashmap: string key, vector value
 static khash_t(rsh) *refseq_hash; // pointer to hashmap
 static pthread_mutex_t refseq_lock; 
 
@@ -102,58 +102,6 @@ static vector_t *vcf_read(FILE *file) {
     qsort(var_list->data, var_list->len, sizeof (void *), nat_sort_variant);
     return var_list;
 }
-
-/*
-static void fasta_read(const char *fa_file) {
-    faidx_t *fai = fai_load(fa_file);
-    if (fai == NULL) { 
-        errno = fai_build(fa_file);
-        if (errno == 0) { fai = fai_load(fa_file); }
-        else { exit_err("failed to build and open FA index %s\n", fa_file); }
-    }
-
-    char *filename = malloc((strlen(fa_file) + 5) * sizeof (*filename));
-    filename[0] = '\0';
-    strcat(filename, fa_file);
-    strcat(filename, ".fai");
-    FILE *file = fopen(filename, "r");
-    if (file == NULL) { exit_err("failed to open FA index for parsing %s\n", filename); }
-    free(filename); filename = NULL;
-
-    char *line = NULL;
-    ssize_t read_file = 0;
-    size_t line_length = 0;
-    while ((read_file = getline(&line, &line_length, file)) != -1) {
-        if (line_length <= 0 || line[strspn(line, " \t\v\r\n")] == '\0') continue; // blank line
-        if (line[0] == '#') continue;
-
-        char name[line_length];
-        int t = sscanf(line, "%s%*[^ \t\v\r\n]", name);
-        if (t < 1) { exit_err("bad fields in FA index file\n%s\n", line); }
-        if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
-
-        fasta_t *f = malloc(sizeof (fasta_t));
-        f->name = strdup(name);
-        f->seq = fai_fetch(fai, name, &f->seq_length);
-        char *s;
-        for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);
-
-        //u_int32_t hash = fnv_32a_str(name);
-        //fprintf(stdout, "%s\t%u\n", name, hash);
-        //continue;
-
-        int absent;
-        khiter_t k = kh_put(rsh, refseq_hash, f->name, &absent);
-        vector_t *node = &kh_val(refseq_hash, k); // point to the bucket associated to k
-        if (absent) vector_init(node, 8, FASTA_T);
-        vector_add(node, f);
-    }
-    free(line); line = NULL;
-    fclose(file);
-    fai_destroy(fai);
-    print_status("# Read reference genome: %s\t%s", fa_file, asctime(time_info));
-}
-*/
 
 static int bam_fetch_last(const char *bam_file, const char *chr, const int pos1, const int pos2) {
     /* Reads in variant j = i + 1 region coordinates */
@@ -297,18 +245,10 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
 
 static fasta_t *refseq_fetch(char *name, const char *fa_file) {
     pthread_mutex_lock(&refseq_lock);
-    size_t i;
 	khiter_t k = kh_get(rsh, refseq_hash, name);
     if (k != kh_end(refseq_hash)) {
-        vector_t *node = &kh_val(refseq_hash, k);
-        fasta_t **f = (fasta_t **)node->data;
-        for (i = 0; i < node->len; i++) {
-            if (strcmp(f[i]->name, name) == 0) {
-                pthread_mutex_unlock(&refseq_lock);
-                return f[i];
-            }
-        }
-        exit_err("failed to find %s in hash key %d\n", name, k);
+        pthread_mutex_unlock(&refseq_lock);
+        return kh_val(refseq_hash, k);
     }
 
     faidx_t *fai = fai_load(fa_file);
@@ -326,9 +266,8 @@ static fasta_t *refseq_fetch(char *name, const char *fa_file) {
 
     int absent;
     k = kh_put(rsh, refseq_hash, f->name, &absent);
-    vector_t *node = &kh_val(refseq_hash, k);
-    if (absent) vector_init(node, 8, FASTA_T);
-    vector_add(node, f);
+    if (absent) { kh_val(refseq_hash, k) = f; }
+    else { exit_err("# refseq_hash collision: %s", asctime(time_info)); }
     fai_destroy(fai);
     pthread_mutex_unlock(&refseq_lock);
     return f;
@@ -1105,7 +1044,6 @@ int main(int argc, char **argv) {
     print_status("# Read VCF: %s\t%i entries\t%s", vcf_file, (int)var_list->len, asctime(time_info));
 
     refseq_hash = kh_init(rsh);
-    //fasta_read(fa_file);
 
     pthread_mutex_init(&refseq_lock, NULL);
     process(var_list, out_fh);
@@ -1115,7 +1053,9 @@ int main(int argc, char **argv) {
 
     khiter_t k;
     for (k = kh_begin(refseq_hash); k != kh_end(refseq_hash); k++) {
-        if (kh_exist(refseq_hash, k)) vector_destroy(&kh_val(refseq_hash, k));
+        if (kh_exist(refseq_hash, k)) {
+            fasta_destroy(kh_val(refseq_hash, k)); free(kh_val(refseq_hash, k)); kh_val(refseq_hash, k) = NULL;
+        }
     }
     kh_destroy(rsh, refseq_hash);
     vector_destroy(var_list); free(var_list); var_list = NULL;

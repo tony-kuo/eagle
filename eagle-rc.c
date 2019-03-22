@@ -3,7 +3,7 @@ EAGLE: explicit alternative genome likelihood evaluator
 Utility program that classifies reads based on EAGLE calculated likelihoods (from verbose output)
 
 Run EAGLE with --rc which sets: --omega=1e-40 --mvh --verbose --isc
-  where main variant evaluation output goes to STDIN
+  where main variant evaluation output goes to STOUT
   while per read likelihoods (verbose) go to STDERR
 
 Other program options are situational
@@ -405,10 +405,7 @@ static int type2ind(char *type) {
     return -1;
 }
 
-static void readlist_read(const char *filename) {
-    FILE *file = fopen(filename, "r");
-    if (file == NULL) { exit_err("failed to open file %s\n", filename); }
-
+static int readlist_read(FILE *file) {
     int nreads = 0;
     char *line = NULL;
     ssize_t read_file = 0;
@@ -465,7 +462,7 @@ static void readlist_read(const char *filename) {
     }
     free(line); line = NULL;
     fclose(file);
-    print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
+    return nreads;
 }
 
 static void fasta_read(const char *fa_file) {
@@ -913,7 +910,18 @@ int main(int argc, char **argv) {
         }
     }
     else if (readlist) {
-        readlist_read(argv[optind]);
+        FILE *list_fh = stdin;
+        char *filename = argv[optind];
+        if (filename != NULL) {
+            list_fh = fopen(filename, "r");
+            if (list_fh == NULL) { exit_err("failed to open file %s\n", filename); }
+        }
+        else {
+            filename = "stdin";
+        }
+        int nreads = readlist_read(list_fh);
+        print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
+
         if (paired) combine_pe();
         if (paired || reclassify) readinfo_classify();
         if (!listonly) bam_write(bam_file, output_prefix, other_bam, 0);

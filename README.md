@@ -190,20 +190,15 @@ If --ngi then there are 2 sets of output bam files:
 * out2.alt.bam: reads in bam2 classified as ref1
 * Both out1.unk.bam and out2.unk.bam contain reads that could not be classified, aligned to ref1 and ref2 respectively.
 
-In the classified read list, keep in mind that the reference focus is in ref1 coordinates.  If ref2 is listed then that is because it mapped only to ref2.  One way to get the reversed list is to switch REF and ALT along with their likelihoods:
+In the classified read list, keep in mind that the reference focus REF is in ref1 coordinates.  If ref2 is listed then that is because it is more likely as ALT.  One way to get the reversed list is to switch REF and ALT along with their likelihoods:
 
 `perl -ne 'chomp; @t=split(/\t/); if($t[1] eq "REF"){$t[1]="ALT";} elsif($t[1] eq "ALT"){$t[1]="REF";} $tmp=$t[4]; $t[4]=$t[5]; $t[5]=$tmp; print join("\t", @t)."\n";' classified_reads.1vs2.list > classified_reads.2vs1.list`
 
-To account for reads that map to only one reference and to have the corresponding reference focus in the reversed list, rerun with:
+Or rerun with:
 
 `eagle-rc --ngi --listonly --ref1=ref2.fa --ref2=ref1.fa --bam1=align2.bam --bam2=align1.bam > classified_reads.2vs1.list`
 
-Then filter for reads that only map to one reference:
-
-`grep 'ref1uniqueid' classified_reads.1vs2.list > classified_reads.1vs2.double.list`
-`grep 'ref2uniqueid' classified_reads.2vs1.list > classified_reads.2vs1.double.list`
-
-This filtered lists can then be passed on for further processing such as in hexaploid analysis.
+The lists can then be passed on for further processing such as in hexaploid analysis.
 
 ## References
 Tony Kuo and Martin C Frith and Jun Sese and Paul Horton. EAGLE: Explicit Alternative Genome Likelihood Evaluator. BMC Medical Genomics. 11(Suppl 2):28. https://doi.org/10.1186/s12920-018-0342-1

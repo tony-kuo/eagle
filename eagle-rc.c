@@ -453,6 +453,8 @@ static int readlist_read(FILE *file) {
                 free(r->chr); r->chr = NULL;
                 r->chr = strdup(name);
                 r->pos = pos;
+                free(r->flag); r->flag = NULL;
+                r->flag = strdup(flag);
                 r->index = type2ind(type);
             }
             r->prgu = log_add_exp(r->prgu, prgu);
@@ -678,10 +680,12 @@ static void bam_read(const char *bam_file, int ind) {
         else {
             read_t *r = kh_val(read_hash, k);
             if (log_add_exp(prgu, prgv) > log_add_exp(r->prgu, r->prgv)) {
-                free(r->chr); r->chr = NULL;
                 r->tid = read->tid;
+                free(r->chr); r->chr = NULL;
                 r->chr = strdup(read->chr);
                 r->pos = read->pos;
+                free(r->flag); r->flag = NULL;
+                r->flag = strdup(read->flag);
             }
             r->prgu = log_add_exp(r->prgu, prgu);
             r->prgv = log_add_exp(r->prgv, prgv);

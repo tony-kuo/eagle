@@ -99,7 +99,7 @@ static int var_read(const char* filename) {
         char chr[line_length], ref[line_length], alt[line_length], set[line_length];
 
         int t = sscanf(line, "%s %d %s %s %*[^\t] %*[^\t] %*[^\t] %*[^\t] %*[^\t] %s", chr, &pos, ref, alt, set);
-        if (t < 4) { exit_err("bad fields in EAGLE output file\n%s\n", line); }
+        if (t < 5) { exit_err("bad fields in EAGLE output file\n%s\n", line); }
 
         if (strcmp(set, "[]") == 0) snprintf(set, line_length, "[%s,%d,%s,%s;]", chr, pos, ref, alt);
 
@@ -418,7 +418,11 @@ static int readlist_read(FILE *file) {
         double prgu, prgv, pout;
         char type[line_length], name[line_length], flag[line_length], chr[line_length];
         int t = sscanf(line, "%s %s %s %d %lf %lf %lf %s %*[^\n]", name, type, chr, &pos, &prgu, &prgv, &pout, flag);
-        if (t < 5) { exit_err("bad fields in read classified list file\n"); }
+        if (t < 8) {
+            t = sscanf(line, "%s %s %d %lf %lf %lf %*[^\t] %*[^\n]", name, chr, &pos, &prgu, &prgv, &pout);
+            if (t < 7) { exit_err("bad fields in EAGLE read info file\n%s\n", line); }
+            flag[0] = '\0';
+        }
 
         int n;
         int is_read2 = 0;
@@ -451,7 +455,7 @@ static int readlist_read(FILE *file) {
             read_t *r = kh_val(read_hash, k);
             if (log_add_exp(prgu, prgv) > log_add_exp(r->prgu, r->prgv)) {
                 free(r->chr); r->chr = NULL;
-                r->chr = strdup(name);
+                r->chr = strdup(chr);
                 r->pos = pos;
                 free(r->flag); r->flag = NULL;
                 r->flag = strdup(flag);

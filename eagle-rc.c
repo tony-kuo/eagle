@@ -325,11 +325,11 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
         if (aln->core.tid < 0) continue; // not mapped
 
-        /* Mapped & Primary alignments only */
-        int n;
         int is_secondary = 0;
         int is_read2 = 0;
         char *flag = bam_flag2str(aln->core.flag);
+
+        int n;
         char *s, token[strlen(flag) + 1];
         for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
             if (strcmp("READ2", token) == 0) is_read2 = 1;
@@ -536,9 +536,10 @@ static void bam_read(const char *bam_file, int ind) {
     int nreads = 0;
     bam1_t *aln = bam_init1(); // initialize an alignment
     while (sam_read1(sam_in, bam_header, aln) >= 0) {
-        int i, j;
-        if (aln->core.tid < 0) continue; // not mapped
-        read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
+        int i;
+        read_t *read = read_fetch(bam_header, aln, pao, isc, nodup, splice, phred64, const_qual);
+        if (read == NULL) continue;
+
         fasta_t *f = refseq_fetch(read->chr);
         if (strcmp(read->chr, f->name) != 0) { exit_err("# request: %s\tvs\tfetch: %s\t%s", read->chr, f->name, asctime(time_info)); }
         if (f == NULL) {
@@ -547,88 +548,6 @@ static void bam_read(const char *bam_file, int ind) {
         }
         char *refseq = f->seq;
         int refseq_length = f->seq_length;
-
-        char *flag = bam_flag2str(aln->core.flag);
-        if (flag != NULL) read->flag = strdup(flag);
-        else read->flag = NULL;
-        free(flag); flag = NULL;
-
-        int n;
-        char *s, token[strlen(read->flag) + 1];
-        for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-            if (strcmp("DUP", token) == 0) read->is_dup = 1;
-            else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
-            else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
-            else if (strcmp("READ2", token) == 0) read->is_read2 = 1;
-            if (*(s + n) != ',') break;
-        }
-        if ((nodup && read->is_dup) || (pao && read->is_secondary)) {
-            read_destroy(read); free(read); read = NULL;
-            continue;
-        }
-
-        int start_align = 0;
-        int s_offset = 0; // offset for softclip at start
-        int e_offset = 0; // offset for softclip at end
-
-        u_int32_t *cigar = bam_get_cigar(aln);
-        read->n_cigar = aln->core.n_cigar;
-        read->cigar_oplen = malloc(read->n_cigar * sizeof (read->cigar_oplen));
-        read->cigar_opchr = malloc((read->n_cigar + 1) * sizeof (read->cigar_opchr));
-        read->splice_pos = malloc(read->n_cigar * sizeof (read->splice_pos));
-        read->splice_offset = malloc(read->n_cigar * sizeof (read->splice_offset));
-
-        j = 0;
-        int splice_pos = 0; // track splice position in reads
-        for (i = 0; i < read->n_cigar; i++) {
-            read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
-            read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
-            read->splice_pos[i] = 0;
-            read->splice_offset[i] = 0;
-
-            if (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == '=' || read->cigar_opchr[i] == 'X') start_align = 1;
-            else if (start_align == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i];
-            else if (start_align == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i];
-
-            if (splice && read->cigar_opchr[i] == 'N') {
-                read->splice_pos[j] = (isc) ? splice_pos - s_offset : splice_pos;
-                read->splice_offset[j] = read->cigar_oplen[i];
-                j++;
-            }
-            else if (splice && read->cigar_opchr[i] != 'D') {
-                splice_pos += read->cigar_oplen[i];
-            }
-
-            if (read->cigar_opchr[i] != 'I') read->end += read->cigar_oplen[i];
-        }
-        read->cigar_opchr[read->n_cigar] = '\0';
-        read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
-        read->n_splice = j;
-
-        if (!isc) {
-            read->pos -= s_offset; // compensate for soft clip in mapped position
-            s_offset = 0;
-            e_offset = 0;
-        }
-        else {
-            read->end -= e_offset; // compensate for soft clip in mapped position
-        }
-        read->length = aln->core.l_qseq - (s_offset + e_offset);
-        read->qseq = malloc((read->length + 1) * sizeof (read->qseq));
-        read->qual = malloc(read->length  * sizeof (read->qual));
-        uint8_t *qual = bam_get_qual(aln);
-        for (i = 0; i < read->length; i++) {
-            read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-            if (const_qual > 0) read->qual[i] = const_qual;
-            else read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
-        }
-        read->qseq[read->length] = '\0';
-
-        read->multimapXA = NULL;
-        if (bam_aux_get(aln, "XA")) read->multimapXA = strdup(bam_aux2Z(bam_aux_get(aln, "XA")));
-
-        read->multimapNH = 1;
-        if (bam_aux_get(aln, "NH")) read->multimapNH = bam_aux2i(bam_aux_get(aln, "NH"));
 
         double is_match[read->length], no_match[read->length];
         for (i = 0; i < read->length; i++) {
@@ -757,23 +676,23 @@ static void print_usage() {
     printf("Usage:\n");
     printf("(Default mode) with genotype info: eagle-rc [options] -a align.bam -o out -v eagle.out.txt eagle.readinfo.txt > classified_reads.list\n");
     printf("Options:\n");
-    printf("  -v --var       FILE             EAGLE output text with variant likelihood ratios\n");
-    printf("  -a --bam       FILE             Alignment data BAM file whose reads are to be classified\n");
-    printf("  -o --out       String           Prefix for output BAM files\n");
-    printf("  -u --unique    FILE1,FILE2,...  Optionally, also output reads that are unique against other BAM files (comma separated list)\n");
-    printf("     --listonly                   Print classified read list only (stdout) without processing BAM file\n");
-    printf("     --readlist                   Read from classified read list file instead of EAGLE outputs and proccess BAM file\n");
-    printf("     --reclassify                 Reclassify after reading in classified read list file\n");
-    printf("     --refonly                    Write REF classified reads only when processing BAM file\n");
+    printf("  -v --var       FILE             EAGLE output text with variant likelihood ratios.\n");
+    printf("  -a --bam       FILE             Alignment data BAM file whose reads are to be classified.\n");
+    printf("  -o --out       String           Prefix for output BAM files.\n");
+    printf("  -u --unique    FILE1,FILE2,...  Optionally, also output reads that are unique against other BAM files (comma separated list).\n");
+    printf("     --listonly                   Print classified read list only (stdout) without processing BAM file.\n");
+    printf("     --readlist                   Read from classified read list file instead of EAGLE outputs and proccess BAM file.\n");
+    printf("     --reclassify                 Reclassify after reading in classified read list file.\n");
+    printf("     --refonly                    Write REF classified reads only when processing BAM file.\n");
     printf("     --paired                     Consider paired-end reads together.\n");
     printf("     --pao                        Primary alignments only.\n");
     printf("\nNo genotype info mode: eagle-rc [options] --ngi --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam -o out > classified_reads.list\n");
     printf("Options (the above default mode options are also applicable):\n");
     printf("     --ngi                         No genotype information (i.e. vcf).  Directly classify read alignments mapped to two different reference (sub)genomes.\n");
-    printf("     --ref1      FILE             --ngi mode: Reference genome 1 fasta file\n");
-    printf("     --bam1      FILE             --ngi mode: Alignments to reference genome 1 bam file\n");
-    printf("     --ref2      FILE             --ngi mode: Reference genome 2, recommend that sequence names are different from ref1\n");
-    printf("     --bam2      FILE             --ngi mode: Alignments to reference genome 2 bam file\n");
+    printf("     --ref1      FILE             --ngi mode: Reference genome 1 fasta file.\n");
+    printf("     --bam1      FILE             --ngi mode: Alignments to reference genome 1 bam file.\n");
+    printf("     --ref2      FILE             --ngi mode: Reference genome 2, recommend that sequence names are different from ref1.\n");
+    printf("     --bam2      FILE             --ngi mode: Alignments to reference genome 2 bam file.\n");
     printf("     --isc                        --ngi mode: Ignore soft-clipped bases.\n");
     printf("     --nodup                      --ngi mode: Ignore marked duplicate reads (based on SAM flag).\n");
     printf("     --splice                     --ngi mode: RNA-seq spliced reads.\n");

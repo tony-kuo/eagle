@@ -146,93 +146,8 @@ static vector_t *bam_fetch(const char *bam_file, const char *chr, const int pos1
     if (iter != NULL) {
         bam1_t *aln = bam_init1(); // initialize an alignment
         while (sam_itr_next(sam_in, iter, aln) >= 0) {
-            int i, j;
-            if (aln->core.tid < 0) continue; // not mapped
-            read_t *read = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
-
-            char *flag = bam_flag2str(aln->core.flag);
-            if (flag != NULL) read->flag = strdup(flag);
-            else read->flag = NULL;
-            free(flag); flag = NULL;
-
-            int n;
-            char *s, token[strlen(read->flag) + 1];
-            for (s = read->flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
-                if (strcmp("DUP", token) == 0) read->is_dup = 1;
-                else if (strcmp("REVERSE", token) == 0) read->is_reverse = 1;
-                else if (strcmp("SECONDARY", token) == 0 || strcmp("SUPPLEMENTARY", token) == 0) read->is_secondary = 1;
-                else if (strcmp("READ2", token) == 0) read->is_read2 = 1;
-                if (*(s + n) != ',') break;
-            }
-            if ((nodup && read->is_dup) || (pao && read->is_secondary)) {
-                read_destroy(read);
-                continue;
-            }
-
-            int start_align = 0;
-            int s_offset = 0; // offset for softclip at start
-            int e_offset = 0; // offset for softclip at end
-
-            u_int32_t *cigar = bam_get_cigar(aln);
-            read->n_cigar = aln->core.n_cigar;
-            read->cigar_oplen = malloc(read->n_cigar * sizeof (read->cigar_oplen));
-            read->cigar_opchr = malloc((read->n_cigar + 1) * sizeof (read->cigar_opchr));
-            read->splice_pos = malloc(read->n_cigar * sizeof (read->splice_pos));
-            read->splice_offset = malloc(read->n_cigar * sizeof (read->splice_offset));
-
-            j = 0;
-            int splice_pos = 0; // track splice position in reads
-            for (i = 0; i < read->n_cigar; i++) {
-                read->cigar_oplen[i] = bam_cigar_oplen(cigar[i]);
-                read->cigar_opchr[i] = bam_cigar_opchr(cigar[i]);
-                read->splice_pos[i] = 0;
-                read->splice_offset[i] = 0;
-
-                if (read->cigar_opchr[i] == 'M' || read->cigar_opchr[i] == '=' || read->cigar_opchr[i] == 'X') start_align = 1; 
-                else if (start_align == 0 && read->cigar_opchr[i] == 'S') s_offset = read->cigar_oplen[i]; 
-                else if (start_align == 1 && read->cigar_opchr[i] == 'S') e_offset = read->cigar_oplen[i]; 
-
-                if (splice && read->cigar_opchr[i] == 'N') {
-                    read->splice_pos[j] = (isc) ? splice_pos - s_offset : splice_pos;
-                    read->splice_offset[j] = read->cigar_oplen[i];
-                    j++;
-                }
-                else if (splice && read->cigar_opchr[i] != 'D') {
-                    splice_pos += read->cigar_oplen[i];
-                }
-
-                if (read->cigar_opchr[i] != 'I') read->end += read->cigar_oplen[i]; 
-            }
-            read->cigar_opchr[read->n_cigar] = '\0';
-            read->inferred_length = bam_cigar2qlen(read->n_cigar, cigar);
-            read->n_splice = j;
-
-            if (!isc) {
-                read->pos -= s_offset; // compensate for soft clip in mapped position
-                s_offset = 0;
-                e_offset = 0;
-            }
-            else {
-                read->end -= e_offset; // compensate for soft clip in mapped position
-            }
-            read->length = aln->core.l_qseq - (s_offset + e_offset);
-            read->qseq = malloc((read->length + 1) * sizeof (read->qseq));
-            read->qual = malloc(read->length  * sizeof (read->qual));
-            uint8_t *qual = bam_get_qual(aln);
-            for (i = 0; i < read->length; i++) {
-                read->qseq[i] = toupper(seq_nt16_str[bam_seqi(bam_get_seq(aln), i + s_offset)]); // get nucleotide id and convert into IUPAC id.
-                if (const_qual > 0) read->qual[i] = const_qual;
-                else read->qual[i] = (phred64) ? qual[i] - 31 : qual[i]; // account for phred64
-            }
-            read->qseq[read->length] = '\0';
-
-            read->multimapXA = NULL;
-            if (bam_aux_get(aln, "XA")) read->multimapXA = strdup(bam_aux2Z(bam_aux_get(aln, "XA")));
-
-            read->multimapNH = 1;
-            if (bam_aux_get(aln, "NH")) read->multimapNH = bam_aux2i(bam_aux_get(aln, "NH"));
-
-            vector_add(read_list, read);
+            read_t *read = read_fetch(bam_header, aln, pao, isc, nodup, splice, phred64, const_qual);
+            if (read != NULL) vector_add(read_list, read);
         }
         bam_destroy1(aln);
     }
@@ -725,23 +640,21 @@ typedef struct {
 
 static void *pool(void *work) {
     work_t *w = (work_t *)work;
-    vector_t *queue = (vector_t *)w->queue;
-    vector_t *results = (vector_t *)w->results;
 
     size_t n = w->len / 10;
     while (1) { //pthread_t ptid = pthread_self(); uint64_t threadid = 0; memcpy(&threadid, &ptid, min(sizeof (threadid), sizeof (ptid)));
         pthread_mutex_lock(&w->q_lock);
-        vector_t *var_set = (vector_t *)vector_pop(queue);
+        vector_t *var_set = (vector_t *)vector_pop(w->queue);
         pthread_mutex_unlock(&w->q_lock);
         if (var_set == NULL) break;
         
         char *outstr = evaluate(var_set);
         if (outstr != NULL) {
             pthread_mutex_lock(&w->r_lock);
-            if (!verbose && n > 10 && results->len > 10 && results->len % n == 0) {
-                print_status("# Progress: %zd%%: %zd / %zd\t%s", 10 * results->len / n, results->len, queue->len, asctime(time_info));
+            if (!verbose && n > 10 && w->results->len > 10 && w->results->len % n == 0) {
+                print_status("# Progress: %zd%%: %zd / %zd\t%s", 10 * w->results->len / n, w->results->len, w->queue->len, asctime(time_info));
             }
-            vector_add(results, outstr);
+            vector_add(w->results, outstr);
             pthread_mutex_unlock(&w->r_lock);
         }
         vector_free(var_set); //variants in var_list so don't destroy

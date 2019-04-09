@@ -10,6 +10,8 @@ This program is distributed under the terms of the GNU General Public License
 #ifndef _vector_h_
 #define _vector_h_
 
+#include "htslib/sam.h"
+
 enum type {VOID_T, STATS_T, VARIANT_T, READ_T, FASTA_T, REGION_T};
 
 typedef struct __attribute__((packed)) {
@@ -102,5 +104,7 @@ int nat_sort_cmp(const void *a, const void *b, enum type var_type);
 int nat_sort_vector(const void *a, const void *b);
 int nat_sort_variant(const void *a, const void *b);
 int nat_sort_region(const void *a, const void *b);
+
+read_t *read_fetch(bam_hdr_t *bam_header, bam1_t *aln, int pao, int isc, int nodup, int splice, int phred64, int const_qual);
 
 #endif

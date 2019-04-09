@@ -18,7 +18,7 @@ HTSLIB:
 	$(MAKE) -C $(HTSDIR)/
 
 UTIL:
-	$(CC) $(CFLAGS) -c vector.c util.c calc.c heap.c $(LDLIBS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) -c vector.c util.c calc.c heap.c $(LDLIBS)
 
 READCLASSIFY:
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)

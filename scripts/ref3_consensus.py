@@ -75,7 +75,7 @@ def classifySingle(key, chrA, fh, p_threshold):
     t = key.strip().split('\t')
     if len(t) > 1: f = t[1]
     else: f = '-'
-    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t-'.format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], chrA[key][3], f), file=fh)
+    print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(t[0], c, chrA[key][0], chrA[key][1], chrA[key][2], chrA[key][3], f), file=fh)
 
 def classifyDouble(key, chrA, chrB, idx, fh, p_threshold, m_threshold):
     pos = [chrA[key][0], chrB[key][0]]
@@ -94,7 +94,7 @@ def classifyDouble(key, chrA, chrB, idx, fh, p_threshold, m_threshold):
     t = key.strip().split('\t')
     if len(t) > 1: f = t[1]
     else: f = '-'
-    print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t-'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[idx[i]])
+    print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[idx[i]])
 
 def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
@@ -123,7 +123,7 @@ def writeTable(chrA, chrB, chrD, doubles, unique_reads, out_prefix):
         t = key.strip().split('\t')
         if len(t) > 1: f = t[1]
         else: f = '-'
-        print('{}\t{}\t{}\t{}\t{}\t{}\t{}\t-'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[i])
+        print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[i])
 
     if doubles:
         for key in chrA:

@@ -211,7 +211,7 @@ read_t *read_create(char *name, int tid, char *chr, int pos) {
     r->prgv = -DBL_MAX;
     r->pout = -DBL_MAX;
     r->index = 0;
-    r->var_list = vector_create(8, VOID_T);
+    r->var_list = vector_create(1, VOID_T);
 
     r->length = r->n_cigar = r->inferred_length = r->multimapNH = r->n_splice = 0;
     r->qseq = NULL;

@@ -8,11 +8,21 @@ LIBS=$(HTSDIR)/libhts.a
 #LDLIBS=-lm -lz -lpthread # older version of htslib
 LDLIBS=-lm -lz -llzma -lbz2 -lpthread
 
+PREFIX = /usr/local
 MAIN = eagle
 AUX = vector.o util.o calc.o heap.o
 
-all: UTIL HTSLIB READCLASSIFY NOMUTATION
+all: UTIL HTSLIB
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(AUX) $(LIBS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-nm.c -o eagle-nm $(AUX) $(LIBS) $(LDLIBS)
+
+eagle: UTIL HTSLIB
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) $(MAIN).c -o $(MAIN) $(AUX) $(LIBS) $(LDLIBS)
+eagle-rc: UTIL HTSLIB
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)
+eagle-nm: UTIL HTSLIB
+	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-nm.c -o eagle-nm $(AUX) $(LIBS) $(LDLIBS)
 
 HTSLIB:
 	$(MAKE) -C $(HTSDIR)/
@@ -20,13 +30,10 @@ HTSLIB:
 UTIL:
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) -c vector.c util.c calc.c heap.c $(LDLIBS)
 
-READCLASSIFY:
-	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-rc.c -o eagle-rc $(AUX) $(LIBS) $(LDLIBS)
-
-NOMUTATION:
-	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) eagle-nm.c -o eagle-nm $(AUX) $(LIBS) $(LDLIBS)
+install: eagle eagle-rc
+	cp $^ $(PREFIX)/bin
 
 clean:
-	rm -f eagle eagle-rc *.o
+	rm -f eagle eagle-rc eagle-nm *.o
 
 # DO NOT DELETE THIS LINE -- make depend needs it

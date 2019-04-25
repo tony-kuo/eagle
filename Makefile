@@ -31,7 +31,7 @@ UTIL:
 	$(CC) $(CFLAGS) $(LFLAGS) $(INCLUDES) -c vector.c util.c calc.c heap.c $(LDLIBS)
 
 install: eagle eagle-rc
-	cp $^ $(PREFIX)/bin
+	install -p $^ $(PREFIX)/bin
 
 clean:
 	rm -f eagle eagle-rc eagle-nm *.o

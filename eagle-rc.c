@@ -500,7 +500,7 @@ static void fasta_read(const char *fa_file) {
         if (!faidx_has_seq(fai, name)) { exit_err("failed to find %s in reference %s\n", name, fa_file); }
 
         fasta_t *f = fasta_create(name);
-        //f->seq = faidx_fetch(fai, f->name, &f->seq_length);
+        //f->seq = fai_fetch(fai, f->name, &f->seq_length);
         f->seq = faidx_fetch_seq(fai, f->name, 0, faidx_seq_len(fai, f->name) - 1, &f->seq_length);
         char *s;
         for (s = f->seq; *s != '\0'; s++) *s = toupper(*s);

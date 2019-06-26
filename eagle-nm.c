@@ -477,7 +477,7 @@ int main(int argc, char **argv) {
             case 'o': out_file = optarg; break;
             case 't': nthread = parse_int(optarg); break;
             case 'd': debug = parse_int(optarg); break;
-            case 990: mut_prior = parse_float(optarg); break;
+            case 990: mut_prior = parse_double(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
             case 993: const_qual = parse_int(optarg); break;
             default: exit_usage("Bad options");

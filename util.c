@@ -10,7 +10,6 @@ This program is distributed under the terms of the GNU General Public License
 #include <stdlib.h>
 #include <ctype.h>
 #include <math.h>
-#include "vector.h"
 #include "util.h"
 
 #if defined (__AVX__)
@@ -48,8 +47,16 @@ int parse_int(const char *str) {
 float parse_float(const char *str) {
     errno = 0;
     char *end;
-    double num = strtof(str, &end);
+    float num = strtof(str, &end);
     if (end != str && *end != '\0') { exit_err("failed to convert '%s' to float with leftover string '%s'\n", str, end); }
+    return num;
+}
+
+double parse_double(const char *str) {
+    errno = 0;
+    char *end;
+    double num = strtod(str, &end);
+    if (end != str && *end != '\0') { exit_err("failed to convert '%s' to double with leftover string '%s'\n", str, end); }
     return num;
 }
 

@@ -157,9 +157,9 @@ static int readinfo_read(const char* filename) {
         khiter_t k = kh_put(rh, read_hash, key, &absent);
         if (absent) {
             read_t *r = read_create(name, 0, chr, pos);
-            r->prgu = prgu;
-            r->prgv = prgv;
-            r->pout = pout;
+            r->prgu = (float)prgu;
+            r->prgv = (float)prgv;
+            r->pout = (float)pout;
             r->flag = strdup(flag);
             r->qseq = strdup(key);
             add2var_list(r->var_list, var);
@@ -169,8 +169,8 @@ static int readinfo_read(const char* filename) {
         }
         else {
             read_t *r = kh_val(read_hash, k);
-            r->prgu = log_add_exp(r->prgu, prgu);
-            r->prgv = log_add_exp(r->prgv, prgv);
+            r->prgu = (float)log_add_exp((double)r->prgu, prgu);
+            r->prgv = (float)log_add_exp((double)r->prgv, prgv);
             add2var_list(r->var_list, var);
         }
     }
@@ -441,9 +441,9 @@ static int readlist_read(FILE *file) {
         khiter_t k = kh_put(rh, read_hash, key, &absent);
         if (absent) {
             read_t *r = read_create(name, 0, chr, pos);
-            r->prgu = prgu;
-            r->prgv = prgv;
-            r->pout = pout;
+            r->prgu = (float)prgu;
+            r->prgv = (float)prgv;
+            r->pout = (float)pout;
             r->flag = strdup(flag);
             r->qseq = strdup(key);
             r->index = type2ind(type);
@@ -453,7 +453,7 @@ static int readlist_read(FILE *file) {
         }
         else {
             read_t *r = kh_val(read_hash, k);
-            if (log_add_exp(prgu, prgv) > log_add_exp(r->prgu, r->prgv)) {
+            if (log_add_exp(prgu, prgv) > log_add_exp((double)r->prgu, (double)r->prgv)) {
                 free(r->chr); r->chr = NULL;
                 r->chr = strdup(chr);
                 r->pos = pos;
@@ -461,9 +461,9 @@ static int readlist_read(FILE *file) {
                 r->flag = strdup(flag);
                 r->index = type2ind(type);
             }
-            r->prgu = log_add_exp(r->prgu, prgu);
-            r->prgv = log_add_exp(r->prgv, prgv);
-            r->pout = log_add_exp(r->pout, pout);
+            r->prgu = (float)log_add_exp((double)r->prgu, prgu);
+            r->prgv = (float)log_add_exp((double)r->prgv, prgv);
+            r->pout = (float)log_add_exp((double)r->pout, pout);
         }
     }
     free(line); line = NULL;
@@ -592,9 +592,9 @@ static void bam_read(const char *bam_file, int ind) {
         khiter_t k = kh_put(rh, read_hash, key, &absent);
         if (absent) {
             read_t *r = read_create(read->name, read->tid, read->chr, read->pos);
-            r->prgu = prgu;
-            r->prgv = prgv;
-            r->pout = pout;
+            r->prgu = (float)prgu;
+            r->prgv = (float)prgv;
+            r->pout = (float)pout;
             r->flag = strdup(read->flag);
             r->qseq = strdup(key);
             kh_key(read_hash, k) = r->qseq;
@@ -602,7 +602,7 @@ static void bam_read(const char *bam_file, int ind) {
         }
         else {
             read_t *r = kh_val(read_hash, k);
-            if (log_add_exp(prgu, prgv) > log_add_exp(r->prgu, r->prgv)) {
+            if (log_add_exp(prgu, prgv) > log_add_exp((double)r->prgu, (double)r->prgv)) {
                 r->tid = read->tid;
                 free(r->chr); r->chr = NULL;
                 r->chr = strdup(read->chr);
@@ -610,9 +610,9 @@ static void bam_read(const char *bam_file, int ind) {
                 free(r->flag); r->flag = NULL;
                 r->flag = strdup(read->flag);
             }
-            r->prgu = log_add_exp(r->prgu, prgu);
-            r->prgv = log_add_exp(r->prgv, prgv);
-            r->pout = log_add_exp(r->pout, pout);
+            r->prgu = (float)log_add_exp((double)r->prgu, prgu);
+            r->prgv = (float)log_add_exp((double)r->prgv, prgv);
+            r->pout = (float)log_add_exp((double)r->pout, pout);
         }
         nreads++;
         read_destroy(read); free(read); read = NULL;
@@ -647,6 +647,12 @@ static void combine_pe() {
             }
             else {
                 read_t *r2 = kh_val(other_read_hash, k2);
+                if (log_add_exp((double)r->prgu, (double)r->prgv) > log_add_exp((double)r2->prgu, (double)r2->prgv)) {
+                    r2->tid = r->tid;
+                    free(r2->chr); r2->chr = NULL;
+                    r2->chr = strdup(r->chr);
+                    r2->pos = r->pos;
+                }
                 r2->prgu += r->prgu;
                 r2->prgv += r->prgv;
                 r2->pout += r->pout;
@@ -773,7 +779,7 @@ int main(int argc, char **argv) {
             case 982: ref_file2 = optarg; break;
             case 983: bam_file1 = optarg; break;
             case 984: bam_file2 = optarg; break;
-            case 991: omega = parse_float(optarg); break;
+            case 991: omega = parse_double(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
             case 993: const_qual = parse_int(optarg); break;
             default: exit_usage("Bad options");

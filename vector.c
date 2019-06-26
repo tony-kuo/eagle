@@ -10,7 +10,6 @@ This program is distributed under the terms of the GNU General Public License
 #include <stdlib.h>
 #include <ctype.h>
 #include <float.h>
-
 #include "util.h"
 #include "vector.h"
 

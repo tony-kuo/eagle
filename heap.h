@@ -18,8 +18,8 @@ typedef struct {
 } node_t;
 
 typedef struct {
-    size_t len, size;
     node_t *node;
+    size_t len, size;
     enum type type;
 } heap_t;
 

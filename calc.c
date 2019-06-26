@@ -359,5 +359,3 @@ void calc_prob_snps(double *prgu, double *prgv, vector_int_t *combo, variant_t *
         }
     }
 }
-
-

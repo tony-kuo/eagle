@@ -37,6 +37,7 @@ void str_resize(char **str, int size);
 int has_numbers(const char *str);
 int parse_int(const char *str);
 float parse_float(const char *str);
+double parse_double(const char *str);
 
 int sum_i(const int *a, int size);
 double sum_d(const double *a, int size);

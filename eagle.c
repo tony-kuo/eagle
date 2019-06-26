@@ -397,12 +397,12 @@ static void calc_likelihood(stats_t *stat, vector_t *var_set, const char *refseq
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
 
-        /* Track combination with highest variant likelihood for verbose output */
-        if (verbose && prgv > read_data[readi]->prgv) {
+        /* Track combination with highest variant likelihood */
+        if (prgv > read_data[readi]->prgv) {
             read_data[readi]->index = seti;
-            read_data[readi]->prgu = prgu;
-            read_data[readi]->prgv = prgv;
-            read_data[readi]->pout = pout;
+            read_data[readi]->prgu = (float)prgu;
+            read_data[readi]->prgv = (float)prgv;
+            read_data[readi]->pout = (float)pout;
         }
 
         /* Mixture model: heterozygosity or heterogeneity as explicit allele frequency mu such that P(r|GuGv) = (mu)(P(r|Gv)) + (1-mu)(P(r|Gu)) */
@@ -904,8 +904,8 @@ int main(int argc, char **argv) {
             case 'm': maxh = parse_int(optarg); break;
             case 981: gap_op = parse_int(optarg); break;
             case 982: gap_ex = parse_int(optarg); break;
-            case 990: hetbias = parse_float(optarg); break;
-            case 991: omega = parse_float(optarg); break;
+            case 990: hetbias = parse_double(optarg); break;
+            case 991: omega = parse_double(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
             case 993: const_qual = parse_int(optarg); break;
             default: exit_usage("Bad options");

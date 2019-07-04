@@ -29,6 +29,7 @@ This program is distributed under the terms of the GNU General Public License
 #include "vector.h"
 
 /* Constants */
+#define VERSION "1.1.1"
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 #define LOGALPHA (log(ALPHA))
 
@@ -693,6 +694,7 @@ static void print_usage() {
     printf("     --refonly                    Write REF classified reads only when processing BAM file.\n");
     printf("     --paired                     Consider paired-end reads together.\n");
     printf("     --pao                        Primary alignments only.\n");
+    printf("     --version                    Display version.\n");
     printf("\nNo genotype info mode: eagle-rc [options] --ngi --ref1=ref1.fa --ref2=ref2.fa --bam1=align1.bam --bam2=align2.bam -o out > classified_reads.list\n");
     printf("Options (the above default mode options are also applicable):\n");
     printf("     --ngi                         No genotype information (i.e. vcf).  Directly classify read alignments mapped to two different reference (sub)genomes.\n");
@@ -762,6 +764,7 @@ int main(int argc, char **argv) {
         {"omega", optional_argument, NULL, 991},
         {"bs", optional_argument, NULL, 992},
         {"cq", optional_argument, NULL, 993},
+        {"version", optional_argument, NULL, 999},
         {0, 0, 0, 0}
     };
 
@@ -783,6 +786,7 @@ int main(int argc, char **argv) {
             case 991: omega = parse_double(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
             case 993: const_qual = parse_int(optarg); break;
+            case 999: printf("EAGLE-RC %s\n", VERSION); exit(0);
             default: exit_usage("Bad options");
         }
     }

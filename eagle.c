@@ -23,6 +23,7 @@ This program is distributed under the terms of the GNU General Public License
 #include "heap.h"
 
 /* Constants */
+#define VERSION "1.1.1"
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
 /* Precalculated log values */
@@ -825,6 +826,7 @@ static void print_usage() {
     printf("     --omega    FLOAT  Prior probability of originating from outside paralogous source, between [0,1]. [1e-6]\n");
     printf("     --cq       INT    Constant quality as a phred score, ignoring the quality field in SAM. [0 is off]\n");
     printf("     --rc              Wrapper for read classification settings: --omega=1.0e-40 --isc --mvh --verbose --lowmem.\n");
+    printf("     --version         Display version.\n");
 }
 
 int main(int argc, char **argv) {
@@ -884,6 +886,7 @@ int main(int argc, char **argv) {
         {"bs", optional_argument, NULL, 992},
         {"cq", optional_argument, NULL, 993},
         {"rc", no_argument, &rc, 1},
+        {"version", optional_argument, NULL, 999},
         {0, 0, 0, 0}
     };
 
@@ -909,6 +912,7 @@ int main(int argc, char **argv) {
             case 991: omega = parse_double(optarg); break;
             case 992: bisulfite = parse_int(optarg); break;
             case 993: const_qual = parse_int(optarg); break;
+            case 999: printf("EAGLE %s\n", VERSION); exit(0);
             default: exit_usage("Bad options");
         }
     }

@@ -40,8 +40,12 @@ def readFiles(files, idcol, valcol, delim, addtogether):
     else: numid = 1
 
     if len(valcol) > 0:
-        valcol = valcol.strip().split(',')
-        valcol = [int(a) for a in valcol]
+        c = valcol.strip().split(',')
+        valcol = []
+        for i in c:
+            i = i.split('-')
+            if len(i) > 1: valcol.extend(range(int(i[0]), int(i[1])+1))
+            else: valcol.append(int(i[0]))
 
     for fn in files: 
         with open(fn, 'r') as fh:

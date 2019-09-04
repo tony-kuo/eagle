@@ -151,8 +151,8 @@ static int readinfo_read(const char* filename) {
             if (*(s + n) != ',') break;
         }
 
-        char key[256];
-        snprintf(key, 256, "%s\t%d", name, is_read2);
+        char key[strlen(name) + 3];
+        snprintf(key, strlen(name) + 3, "%s\t%d", name, is_read2);
 
         int absent;
         khiter_t k = kh_put(rh, read_hash, key, &absent);
@@ -280,10 +280,13 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
                 free(flag); flag = NULL;
                 if (pao && is_secondary) continue;
 
-                char *name = strdup((char *)aln->data);
-
                 int absent;
-                k = kh_put(orh, other_read_hash, name, &absent);
+                k = kh_put(orh, other_read_hash, (char *)aln->data, &absent);
+                if (absent) {
+                    read_t *r = read_create((char *)aln->data, aln->core.tid, bam_header->target_name[aln->core.tid], aln->core.pos);
+                    kh_key(other_read_hash, k) = r->name;
+                    kh_val(other_read_hash, k) = r;
+                }
             }
             bam_destroy1(aln);
             bam_hdr_destroy(bam_header);
@@ -297,6 +300,7 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
     if (sam_in == NULL) { exit_err("failed to open BAM file %s\n", bam_file); }
     bam_hdr_t *bam_header = sam_hdr_read(sam_in); // bam header
     if (bam_header == 0) { exit_err("bad header %s\n", bam_file); }
+    print_status("# Open input bam:\t%s\t%s", bam_file, asctime(time_info));
 
     /* Split input bam files into respective categories' output bam files */
     samFile *out;
@@ -346,31 +350,32 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
         char *name = (char *)aln->data;
 
         if (paired) is_read2 = 0;
-        char key[256];
-        snprintf(key, 256, "%s\t%d", name, is_read2);
+        char key[strlen(name) + 3];
+        snprintf(key, strlen(name) + 3, "%s\t%d", name, is_read2);
 
-        k = kh_get(rh, read_hash, key);
-        if (k != kh_end(read_hash)) {
-            read_t *r = kh_val(read_hash, k);
-            if (r->index == 0 && !reverse) out = ref_out;
-            else if (r->index == 1 && reverse) out = ref_out; // reverse, ALT writes to ref.bam
-            else if (!refonly && r->index == 1 && !reverse) out = alt_out;
-            else if (!refonly && r->index == 0 && reverse) out = alt_out; // reverse, REF writes to alt.bam
-            else if (!refonly && r->index == 2) out = ref_out;
-            else if (!refonly && r->index == 3) out = mul_out;
-            else if (r->index == 4) out = unk_out;
-            if (debug >= 1) {
-                fprintf(stderr, "%f\t%f\t%f\t%d\t", r->prgu, r->prgv, r->pout, r->index);
-                fprintf(stderr, "%s\t%s\t%d\t", r->name, r->chr, r->pos);
-                fprintf(stderr, "%s\t%s\t%p\n", r->flag, r->qseq, out);
-            }
-        }
-        free(flag); flag = NULL;
-
-        if (other_bam != NULL && out == NULL) {
+        if (other_bam != NULL) {
             k = kh_get(orh, other_read_hash, name);
             if (k == kh_end(other_read_hash)) out = ref_out; // unique vs other bams
         }
+        else {
+            k = kh_get(rh, read_hash, key);
+            if (k != kh_end(read_hash)) {
+                read_t *r = kh_val(read_hash, k);
+                if (r->index == 0 && !reverse) out = ref_out;
+                else if (r->index == 1 && reverse) out = ref_out; // reverse, ALT writes to ref.bam
+                else if (!refonly && r->index == 1 && !reverse) out = alt_out;
+                else if (!refonly && r->index == 0 && reverse) out = alt_out; // reverse, REF writes to alt.bam
+                else if (!refonly && r->index == 2) out = ref_out;
+                else if (!refonly && r->index == 3) out = mul_out;
+                else if (r->index == 4) out = unk_out;
+                if (debug >= 1) {
+                    fprintf(stderr, "%f\t%f\t%f\t%d\t", r->prgu, r->prgv, r->pout, r->index);
+                    fprintf(stderr, "%s\t%s\t%d\t", r->name, r->chr, r->pos);
+                    fprintf(stderr, "%s\t%s\t%p\n", r->flag, r->qseq, out);
+                }
+            }
+        }
+        free(flag); flag = NULL;
 
         if (out != NULL) {
             int r = sam_write1(out, bam_header, aln);
@@ -380,6 +385,7 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
 
     for (k = kh_begin(other_read_hash); k != kh_end(other_read_hash); k++) {
         if (kh_exist(other_read_hash, k)) {
+            //print_status("# key to exclude, from other BAM:\t%s", kh_key(other_read_hash, k));
             read_destroy(kh_val(other_read_hash, k)); free(kh_val(other_read_hash, k)); kh_val(other_read_hash, k) = NULL;
         }
     }
@@ -435,8 +441,8 @@ static int readlist_read(FILE *file) {
             if (*(s + n) != ',') break;
         }
 
-        char key[256];
-        snprintf(key, 256, "%s\t%d", name, is_read2);
+        char key[strlen(name) + 3];
+        snprintf(key, strlen(name) + 3, "%s\t%d", name, is_read2);
 
         int absent;
         khiter_t k = kh_put(rh, read_hash, key, &absent);
@@ -576,8 +582,8 @@ static void bam_read(const char *bam_file, int ind) {
         prgu = log_add_exp(pout, prgu);
         prgv = log_add_exp(pout, prgv);
 
-        char key[256];
-        snprintf(key, 256, "%s\t%d", read->name, read->is_read2);
+        char key[strlen(read->name) + 3];
+        snprintf(key, strlen(read->name) + 3, "%s\t%d", read->name, read->is_read2);
 
         if (debug >= 2) {
             fprintf(stderr, "%f\t%f\t%f\t", prgu, prgv, pout);
@@ -632,8 +638,8 @@ static void combine_pe() {
     for (k = kh_begin(read_hash); k != kh_end(read_hash); k++) {
 		if (kh_exist(read_hash, k)) {
             read_t *r = kh_val(read_hash, k);
-            char key[256];
-            snprintf(key, 256, "%s\t0", r->name);
+            char key[strlen(r->name) + 3];
+            snprintf(key, strlen(r->name) + 3, "%s\t0", r->name);
 
             int absent;
             khiter_t k2 = kh_put(orh, other_read_hash, key, &absent);
@@ -658,8 +664,8 @@ static void combine_pe() {
                 r2->prgu += r->prgu;
                 r2->prgv += r->prgv;
                 r2->pout += r->pout;
-                char flag[256];
-                snprintf(flag, 256, "%s;%s", r2->flag, r->flag);
+                char flag[strlen(r2->flag) + strlen(r->flag) + 2];
+                snprintf(flag, strlen(r2->flag) + strlen(r->flag) + 2, "%s;%s", r2->flag, r->flag);
                 free(r2->flag); r2->flag = NULL;
                 r2->flag = strdup(flag);
             }
@@ -839,9 +845,9 @@ int main(int argc, char **argv) {
         readinfo_classify();
 
         if (!listonly) {
-            char output_prefix1[256], output_prefix2[256];
-            snprintf(output_prefix1, 256, "%s1", output_prefix);
-            snprintf(output_prefix2, 256, "%s2", output_prefix);
+            char output_prefix1[strlen(output_prefix) + 2], output_prefix2[strlen(output_prefix) + 2];
+            snprintf(output_prefix1, strlen(output_prefix) + 2, "%s1", output_prefix);
+            snprintf(output_prefix2, strlen(output_prefix) + 2, "%s2", output_prefix);
 
             bam_write(bam_file1, output_prefix1, other_bam, 0);
             bam_write(bam_file2, output_prefix2, other_bam, 1);

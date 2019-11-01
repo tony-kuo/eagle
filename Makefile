@@ -5,8 +5,9 @@ HTSDIR=htslib
 INCLUDES=-I$(HTSDIR)
 LFLAGS=-L$(HTSDIR)
 LIBS=$(HTSDIR)/libhts.a
-#LDLIBS=-lm -lz -lpthread # older version of htslib
-LDLIBS=-lm -lz -llzma -lbz2 -lpthread
+#LDLIBS=-lm -lz -lpthread # older version of htslib, 1.3
+#LDLIBS=-lm -lz -llzma -lbz2 -lpthread # older version of htslib, 1.6
+LDLIBS=-lm -lz -llzma -lbz2 -lpthread -lcurl
 
 PREFIX = /usr/local
 MAIN = eagle

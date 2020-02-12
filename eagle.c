@@ -471,7 +471,9 @@ static char *evaluate(vector_t *var_set) {
     read_t **read_data = (read_t **)read_list->data;
 
     /* Variant combinations as a vector of vectors */
-    vector_t *combo = powerset(var_set->len, maxh, 0);
+    //vector_t *combo = powerset(var_set->len, maxh);
+    vector_t *combo = all_and_singletons(var_set->len);
+
     /*
     for (seti = 0; seti < combo->len; seti++) { // Print combinations
         fprintf(stderr, "%d\t", (int)seti); 

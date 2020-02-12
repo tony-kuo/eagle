@@ -210,7 +210,7 @@ void derive_combo(vector_t *combo, vector_int_t *prev, int n) { // Derive the co
     //int ii, jj; for (ii = 0; ii < combo->size; ii++) { vector_int_t **c = (vector_int_t **)combo->data; fprintf(stderr, "%d\t", (int)ii); for (jj = 0; jj < c[ii]->size; jj++) { fprintf(stderr, "%d;", c[ii]->data[jj]); } fprintf(stderr, "\n"); } fprintf(stderr, "\n");
 }
 
-vector_t *powerset(int n, int maxh) {
+vector_t *powerset(int n, int maxh, int fullset) {
     vector_t *combo = vector_create(n + 1, VOID_T);
     if (n == 1) {
         combinations(combo, 1, n);
@@ -218,10 +218,10 @@ vector_t *powerset(int n, int maxh) {
     else if (n > 1) {
         combinations(combo, n, n);
         combinations(combo, 1, n);
-        /*
-        int k; 
-        for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; k++) combinations(combo, k, n);
-        */
+        if (fullset) {
+            int k;
+            for (k = 2; k <= n - 1 && (int)combo->size - n - 1 < maxh; k++) combinations(combo, k, n);
+        }
         /*
         int i = 0;
         while (++i < combo->size) {

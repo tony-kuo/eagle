@@ -471,7 +471,7 @@ static char *evaluate(vector_t *var_set) {
     read_t **read_data = (read_t **)read_list->data;
 
     /* Variant combinations as a vector of vectors */
-    vector_t *combo = powerset(var_set->len, maxh);
+    vector_t *combo = powerset(var_set->len, maxh, 0);
     /*
     for (seti = 0; seti < combo->len; seti++) { // Print combinations
         fprintf(stderr, "%d\t", (int)seti); 
@@ -484,8 +484,8 @@ static char *evaluate(vector_t *var_set) {
 
     for (seti = 0; seti < combo->len; seti++) { // all, singles
         stats_t *s = stats_create((vector_int_t *)combo->data[seti], read_list->len);
-        vector_add(stats, s);
         calc_likelihood(s, var_set, refseq, refseq_length, read_data, read_list->len, seti, seqnt_map);
+        vector_add(stats, s);
     }
     if (var_set->len > 1) { // doubles and beyond
         heap_t *h = heap_create(STATS_T);
@@ -499,8 +499,8 @@ static char *evaluate(vector_t *var_set) {
             derive_combo(c, s->combo, var_set->len);
             for (i = 0; i < c->len; i++) {
                 stats_t *s = stats_create((vector_int_t *)c->data[i], read_list->len);
+                calc_likelihood(s, var_set, refseq, refseq_length, read_data, read_list->len, stats->len, seqnt_map);
                 vector_add(stats, s);
-                calc_likelihood(s, var_set, refseq, refseq_length, read_data, read_list->len, stats->len - 1, seqnt_map);
                 heap_push(h, s->mut, s);
             }
             vector_free(c); //combos in stat so don't destroy

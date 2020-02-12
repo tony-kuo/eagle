@@ -48,7 +48,7 @@ double log_sum_exp(const double *a, int size);
 
 void combinations(vector_t *combo, int k, int n);
 void derive_combo(vector_t *combo, vector_int_t *prev, int n);
-vector_t *powerset(int n, int maxh);
+vector_t *powerset(int n, int maxh, int fullset);
 int is_subset (int arr1[], int arr2[], int m, int n);
 
 u_int32_t fnv_32a_str(char *str);

@@ -20,9 +20,9 @@ grep '^chr.A' refseq.gtf > refseq.chrA.gtf
 grep '^chr.B' refseq.gtf > refseq.chrB.gtf
 grep '^chr.D' refseq.gtf > refseq.chrD.gtf
 
-gffread -g $REF.fa -x chrA.cds.fa refseq.chrA.gtf
-gffread -g $REF.fa -x chrB.cds.fa refseq.chrB.gtf
-gffread -g $REF.fa -x chrD.cds.fa refseq.chrD.gtf
+gffread -g $REF.fa -w chrA.cds.fa refseq.chrA.gtf
+gffread -g $REF.fa -w chrB.cds.fa refseq.chrB.gtf
+gffread -g $REF.fa -w chrD.cds.fa refseq.chrD.gtf
 
 # Reciprocal best hit
 lastdb -uNEAR -R01 chrA_db chrA.cds.fa

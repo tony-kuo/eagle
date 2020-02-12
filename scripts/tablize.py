@@ -73,7 +73,7 @@ def readFiles(files, idcol, valcol, delim, addtogether):
                 if key not in entry:
                     entry[key] = {}
                     entry[key][fn] = values
-                elif key in entry and addtogether:
+                elif key in entry and fn in entry[key] and addtogether:
                     entry[key][fn] = [float(values[i]) + float(entry[key][fn][i]) for i in range(0, len(values))]
                 else:
                     entry[key][fn] = values
@@ -145,7 +145,7 @@ def main():
     parser.add_argument('-miss', type=str, default='', help='symbol for missing values (default: '')')
     parser.add_argument('-mean', action='store_true', help='sort by mean of values (numerical data only), ascending order, rather than id')
     parser.add_argument('-desc', action='store_true', help='sort by descending order')
-    parser.add_argument('-add', action='store_true', help='if duplicate id then add the values to aggregate (numerical data only)')
+    parser.add_argument('-add', action='store_true', help='if duplicate id in the same file then add the values to aggregate (numerical data only)')
     args = parser.parse_args()
 
     global existall, existfirst, notexistall, existone, notexistfirst, header, missing, skipheaders, sortbymean, sortdesc
@@ -161,6 +161,11 @@ def main():
     sortdesc = args.desc
 
     (entry, numid, numval) = readFiles(args.files, args.i, args.c, args.delim, args.add)
+    #if addtogetherfiles:
+    #    for key in entry:
+    #        a = sum([float(x) for x in entry[key] for x in entry[key][x]])
+    #        entry[key][files[0]] = [str(a)]
+    #    args.files = [args.files[0]]
     writeTable(entry, numid, numval, args.files)
 
 if __name__ == '__main__':

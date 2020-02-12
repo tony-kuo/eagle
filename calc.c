@@ -29,7 +29,7 @@ void init_q2p_table(double *p_match, double *p_mismatch, int size) {
 
 void init_seqnt_map(int *seqnt_map) {
     /* Mapping table, symmetrical according to complement */
-    memset(seqnt_map, 0, sizeof (int) * 26);
+    memset(seqnt_map, 0, sizeof (int) * 58);
 
     seqnt_map['A'-'A'] = 0;
     seqnt_map['C'-'A'] = 1;

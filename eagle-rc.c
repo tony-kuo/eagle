@@ -433,7 +433,6 @@ static int readlist_read(FILE *file) {
 
         int n;
         int is_read2 = 0;
-        if (flag[0] == '-') paired = 1;
 
         char *s, token[strlen(flag) + 1];
         for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {

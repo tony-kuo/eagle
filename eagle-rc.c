@@ -39,7 +39,7 @@ static int listonly;
 static int readlist;
 static int reclassify;
 static int refonly;
-static int paired;
+static int paired, already_paired;
 static int pao;
 static int isc;
 static int nodup;
@@ -349,7 +349,7 @@ static void bam_write(const char *bam_file, const char *output_prefix, char *oth
         out = NULL;
         char *name = (char *)aln->data;
 
-        if (paired) is_read2 = 0;
+        if (paired || already_paired) is_read2 = 0;
         char key[strlen(name) + 3];
         snprintf(key, strlen(name) + 3, "%s\t%d", name, is_read2);
 
@@ -433,6 +433,7 @@ static int readlist_read(FILE *file) {
 
         int n;
         int is_read2 = 0;
+        if (flag[0] == '-') already_paired = 1;
 
         char *s, token[strlen(flag) + 1];
         for (s = flag; sscanf(s, "%[^,]%n", token, &n) == 1; s += n + 1) {
@@ -729,6 +730,7 @@ int main(int argc, char **argv) {
     reclassify = 0;
     refonly = 0;
     paired = 0;
+    already_paired = 0;
     pao = 0;
     isc = 0;
     nodup = 0;
@@ -866,7 +868,7 @@ int main(int argc, char **argv) {
         print_status("# Classified list: %s\t%i reads\t%s", filename, nreads, asctime(time_info));
 
         if (paired) combine_pe();
-        if (paired || reclassify) readinfo_classify();
+        if (reclassify) readinfo_classify();
         if (!listonly) bam_write(bam_file, output_prefix, other_bam, 0);
     }
     else {

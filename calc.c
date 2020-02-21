@@ -198,7 +198,6 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
     for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = 0;
 
     double max_score = 0;
-    double x_drop = 20 + (8 * log(read_length)) - 1; // minimum alignment score - 1
     for (i = start; i < end; i++) {
         double row_max = 0;
         double upleft, open, extend;
@@ -223,11 +222,9 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
             curr[j] = upleft;
             if (a_gap_curr[j] >= curr[j]) curr[j] = a_gap_curr[j];
             if (b_gap_curr[j] >= curr[j]) curr[j] = b_gap_curr[j];
-            if (curr[j] < row_max - x_drop) break;
-            else if (curr[j] > row_max) row_max = curr[j];
+            if (curr[j] > row_max) row_max = curr[j];
         }
-        if (row_max < max_score - x_drop) break;
-        else if (row_max > max_score) max_score = row_max;
+        if (row_max > max_score) max_score = row_max;
 
         memcpy(prev, curr, sizeof (prev));
         memcpy(b_gap_prev, b_gap_curr, sizeof (b_gap_prev));

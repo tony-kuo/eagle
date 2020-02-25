@@ -187,6 +187,78 @@ double calc_prob(const double *matrix, int read_length, const char *seq, int seq
     return probability;
 }
 
+double x_drop(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end, int gap_op, int gap_ex, int *seqnt_map) { /* short in long version */
+    double S[read_length + 1][end - start + 2]; // M = read length; N = end - start + 1
+    double A[read_length + 1][end - start + 2];
+    double B[read_length + 1][end - start + 2];
+
+    double X = 20 + (8 * log(read_length)) - 1; // minimum alignment score - 1
+    double max_score = 0;
+    double t_max = 0;
+    int k = 0;
+    int L = 0;
+    int U = 0;
+    S[0][0] = 0;
+    A[0][0] = 0;
+    B[0][0] = 0;
+
+    do {
+        int i, j;
+        k++;
+        for (i = L; i <= U + 1; i++) {
+            double upleft, open, extend;
+            j = k - i;
+
+            upleft = 0;
+            if (i > L && i <= U) {
+                if (j > 0) {
+                    //printf(">");
+                    int n = j - 1 + start;
+                    int c = seq[n] - 'A';
+                    if (c < 0 || c > 57 || (c > 25 && c < 32)) { exit_err("Character %c at pos %d (%d) not in valid alphabet\n", seq[n], n, seq_length); }
+                    upleft = S[i - 1][j - 1] + matrix[read_length * seqnt_map[c] + (i - 1)];
+                }
+            }
+
+            A[i][j] = 0;
+            if (i <= U) {
+                open = (j > 0) ? S[i][j - 1] - gap_op : -gap_op;
+                extend = (j > 0) ? A[i][j - 1] - gap_ex : -gap_ex;
+                A[i][j] = (open >= extend) ? open : extend;
+            }
+
+            B[i][j] = 0;
+            if (i > L) {
+                open = S[i - 1][j] - gap_op;
+                extend = B[i - 1][j] - gap_ex;
+                B[i][j] = (open >= extend) ? open : extend;
+            }
+
+            S[i][j] = upleft;
+            if (A[i][j] > S[i][j]) S[i][j] = A[i][j];
+            if (B[i][j] > S[i][j]) S[i][j] = B[i][j];
+            if (S[i][j] > t_max) t_max = S[i][j];
+            else if (S[i][j] < max_score - X) S[i][j] = -INFINITY;
+            //printf("%d, %d, %d \t %d, %d \t%f\t %f\t %f\t %f\t %f\t %f\n", k, L, U, i, j, S[i][j], upleft, A[i][j], B[i][j], t_max, max_score);
+        }
+        //L = 0; U = k;
+        for (i = L; i <= U + 1; i++) {
+            //printf("L: %d, %d, %f\n", i, k-i, S[i][k-i]);
+            if (S[i][k - i] > -INFINITY) { L = i; break; }
+        }
+        for (i = U + 1; i >= L; i--) {
+            //printf("U: %d, %d, %f\n", i, k-i, S[i][k-i]);
+            if (S[i][k - i] > -INFINITY) { U = i; break; }
+        }
+        L = (L > k + 1 - (end - start + 1)) ? L : k + 1 - (end - start + 1);
+        U = (U < read_length - 1) ?  U : read_length - 1;
+        if (t_max > max_score) max_score = t_max;
+    }
+    while (L <= U + 1);
+    exit(0);
+    return max_score;
+}
+
 double smith_waterman_gotoh(const double *matrix, int read_length, const char *seq, int seq_length, int start, int end, int gap_op, int gap_ex, int *seqnt_map) { /* short in long version */
     int i, j;
 
@@ -198,7 +270,7 @@ double smith_waterman_gotoh(const double *matrix, int read_length, const char *s
     for (j = 0; j < read_length + 1; j++) b_gap_prev[j] = 0;
 
     double max_score = 0;
-    for (i = start; i < end; i++) {
+    for (i = start; i <= end; i++) {
         double row_max = 0;
         double upleft, open, extend;
 
@@ -239,6 +311,7 @@ double calc_prob_region_dp(const double *matrix, int read_length, const char *se
     if (end < 0) end = 0;
     else if (end >= seq_length) end = seq_length - 1;
     return smith_waterman_gotoh(matrix, read_length, seq, seq_length, start, end, gap_op, gap_ex, seqnt_map);
+    //return x_drop(matrix, read_length, seq, seq_length, start, end, gap_op, gap_ex, seqnt_map);
 }
 
 double calc_prob_dp(const double *matrix, int read_length, const char *seq, int seq_length, int pos, int *splice_pos, int *splice_offset, int n_splice, int gap_op, int gap_ex, int *seqnt_map) {

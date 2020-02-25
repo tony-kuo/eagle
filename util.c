@@ -139,16 +139,15 @@ double log_sum_exp(const double *a, int size) {
     v = _mm256_set1_pd(0);
     __m256d me = _mm256_set1_pd(max_exp);
     for (i = 0; i < n4; i += 4) {
-        __m256d t = _mm256_load_pd(&a[i]); // load vector of 4 x double
+        __m256d t = _mm256_loadu_pd(&a[i]); // load vector of 4 x double
         t = _mm256_sub_pd(t, me);          // subtract max_exp
         t = _mm256_exp_pd(t);              // exponential, *not in gcc* unfortunately
-        t = _mm256_set_pd(*d1, *d2, *d3, *d4);
         v = _mm256_add_pd(v, t);           // accumulate partial sum vector
     }
     // horizontal add of four partials
     v = _mm256_hadd_pd(v, _mm256_permute2f128_pd(v, v, 1));
     v = _mm256_hadd_pd(v, v);
-    double *r = (double *)&v;
+    r = (double *)&v;
     double s = r[0];
     for (i = n4; i < size; i++) s += exp(a[i] - max_exp); // non-vectorized loop for remainder
     return log(s) + max_exp;

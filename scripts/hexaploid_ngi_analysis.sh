@@ -1,66 +1,13 @@
 #! /bin/bash
-# Example workflow using EAGLE-RC for hexaploid wheat
-# gffread at: https://github.com/gpertea/gffread.  
+# Example workflow using EAGLE-RC in ngi mode for hexaploid wheat
 # LAST at: http://last.cbrc.jp/ 
 # STAR at: https://github.com/alexdobin/STAR
 # featureCounts at: http://bioinf.wehi.edu.au/featureCounts/
-
-## Homeolog identification
 
 # The lyrata gene and scaffold ids should be modified to prepend Alyr_ or some other way make ids unique
 REF=Taes_genome_2017_05
 GTF=iwgsc_refseqv1.0_HighConf_UTR_2017May05
 CPU=8
-
-# Extract transcript sequences
-gffread -T -o refseq.gtf $GTF.gff3 # gff to gtf
-gffread -g $REF.fa -w refseq.fa $GTF.gff3
-
-grep '^chr.A' refseq.gtf > refseq.chrA.gtf
-grep '^chr.B' refseq.gtf > refseq.chrB.gtf
-grep '^chr.D' refseq.gtf > refseq.chrD.gtf
-
-gffread -g $REF.fa -w chrA.cds.fa refseq.chrA.gtf
-gffread -g $REF.fa -w chrB.cds.fa refseq.chrB.gtf
-gffread -g $REF.fa -w chrD.cds.fa refseq.chrD.gtf
-
-# Reciprocal best hit
-lastdb -uNEAR -R01 chrA_db chrA.cds.fa
-lastdb -uNEAR -R01 chrB_db chrB.cds.fa
-lastdb -uNEAR -R01 chrD_db chrD.cds.fa
-
-lastal chrA_db -P$CPU -D10000000000 chrB.cds.fa | last-map-probs -m 0.49 > A.B.maf
-lastal chrB_db -P$CPU -D10000000000 chrA.cds.fa | last-map-probs -m 0.49 > B.A.maf
-
-lastal chrB_db -P$CPU -D10000000000 chrD.cds.fa | last-map-probs -m 0.49 > B.D.maf
-lastal chrD_db -P$CPU -D10000000000 chrB.cds.fa | last-map-probs -m 0.49 > D.B.maf
-
-lastal chrA_db -P$CPU -D10000000000 chrD.cds.fa | last-map-probs -m 0.49 > A.D.maf
-lastal chrD_db -P$CPU -D10000000000 chrA.cds.fa | last-map-probs -m 0.49 > D.A.maf
-
-# Create VCFs based on genotype differences between homeologs
-python scripts/homeolog_genotypes.py -o A.vs.B -f exon -g refseq.gtf A.B.maf B.A.maf # coordinates based on A
-python scripts/homeolog_genotypes.py -o B.vs.A -f exon -g refseq.gtf B.A.maf A.B.maf # coordinates based on B
-
-python scripts/homeolog_genotypes.py -o B.vs.D -f exon -g refseq.gtf B.D.maf D.B.maf # coordinates based on B
-python scripts/homeolog_genotypes.py -o D.vs.B -f exon -g refseq.gtf D.B.maf B.D.maf # coordinates based on D
-
-python scripts/homeolog_genotypes.py -o A.vs.D -f exon -g refseq.gtf A.D.maf D.A.maf # coordinates based on A
-python scripts/homeolog_genotypes.py -o D.vs.A -f exon -g refseq.gtf D.A.maf A.D.maf # coordinates based on D
-
-# Triple copy homeologs
-perl triple_homeolog.pl A.vs.B.reciprocal_best B.vs.D.reciprocal_best A.vs.D.reciprocal_best > homeolog.ABD.list
-
-# Subgenome unique transcripts
-cat A.vs.B.reciprocal_best A.vs.D.reciprocal_best | cut -f1 | sort | uniq > A.vs.all.list
-cat B.vs.A.reciprocal_best B.vs.D.reciprocal_best | cut -f1 | sort | uniq > B.vs.all.list
-cat D.vs.A.reciprocal_best D.vs.B.reciprocal_best | cut -f1 | sort | uniq > D.vs.all.list
-grep $'mRNA\t' $GTF.gff3 | grep $'chr.A\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrA.cds.list
-grep $'mRNA\t' $GTF.gff3 | grep $'chr.B\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrB.cds.list
-grep $'mRNA\t' $GTF.gff3 | grep $'chr.D\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrD.cds.list
-python scripts/tablize.py -v0 A.vs.all.list chrA.cds.list > chrA.only.list
-python scripts/tablize.py -v0 B.vs.all.list chrB.cds.list > chrB.only.list
-python scripts/tablize.py -v0 D.vs.all.list chrD.cds.list > chrD.only.list
 
 ## Origin specific alignment with STAR
 GENDIR=/project/wheat/stargenome
@@ -84,27 +31,14 @@ for n in $CHR; do
 done
 
 ## EAGLE-RC: read classification and the quantification with featureCounts
-# Put the appropriate vcfs to the corresponding dir, i.e. A.vs.*.gtf.vcf in chrA
-for n in $CHR; do
-    cd $n
-    for i in `ls *.refsort.bam`; do 
-        F=`basename $i .refsort.bam`
-        for j in `ls *.gtf.vcf`; do
-            V=`basename $j .gtf.vcf`
-            eagle -t 8 -a $F.refsort.bam -r ../$REF.$n.fa -v $V.gtf.vcf --splice --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
-            eagle-rc --listonly -a $F.refsort.bam -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
-        done
-    done
-    cd ..
-done
+~/eagle/eagle-rc --ngi --listonly --splice --isc --ref1=$REF.chrA.fa --ref2=$REF.chrB.fa --bam1=$F.chrA.refsort.bam --bam2=$F.chrB.refsort.bam > $F.AvsB.list
+~/eagle/eagle-rc --ngi --listonly --splice --isc --ref1=$REF.chrA.fa --ref2=$REF.chrD.fa --bam1=$F.chrA.refsort.bam --bam2=$F.chrD.refsort.bam > $F.AvsD.list
+~/eagle/eagle-rc --ngi --listonly --splice --isc --ref1=$REF.chrB.fa --ref2=$REF.chrD.fa --bam1=$F.chrB.refsort.bam --bam2=$F.chrD.refsort.bam > $F.BvsD.list
 
 mkdir -p eagle
 for i in `ls *_R1.fastq.gz`; do
     F=`basename $i _R1.fastq.gz`
-    python scripts/ref3_consensus.py --pe -u -d -o eagle/$F.ref \
-        -A chrA/$F.A.vs.B.list chrA/$F.A.vs.D.list \
-        -B chrB/$F.B.vs.A.list chrB/$F.B.vs.D.list \
-        -D chrD/$F.D.vs.A.list chrD/$F.D.vs.B.list
+    python ref_ngi_consensus.py --pe -u -d -o eagle/$F.ref -AB chrA/$F.A.vs.B.list -AD chrA/$F.A.vs.D.list -BD chrB/$F.B.vs.D.list
     eagle-rc --refonly --readlist -a chrA/$F.refsort.bam -o eagle/$F.chrA eagle/$F.ref.chrA.list
     eagle-rc --refonly --readlist -a chrB/$F.refsort.bam -o eagle/$F.chrB eagle/$F.ref.chrB.list
     eagle-rc --refonly --readlist -a chrD/$F.refsort.bam -o eagle/$F.chrD eagle/$F.ref.chrD.list

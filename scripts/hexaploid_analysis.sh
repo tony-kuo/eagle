@@ -20,23 +20,23 @@ grep '^chr.A' refseq.gtf > refseq.chrA.gtf
 grep '^chr.B' refseq.gtf > refseq.chrB.gtf
 grep '^chr.D' refseq.gtf > refseq.chrD.gtf
 
-gffread -g $REF.fa -w chrA.cds.fa refseq.chrA.gtf
-gffread -g $REF.fa -w chrB.cds.fa refseq.chrB.gtf
-gffread -g $REF.fa -w chrD.cds.fa refseq.chrD.gtf
+gffread -g $REF.fa -w chrA.exon.fa refseq.chrA.gtf
+gffread -g $REF.fa -w chrB.exon.fa refseq.chrB.gtf
+gffread -g $REF.fa -w chrD.exon.fa refseq.chrD.gtf
 
 # Reciprocal best hit
-lastdb -uNEAR -R01 chrA_db chrA.cds.fa
-lastdb -uNEAR -R01 chrB_db chrB.cds.fa
-lastdb -uNEAR -R01 chrD_db chrD.cds.fa
+lastdb -uNEAR -R01 chrA_db chrA.exon.fa
+lastdb -uNEAR -R01 chrB_db chrB.exon.fa
+lastdb -uNEAR -R01 chrD_db chrD.exon.fa
 
-lastal chrA_db -P$CPU -D10000000000 chrB.cds.fa | last-map-probs -m 0.49 > A.B.maf
-lastal chrB_db -P$CPU -D10000000000 chrA.cds.fa | last-map-probs -m 0.49 > B.A.maf
+lastal chrA_db -P$CPU -D10000000000 chrB.exon.fa | last-map-probs -m 0.49 > A.B.maf
+lastal chrB_db -P$CPU -D10000000000 chrA.exon.fa | last-map-probs -m 0.49 > B.A.maf
 
-lastal chrB_db -P$CPU -D10000000000 chrD.cds.fa | last-map-probs -m 0.49 > B.D.maf
-lastal chrD_db -P$CPU -D10000000000 chrB.cds.fa | last-map-probs -m 0.49 > D.B.maf
+lastal chrB_db -P$CPU -D10000000000 chrD.exon.fa | last-map-probs -m 0.49 > B.D.maf
+lastal chrD_db -P$CPU -D10000000000 chrB.exon.fa | last-map-probs -m 0.49 > D.B.maf
 
-lastal chrA_db -P$CPU -D10000000000 chrD.cds.fa | last-map-probs -m 0.49 > A.D.maf
-lastal chrD_db -P$CPU -D10000000000 chrA.cds.fa | last-map-probs -m 0.49 > D.A.maf
+lastal chrA_db -P$CPU -D10000000000 chrD.exon.fa | last-map-probs -m 0.49 > A.D.maf
+lastal chrD_db -P$CPU -D10000000000 chrA.exon.fa | last-map-probs -m 0.49 > D.A.maf
 
 # Create VCFs based on genotype differences between homeologs
 python scripts/homeolog_genotypes.py -o A.vs.B -f exon -g refseq.gtf A.B.maf B.A.maf # coordinates based on A
@@ -55,12 +55,12 @@ perl triple_homeolog.pl A.vs.B.reciprocal_best B.vs.D.reciprocal_best A.vs.D.rec
 cat A.vs.B.reciprocal_best A.vs.D.reciprocal_best | cut -f1 | sort | uniq > A.vs.all.list
 cat B.vs.A.reciprocal_best B.vs.D.reciprocal_best | cut -f1 | sort | uniq > B.vs.all.list
 cat D.vs.A.reciprocal_best D.vs.B.reciprocal_best | cut -f1 | sort | uniq > D.vs.all.list
-grep $'mRNA\t' $GTF.gff3 | grep $'chr.A\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrA.cds.list
-grep $'mRNA\t' $GTF.gff3 | grep $'chr.B\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrB.cds.list
-grep $'mRNA\t' $GTF.gff3 | grep $'chr.D\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrD.cds.list
-python scripts/tablize.py -v0 A.vs.all.list chrA.cds.list > chrA.only.list
-python scripts/tablize.py -v0 B.vs.all.list chrB.cds.list > chrB.only.list
-python scripts/tablize.py -v0 D.vs.all.list chrD.cds.list > chrD.only.list
+grep $'mRNA\t' $GTF.gff3 | grep $'chr.A\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrA.exon.list
+grep $'mRNA\t' $GTF.gff3 | grep $'chr.B\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrB.exon.list
+grep $'mRNA\t' $GTF.gff3 | grep $'chr.D\t' | perl -ne 'chomp; m/ID=(.*?);/; print "$1\n";' > chrD.exon.list
+python scripts/tablize.py -v0 A.vs.all.list chrA.exon.list > chrA.only.list
+python scripts/tablize.py -v0 B.vs.all.list chrB.exon.list > chrB.only.list
+python scripts/tablize.py -v0 D.vs.all.list chrD.exon.list > chrD.only.list
 
 ## Origin specific alignment with STAR
 GENDIR=/project/wheat/stargenome

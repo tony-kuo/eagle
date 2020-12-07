@@ -17,48 +17,13 @@ exit;
 my %opt = (); &getopts( "b:", \%opt );
 my $faidx = defined $opt{b} ? $opt{b} : ""; 
 
-my %ab = ();
-my $fh = &open_maybe_compressed($ARGV[0]);
-while (my $line = $fh->getline) {
-    chomp $line;
-    my @t = split(/\s+/, $line);
-    if (scalar @t == 3) {
-        $ab{$t[1]} = $t[2];
-    }
-    else {
-        $ab{$t[0]} = $t[1];
-    }
-}
-
-my %bd = ();
-$fh = &open_maybe_compressed($ARGV[1]);
-while (my $line = $fh->getline) {
-    chomp $line;
-    my @t = split(/\s+/, $line);
-    if (scalar @t == 3) {
-        $bd{$t[1]} = $t[2];
-    }
-    else {
-        $bd{$t[0]} = $t[1];
-    }
-}
-
-my %ad = ();
-$fh = &open_maybe_compressed($ARGV[2]);
-while (my $line = $fh->getline) {
-    chomp $line;
-    my @t = split(/\s+/, $line);
-    if (scalar @t == 3) {
-        $ad{$t[1]} = $t[2];
-    }
-    else {
-        $ad{$t[0]} = $t[1];
-    }
-}
+my %ab = &read_file($ARGV[0]);
+my %bd = &read_file($ARGV[1]);
+my %ad = &read_file($ARGV[2]);
 
 my %bed = ();
 if (length($faidx) > 0) {
-    $fh = &open_maybe_compressed($faidx);
+    my $fh = &open_maybe_compressed($faidx);
     while (my $line = $fh->getline) {
         chomp $line;
         my @t = split(/\s+/, $line);
@@ -93,4 +58,21 @@ sub open_maybe_compressed {
         }
     }
     die "could not open $fname";
+}
+
+sub read_file {
+    my($fname) = @_;
+    my %data = ();
+    my $fh = &open_maybe_compressed($fname);
+    while (my $line = $fh->getline) {
+        chomp $line;
+        my @t = split(/\s+/, $line);
+        if (scalar @t == 3) {
+            $data{$t[1]} = $t[2];
+        }
+        else {
+            $data{$t[0]} = $t[1];
+        }
+    }
+    return %data;
 }

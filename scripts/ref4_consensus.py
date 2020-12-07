@@ -92,7 +92,7 @@ def classifyTriple(key, chrA, chrB, chrC, idx, fh, p_threshold, m_threshold):
     else: f = '-'
     print('{}\t{}\t{}\t{}\t{}\t{}\t{}'.format(t[0], c, pos[i], x[i], y[i], z[i], f), file=fh[idx[i]])
 
-def writeTable(chrA, chrB, chrC, chrD, doubles, unique_reads, out_prefix):
+def writeTable(chrA, chrB, chrC, chrD, triples, doubles, unique_reads, out_prefix):
     fhA = open(out_prefix + '.chrA.list', 'w')
     fhB = open(out_prefix + '.chrB.list', 'w')
     fhC = open(out_prefix + '.chrC.list', 'w')
@@ -133,13 +133,13 @@ def writeTable(chrA, chrB, chrC, chrD, doubles, unique_reads, out_prefix):
     if doubles:
         for key in chrA:
             if key in chrB and key not in chrC and key not in chrD: classifyDouble(key, chrA, chrB, (0, 1), fh, p_threshold, m_threshold)
-            elif key not in chrB and key in chrC and key not in chrD: classifyDouble(key, chrA, chrD, (0, 2), fh, p_threshold, m_threshold)
+            elif key not in chrB and key in chrC and key not in chrD: classifyDouble(key, chrA, chrC, (0, 2), fh, p_threshold, m_threshold)
             elif key not in chrB and key not in chrC and key in chrD: classifyDouble(key, chrA, chrD, (0, 3), fh, p_threshold, m_threshold)
         for key in chrB:
-            if key not in chrA and key in chrC and key not in chrD: classifyDouble(key, chrB, chrD, (1, 2), fh, p_threshold, m_threshold)
+            if key not in chrA and key in chrC and key not in chrD: classifyDouble(key, chrB, chrC, (1, 2), fh, p_threshold, m_threshold)
             elif key not in chrA and key not in chrC and key in chrD: classifyDouble(key, chrB, chrD, (1, 3), fh, p_threshold, m_threshold)
         for key in chrC:
-            if key not in chrA and key not in chrB and key in chrD: classifyDouble(key, chrB, chrD, (2, 3), fh, p_threshold, m_threshold)
+            if key not in chrA and key not in chrB and key in chrD: classifyDouble(key, chrC, chrD, (2, 3), fh, p_threshold, m_threshold)
 
     if unique_reads:
         for key in chrA:
@@ -147,7 +147,7 @@ def writeTable(chrA, chrB, chrC, chrD, doubles, unique_reads, out_prefix):
         for key in chrB:
             if key not in chrA and key not in chrC and key not in chrD: classifySingle(key, chrB, fhB, p_threshold)
         for key in chrC:
-            if key not in chrA and key not in chrB and key not in chrD: classifySingle(key, chrB, fhB, p_threshold)
+            if key not in chrA and key not in chrB and key not in chrD: classifySingle(key, chrC, fhC, p_threshold)
         for key in chrD:
             if key not in chrA and key not in chrB and key not in chrC: classifySingle(key, chrD, fhD, p_threshold)
 
@@ -196,7 +196,7 @@ def main():
         chrB = combinePE(chrB)
         chrC = combinePE(chrC)
         chrD = combinePE(chrD)
-    writeTable(chrA, chrB, chrC, chrD, args.d, args.u, args.o)
+    writeTable(chrA, chrB, chrC, chrD, args.t, args.d, args.u, args.o)
 
 if __name__ == '__main__':
     main()

@@ -6,8 +6,8 @@
 
 ## Homeolog identification
 
-REF=Taes_genome_2017_05
-GTF=iwgsc_refseqv1.0_HighConf_UTR_2017May05
+REF=genome
+GTF=gtf_file
 CPU=8
 
 gffread -T -o refseq.gtf $GTF.gff3 # gff to gtf
@@ -16,10 +16,12 @@ gffread -g $REF.fa -w refseq.fa $GTF.gff3
 # Assuming we have the genome assemblies and annotation for the A, B, D subgenomes
 grep '^chr.A' refseq.gtf > refseq.chrA.gtf
 grep '^chr.B' refseq.gtf > refseq.chrB.gtf
+grep '^chr.C' refseq.gtf > refseq.chrC.gtf
 grep '^chr.D' refseq.gtf > refseq.chrD.gtf
 
 gffread -g $REF.fa -w chrA.exon.fa refseq.chrA.gtf
 gffread -g $REF.fa -w chrB.exon.fa refseq.chrB.gtf
+gffread -g $REF.fa -w chrC.exon.fa refseq.chrC.gtf
 gffread -g $REF.fa -w chrD.exon.fa refseq.chrD.gtf
 
 # **IMPORTANT**

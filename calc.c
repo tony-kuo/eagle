@@ -17,6 +17,12 @@ This program is distributed under the terms of the GNU General Public License
 #define M_1_LOG10E (1.0/M_LOG10E)
 #define LG3 (log(3.0))
 
+/* Mapping table */
+int seqnt_map[58];
+
+/* Fastq quality to probability table */
+double p_match[50], p_mismatch[50];
+
 void init_q2p_table(double *p_match, double *p_mismatch, int size) {
     /* FastQ quality score to ln probability lookup table */
     int i;

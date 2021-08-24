@@ -725,7 +725,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
     int flag_add = 1;
     while (flag_add) {
         flag_add = 0;
-        size_t var_set_len = var_set->len
+        size_t var_set_len = var_set->len;
         for (i = 0; i < var_set_len; i++) {
             vector_t *curr_set = (vector_t *)var_set->data[i];
             if (curr_set->len == 1) continue;
@@ -751,7 +751,7 @@ static void process(const vector_t *var_list, FILE *out_fh) {
                     variant_t *next = (variant_t *)curr_set->data[j + 1];
                     if (curr->pos == next->pos) {
                         flag_add = 1;
-                        vector_t *dup = vector_dup(curr_set);
+                        vector_t *dup = vector_dup_shallow(curr_set);
                         vector_del(curr_set, j);
                         vector_del(dup, j + 1);
                         vector_add(var_set, dup);

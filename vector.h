@@ -28,7 +28,7 @@ void vector_destroy(vector_t *a);
 void vector_add(vector_t *a, void *entry);
 void vector_del(vector_t *a, size_t i);
 void *vector_pop(vector_t *a);
-vector_t *vector_dup(vector_t *a);
+vector_t *vector_dup_shallow(vector_t *a);
 
 typedef struct {
     size_t len, size;

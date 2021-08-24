@@ -86,7 +86,7 @@ void *vector_pop(vector_t *a) {
     return entry;
 }
 
-vector_t *vector_dup(vector_t *a) {
+vector_t *vector_dup_shallow(vector_t *a) {
     vector_t *v = vector_create(a->size, a->type);
     v->len = a->len;
     memcpy(&(v->data[0]), &(a->data[0]), a->len * sizeof (void *));

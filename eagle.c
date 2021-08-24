@@ -755,8 +755,27 @@ static void process(const vector_t *var_list, FILE *out_fh) {
                         vector_del(curr_set, j);
                         vector_del(dup, j + 1);
                         vector_add(var_set, dup);
+                        j--; // to account for the deletion
                     }
                 }
+            }
+        }
+        for (i = 0; i < var_set->len - 1; i++) { // look for duplicate sets and remove if found
+            vector_t *curr_set = (vector_t *)var_set->data[i];
+            vector_t *next_set = (vector_t *)var_set->data[i + 1];
+            if (curr_set->len == 1) continue;
+            if (curr_set->len != next_set->len) continue;
+
+            int all_equal = 1;
+            for (j = 0; j < curr_set->len; j++) {
+                variant_t *curr = (variant_t *)curr_set->data[j];
+                variant_t *next = (variant_t *)next_set->data[j];
+                if (curr->pos != next->pos || strcmp(curr->chr, next->chr) != 0 || strcmp(curr->ref, next->ref) != 0 || strcmp(curr->alt, next->alt) != 0) all_equal = 0;
+            }
+            if (all_equal) {
+                vector_free(next_set);
+                vector_del(var_set, i + 1);
+                i--; // to account for the deletion
             }
         }
     } 

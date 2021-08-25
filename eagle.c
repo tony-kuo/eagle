@@ -760,25 +760,30 @@ static void process(const vector_t *var_list, FILE *out_fh) {
                 }
             }
         }
-        for (i = 0; i < var_set->len - 1; i++) { // look for duplicate sets and remove if found
-            vector_t *curr_set = (vector_t *)var_set->data[i];
-            vector_t *next_set = (vector_t *)var_set->data[i + 1];
-            if (curr_set->len == 1) continue;
+    }
+    /* Look for duplicate sets and remove if found */
+    for (i = 0; i < var_set->len - 1; i++) {
+        vector_t *curr_set = (vector_t *)var_set->data[i];
+        if (curr_set->len == 1) continue;
+        for (j = i + 1; j < var_set->len; j++) {
+            vector_t *next_set = (vector_t *)var_set->data[j];
+            if (next_set->len == 1) continue;
             if (curr_set->len != next_set->len) continue;
 
             int all_equal = 1;
-            for (j = 0; j < curr_set->len; j++) {
-                variant_t *curr = (variant_t *)curr_set->data[j];
-                variant_t *next = (variant_t *)next_set->data[j];
+            size_t k;
+            for (k = 0; k < curr_set->len; k++) {
+                variant_t *curr = (variant_t *)curr_set->data[k];
+                variant_t *next = (variant_t *)next_set->data[k];
                 if (curr->pos != next->pos || strcmp(curr->chr, next->chr) != 0 || strcmp(curr->ref, next->ref) != 0 || strcmp(curr->alt, next->alt) != 0) all_equal = 0;
             }
             if (all_equal) {
                 vector_free(next_set);
-                vector_del(var_set, i + 1);
-                i--; // to account for the deletion
+                vector_del(var_set, j);
+                j--; // to account for the deletion
             }
         }
-    } 
+    }
     if (sharedr == 1) { print_status("# Variants with shared reads to first in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
     else if (sharedr == 2) { print_status("# Variants with shared reads to any in set: %i entries\t%s", (int)var_set->len, asctime(time_info)); }
     else { print_status("# Variants within %d (max window: %d) bp: %i entries\t%s", distlim, maxdist, (int)var_set->len, asctime(time_info)); }

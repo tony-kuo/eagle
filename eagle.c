@@ -23,7 +23,7 @@ This program is distributed under the terms of the GNU General Public License
 #include "heap.h"
 
 /* Constants */
-#define VERSION "1.1.1"
+#define VERSION "1.1.3"
 #define ALPHA 1.3     // Factor to account for longer read lengths lowering the probability a sequence matching an outside paralogous source
 
 /* Precalculated log values */

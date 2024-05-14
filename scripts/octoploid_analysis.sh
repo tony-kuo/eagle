@@ -79,72 +79,72 @@ perl triple_homeolog.pl B.vs.C.reciprocal_best B.vs.D.reciprocal_best C.vs.D.rec
 
 
 ## Origin specific alignment with STAR for RNA-seq to Genome alignment
-#GENDIR=/project/wheat/stargenome
-#CHR="chrA chrB chrD"
-#for n in $CHR; do
-#    mkdir -p $GENDIR\_$n
-#    STAR --runMode genomeGenerate --genomeDir $GENDIR\_$n --genomeFastaFiles $REF.$n.fa --sjdbGTFfile $GTF.gtf --runThreadN $CPU
-#
-#    for i in `ls *_R1.fastq.gz`; do 
-#        F=`basename $i _R1.fastq.gz`
-#        mkdir -p ./$n/star_$F
-#        STAR --genomeDir $GENDIR\_$n --readFilesCommand zcat --readFilesIn $F\_R1.fastq.gz $F\_R2.fastq.gz \
-#            --outFileNamePrefix star_$F- --runThreadN $CPU --genomeLoad NoSharedMemory \
-#            --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonicalUnannotated \
-#            --outSJfilterCountUniqueMin 3 2 2 2 --outMultimapperOrder Random --outFilterType BySJout \
-#            --outStd SAM | samtools view -Shb - > ./$n/$F.bam
-#        samtools sort -o ./$n/$F.refsort.bam ./$n/$F.bam 
-#        samtools index -c ./$n/$F.refsort.bam
-#        mv star_$F-* ./$n/star_$F
-#    done
-#done
-
-## Origin specific alignment with Bowtie2 for RNA-seq to Transcriptome alignment
-GENDIR=/project/wheat/bowtie2
-CHR="chrA chrB chrD chrC"
+GENDIR=/project/wheat/stargenome
+CHR="chrA chrB chrD"
 for n in $CHR; do
-    mkdir -p $GENDIR
-    bowtie2-build -f $CHR.exon.fa $GENDIR/$n --threads $CPU
+    mkdir -p $GENDIR\_$n
+    STAR --runMode genomeGenerate --genomeDir $GENDIR\_$n --genomeFastaFiles $REF.$n.fa --sjdbGTFfile $GTF.gtf --runThreadN $CPU
 
     for i in `ls *_R1.fastq.gz`; do 
         F=`basename $i _R1.fastq.gz`
-        mkdir -p ./$n/bowtie2_$F
-        bowtie2 -x $GENDIR/$n -1 $F\_R1.fastq.gz -2 $F\_R2.fastq.gz --threads $CPU | samtools view -SbF4 - > ./$n/$F.bam
+        mkdir -p ./$n/star_$F
+        STAR --genomeDir $GENDIR\_$n --readFilesCommand zcat --readFilesIn $F\_R1.fastq.gz $F\_R2.fastq.gz \
+            --outFileNamePrefix star_$F- --runThreadN $CPU --genomeLoad NoSharedMemory \
+            --outSAMstrandField intronMotif --outFilterIntronMotifs RemoveNoncanonicalUnannotated \
+            --outSJfilterCountUniqueMin 3 2 2 2 --outMultimapperOrder Random --outFilterType BySJout \
+            --outStd SAM | samtools view -Shb - > ./$n/$F.bam
         samtools sort -o ./$n/$F.refsort.bam ./$n/$F.bam 
         samtools index -c ./$n/$F.refsort.bam
+        mv star_$F-* ./$n/star_$F
     done
 done
 
-## EAGLE-RC: read classification and the quantification with featureCounts
-# Put the appropriate vcfs to the corresponding dir, i.e. A.vs.*.gtf.vcf in chrA
-#CHR="chrA chrB chrD"
+## Origin specific alignment with Bowtie2 for RNA-seq to Transcriptome alignment
+#GENDIR=/project/wheat/bowtie2
+#CHR="chrA chrB chrD chrC"
 #for n in $CHR; do
-#    cd $n
-#    for i in `ls *.refsort.bam`; do 
-#        F=`basename $i .refsort.bam`
-#        for j in `ls *.gtf.vcf`; do
-#            V=`basename $j .gtf.vcf`
-#            eagle -t 8 -a $F.refsort.bam -r ../$REF.$n.fa -v $V.gtf.vcf --splice --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
-#            eagle-rc --listonly -a $F.refsort.bam -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
-#        done
+#    mkdir -p $GENDIR
+#    bowtie2-build -f $CHR.exon.fa $GENDIR/$n --threads $CPU
+#
+#    for i in `ls *_R1.fastq.gz`; do 
+#        F=`basename $i _R1.fastq.gz`
+#        mkdir -p ./$n/bowtie2_$F
+#        bowtie2 -x $GENDIR/$n -1 $F\_R1.fastq.gz -2 $F\_R2.fastq.gz --threads $CPU | samtools view -SbF4 - > ./$n/$F.bam
+#        samtools sort -o ./$n/$F.refsort.bam ./$n/$F.bam 
+#        samtools index -c ./$n/$F.refsort.bam
 #    done
-#    cd ..
 #done
 
-# For transcriptome alignments
-CHR="chrA chrB chrD chrC"
+## EAGLE-RC: read classification and the quantification with featureCounts
+# Put the appropriate vcfs to the corresponding dir, i.e. A.vs.*.gtf.vcf in chrA
+CHR="chrA chrB chrD"
 for n in $CHR; do
     cd $n
     for i in `ls *.refsort.bam`; do 
         F=`basename $i .refsort.bam`
         for j in `ls *.gtf.vcf`; do
             V=`basename $j .gtf.vcf`
-            eagle -t 8 -a $F.refsort.bam -r ../$CHR.exon.fa -v $V.raw.vcf --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
+            eagle -t 8 -a $F.refsort.bam -r ../$REF.$n.fa -v $V.gtf.vcf --splice --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
             eagle-rc --listonly -a $F.refsort.bam -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
         done
     done
     cd ..
 done
+
+# For transcriptome alignments
+#CHR="chrA chrB chrD chrC"
+#for n in $CHR; do
+#    cd $n
+#    for i in `ls *.refsort.bam`; do 
+#        F=`basename $i .refsort.bam`
+#        for j in `ls *.gtf.vcf`; do
+#            V=`basename $j .gtf.vcf`
+#            eagle -t 8 -a $F.refsort.bam -r ../$CHR.exon.fa -v $V.raw.vcf --rc 1> $F.$V.txt 2> $F.$V.readinfo.txt
+#            eagle-rc --listonly -a $F.refsort.bam -o $F.$V -v $F.$V.txt $F.$V.readinfo.txt > $F.$V.list
+#        done
+#    done
+#    cd ..
+#done
 
 
 mkdir -p eagle
@@ -159,8 +159,14 @@ for i in `ls *_R1.fastq.gz`; do
     eagle-rc --refonly --readlist -a chrB/$F.refsort.bam -o eagle/$F.chrB eagle/$F.ref.chrB.list
     eagle-rc --refonly --readlist -a chrC/$F.refsort.bam -o eagle/$F.chrC eagle/$F.ref.chrC.list
     eagle-rc --refonly --readlist -a chrD/$F.refsort.bam -o eagle/$F.chrD eagle/$F.ref.chrD.list
-#    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrA.gtf -o eagle/$F.chrA.counts.txt eagle/$F.chrA.ref.bam
-#    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrB.gtf -o eagle/$F.chrB.counts.txt eagle/$F.chrB.ref.bam
-#    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrC.gtf -o eagle/$F.chrC.counts.txt eagle/$F.chrC.ref.bam
-#    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrD.gtf -o eagle/$F.chrD.counts.txt eagle/$F.chrD.ref.bam
+    # For genome alignments
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrA.gtf -o eagle/$F.chrA.counts.txt eagle/$F.chrA.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrB.gtf -o eagle/$F.chrB.counts.txt eagle/$F.chrB.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrC.gtf -o eagle/$F.chrC.counts.txt eagle/$F.chrC.ref.bam
+    featureCounts -T 8 -t exon -g transcript_id -a refseq.chrD.gtf -o eagle/$F.chrD.counts.txt eagle/$F.chrD.ref.bam
+    # For transcriptome alignments: you will need to provide a transcriptome gtf 
+    #featureCounts -T 8 -t exon -g transcript_id -a refseq.chrA.exon.gtf -o eagle/$F.chrA.counts.txt eagle/$F.chrA.ref.bam
+    #featureCounts -T 8 -t exon -g transcript_id -a refseq.chrB.exon.gtf -o eagle/$F.chrB.counts.txt eagle/$F.chrB.ref.bam
+    #featureCounts -T 8 -t exon -g transcript_id -a refseq.chrC.exon.gtf -o eagle/$F.chrC.counts.txt eagle/$F.chrC.ref.bam
+    #featureCounts -T 8 -t exon -g transcript_id -a refseq.chrD.exon.gtf -o eagle/$F.chrD.counts.txt eagle/$F.chrD.ref.bam
 done

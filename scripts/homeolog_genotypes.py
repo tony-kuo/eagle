@@ -58,6 +58,14 @@ def readGTF(fn, field):
             else:
                 entry[m.group(1)]['offset'].append(int(t[3]) - entry[m.group(1)]['exon'][-1][-1] - 1);
                 entry[m.group(1)]['exon'].append((int(t[3]), int(t[4])));
+
+    for transcript in entry.values():
+        transcript['exon'].sort(key=lambda exon: (exon[0], exon[1]));
+        exons = transcript['exon'];
+        transcript['offset'] = [0] + [
+            current[0] - previous[1] - 1
+            for previous, current in zip(exons, exons[1:])
+        ];
     return(entry);
 
 def readMAF(fn, refFirst):
